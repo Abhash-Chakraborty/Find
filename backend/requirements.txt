@@ -1,0 +1,61 @@
+# Core dependencies
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Database
+sqlalchemy==2.0.25
+alembic==1.13.1
+psycopg2-binary==2.9.9
+pgvector==0.2.4
+
+# Object Storage
+minio==7.2.3
+
+# Job Queue
+redis==5.0.1
+rq==1.16.1
+
+# ML and Computer Vision
+torch==2.2.0+cu121
+torchvision==0.17.0+cu121
+--extra-index-url https://download.pytorch.org/whl/cu121
+transformers==4.37.2
+open-clip-torch==2.24.0
+pillow==10.2.0
+opencv-python-headless==4.9.0.80
+ultralytics==8.1.11
+insightface==0.7.3
+onnxruntime-gpu==1.17.0
+
+# OCR
+pytesseract==0.3.10
+
+# Clustering and ML utilities
+scikit-learn==1.4.0
+hdbscan==0.8.40
+numpy==1.26.3
+scipy==1.12.0
+cython<3
+
+# Image processing
+piexif==1.1.3
+imagehash==4.3.1
+
+# Utilities
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-dotenv==1.0.1
+httpx==0.26.0
+aiofiles==23.2.1
+
+# FAISS (optional, for large-scale vector search)
+faiss-cpu==1.7.4
+
+# Development
+pytest==8.0.0
+pytest-asyncio==0.23.3
+black==24.1.1
+ruff==0.1.14
