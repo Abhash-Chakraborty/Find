@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Node
+node_modules/
+.next/
+.npm
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+*.dockerignore
+
+# Data
+uploads/
+*.db
+*.sqlite
+
+# ML Models (download locally, don't commit)
+*.pt
+*.pth
+*.onnx
+models/
+
+# Logs
+logs/
+*.log
+
+# Testing
+.pytest_cache/
+coverage/
+.coverage
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# MinIO data
+minio_data/
