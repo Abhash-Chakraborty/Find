@@ -6,7 +6,7 @@ import logging
 # Add app to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app.core.config import settings
+from app.core.config import settings  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
