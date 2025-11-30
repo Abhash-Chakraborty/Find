@@ -56,7 +56,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: ${BACKEND_BASE_IMAGE}
+        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}
     container_name: find-api
     ports:
       - "8000:8000"
@@ -100,7 +100,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: ${BACKEND_BASE_IMAGE}
+        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}
     container_name: find-worker
     command: rq worker --url redis://redis:6379 high default low
     environment:

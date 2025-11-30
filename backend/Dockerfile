@@ -8,8 +8,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     build-essential \
     libpq-dev \
-    tesseract-ocr \
-    tesseract-ocr-eng \
     libgl1 \
     libglib2.0-0 \
     libsm6 \

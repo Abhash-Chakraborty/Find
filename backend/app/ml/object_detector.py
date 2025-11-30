@@ -1,46 +1,51 @@
 """
-Object detection using YOLOv8
+Object detection using YOLOv10
 """
 from ultralytics import YOLO
 from PIL import Image
 import numpy as np
 from typing import List, Dict, Union
 import logging
+import asyncio
 
 from app.core.config import settings
+from app.core.model_manager import get_model_manager
 
 logger = logging.getLogger(__name__)
 
 
 class ObjectDetector:
-    """Detect objects in images using YOLOv8"""
+    """Detect objects in images using YOLOv10"""
     
     def __init__(self):
-        logger.info(f"Initializing YOLO model: {settings.YOLO_MODEL}")
-        
-        # Load YOLO model
-        self.model = YOLO(settings.YOLO_MODEL)
-        
-        # Set device
+        self.manager = get_model_manager()
+        # We don't load here anymore, we load on demand via manager
+        logger.info(f"ObjectDetector initialized for model: yolov10b.pt")
+    
+    def _load_model(self):
+        """Loader function for ModelManager"""
+        logger.info(f"Loading YOLO model: yolov10b.pt")
+        model = YOLO("yolov10b.pt")  # Auto-downloads from Ultralytics
         if settings.USE_GPU:
-            self.model.to('cuda')
-        
-        logger.info("YOLO model loaded successfully")
+            model.to('cuda')
+        return model
     
     def detect(self, image: Union[Image.Image, np.ndarray], conf_threshold: float = 0.25) -> List[Dict]:
         """
         Detect objects in image
-        
-        Args:
-            image: PIL Image or numpy array
-            conf_threshold: Confidence threshold for detections
-            
-        Returns:
-            List of detected objects with bounding boxes and labels
         """
         try:
+            # Get model from manager
+            model = self.manager.get_model("yolov10", self._load_model)
+            
             # Run inference
-            results = self.model(image, conf=conf_threshold, verbose=False)
+            # Note: In a single-worker setup, we don't strictly need the lock for safety,
+            # but we use it to ensure we don't accidentally run multiple GPU tasks if threaded.
+            # Since this is synchronous code called from a thread/process, we can't easily use 
+            # the async lock here without an event loop.
+            # For now, we rely on the single-worker architecture for serialization.
+            
+            results = model(image, conf=conf_threshold, verbose=False)
             
             detections = []
             
@@ -56,7 +61,7 @@ class ObjectDetector:
                     # Get class and confidence
                     class_id = int(box.cls[0])
                     confidence = float(box.conf[0])
-                    class_name = self.model.names[class_id]
+                    class_name = model.names[class_id]
                     
                     detection = {
                         "class": class_name,

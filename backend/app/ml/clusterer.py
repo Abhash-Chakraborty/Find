@@ -16,11 +16,12 @@ class ImageClusterer:
     
     def __init__(
         self,
-        min_cluster_size: int = None,
-        min_samples: int = None
+        min_cluster_size: int = 2,  # Reduced default for small datasets
+        min_samples: int = 1        # Reduced default
     ):
-        self.min_cluster_size = min_cluster_size or settings.MIN_CLUSTER_SIZE
-        self.min_samples = min_samples or settings.MIN_SAMPLES
+        # Allow override from settings, but default to small if not set
+        self.min_cluster_size = min_cluster_size or getattr(settings, 'MIN_CLUSTER_SIZE', 2)
+        self.min_samples = min_samples or getattr(settings, 'MIN_SAMPLES', 1)
         
         logger.info(
             f"Initialized clusterer: min_cluster_size={self.min_cluster_size}, "
@@ -34,17 +35,16 @@ class ImageClusterer:
     ) -> Tuple[np.ndarray, Dict]:
         """
         Cluster embeddings using HDBSCAN
-        
-        Args:
-            embeddings: Array of shape (n_samples, embedding_dim)
-            metric: Distance metric to use
-            
-        Returns:
-            Tuple of (cluster_labels, cluster_info)
-            cluster_labels: Array of cluster IDs (-1 for noise)
-            cluster_info: Dict with clustering statistics
         """
         try:
+            if len(embeddings) == 0:
+                return np.array([]), {"n_clusters": 0, "noise_points": 0}
+                
+            # Normalize embeddings (critical for cosine similarity / euclidean on unit sphere)
+            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+            # Avoid division by zero
+            embeddings = embeddings / (norms + 1e-10)
+            
             if len(embeddings) < self.min_cluster_size:
                 logger.warning(
                     f"Not enough samples for clustering: {len(embeddings)} < {self.min_cluster_size}"
@@ -95,15 +95,12 @@ class ImageClusterer:
     ) -> Dict[int, np.ndarray]:
         """
         Compute centroid vectors for each cluster
-        
-        Args:
-            embeddings: Array of embeddings
-            labels: Cluster labels
-            
-        Returns:
-            Dict mapping cluster_id -> centroid_vector
         """
         centroids = {}
+        
+        # Normalize inputs just in case
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        embeddings = embeddings / (norms + 1e-10)
         
         unique_labels = set(labels)
         for label in unique_labels:
@@ -117,7 +114,7 @@ class ImageClusterer:
             # Compute mean (centroid)
             centroid = np.mean(cluster_embeddings, axis=0)
             
-            # Normalize
+            # Normalize centroid
             centroid = centroid / np.linalg.norm(centroid)
             
             centroids[int(label)] = centroid
@@ -132,14 +129,6 @@ class ImageClusterer:
     ) -> int:
         """
         Assign a single embedding to nearest cluster
-        
-        Args:
-            embedding: Embedding vector
-            centroids: Dict of cluster centroids
-            threshold: Similarity threshold for assignment
-            
-        Returns:
-            Cluster ID or -1 if no good match
         """
         if not centroids:
             return -1
@@ -152,6 +141,7 @@ class ImageClusterer:
         best_cluster = -1
         
         for cluster_id, centroid in centroids.items():
+            # Dot product of normalized vectors = cosine similarity
             similarity = np.dot(embedding, centroid)
             if similarity > best_similarity:
                 best_similarity = similarity

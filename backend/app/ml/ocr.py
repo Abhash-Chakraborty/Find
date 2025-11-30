@@ -1,99 +1,106 @@
 """
-OCR (Optical Character Recognition) using Tesseract
+OCR using PaddleOCR (CPU optimized)
 """
-import pytesseract
+from paddleocr import PaddleOCR
 from PIL import Image
 import numpy as np
-from typing import Union, Dict, List
+from typing import List, Dict, Union
 import logging
+import cv2
+
+from app.core.config import settings
+from app.core.model_manager import get_model_manager
 
 logger = logging.getLogger(__name__)
 
 
 class OCRExtractor:
-    """Extract text from images using Tesseract OCR"""
+    """Extract text from images using PaddleOCR"""
     
     def __init__(self):
-        logger.info("Initializing OCR extractor")
-        # Tesseract should be installed system-wide
-        # On Docker: apt-get install tesseract-ocr
+        self.manager = get_model_manager()
+        logger.info("OCRExtractor initialized for PaddleOCR (CPU)")
     
-    def extract_text(self, image: Union[Image.Image, np.ndarray], lang: str = 'eng') -> str:
+    def _load_model(self):
+        """Loader function for ModelManager"""
+        logger.info("Loading PaddleOCR model...")
+        # Force CPU to save VRAM for other models
+        ocr = PaddleOCR(
+            use_angle_cls=True, 
+            lang='en', 
+            use_gpu=False,
+            show_log=False
+        )
+        return ocr
+    
+    def extract_text(self, image: Union[Image.Image, np.ndarray]) -> str:
         """
-        Extract text from image
-        
-        Args:
-            image: PIL Image or numpy array
-            lang: Language code (default: English)
-            
-        Returns:
-            Extracted text
+        Extract all text from image as a single string
         """
         try:
-            if isinstance(image, np.ndarray):
-                image = Image.fromarray(image)
+            if isinstance(image, Image.Image):
+                image = np.array(image)
             
-            # Extract text
-            text = pytesseract.image_to_string(image, lang=lang)
-            text = text.strip()
+            # PaddleOCR expects BGR or RGB? It handles numpy arrays.
+            # Standard cv2 is BGR, PIL is RGB. PaddleOCR handles both but prefers RGB usually?
+            # Let's assume RGB from PIL -> numpy is fine.
             
-            if text:
-                logger.info(f"Extracted {len(text)} characters")
-            else:
-                logger.info("No text detected")
+            ocr = self.manager.get_model("paddleocr", self._load_model)
             
-            return text
+            result = ocr.ocr(image, cls=True)
+            
+            text_parts = []
+            if result and result[0]:
+                for line in result[0]:
+                    text_parts.append(line[1][0])
+            
+            full_text = "\n".join(text_parts)
+            logger.info(f"Extracted {len(full_text)} characters")
+            return full_text
         
         except Exception as e:
             logger.error(f"Failed to extract text: {e}")
-            return ""
+            raise
     
-    def extract_text_with_boxes(
-        self, 
-        image: Union[Image.Image, np.ndarray], 
-        lang: str = 'eng'
-    ) -> List[Dict]:
+    def extract_text_with_boxes(self, image: Union[Image.Image, np.ndarray]) -> List[Dict]:
         """
         Extract text with bounding boxes
-        
-        Args:
-            image: PIL Image or numpy array
-            lang: Language code
-            
-        Returns:
-            List of text blocks with bounding boxes
         """
         try:
-            if isinstance(image, np.ndarray):
-                image = Image.fromarray(image)
+            if isinstance(image, Image.Image):
+                image = np.array(image)
+                
+            ocr = self.manager.get_model("paddleocr", self._load_model)
             
-            # Get detailed OCR data
-            data = pytesseract.image_to_data(image, lang=lang, output_type=pytesseract.Output.DICT)
+            result = ocr.ocr(image, cls=True)
             
-            text_blocks = []
-            n_boxes = len(data['text'])
-            
-            for i in range(n_boxes):
-                text = data['text'][i].strip()
-                if text:  # Only include non-empty text
-                    block = {
+            blocks = []
+            if result and result[0]:
+                for line in result[0]:
+                    box = line[0] # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                    text = line[1][0]
+                    confidence = line[1][1]
+                    
+                    # Convert box to x1, y1, x2, y2
+                    x_coords = [p[0] for p in box]
+                    y_coords = [p[1] for p in box]
+                    
+                    blocks.append({
                         "text": text,
-                        "confidence": float(data['conf'][i]),
+                        "confidence": float(confidence),
                         "bbox": {
-                            "x": int(data['left'][i]),
-                            "y": int(data['top'][i]),
-                            "width": int(data['width'][i]),
-                            "height": int(data['height'][i])
+                            "x1": float(min(x_coords)),
+                            "y1": float(min(y_coords)),
+                            "x2": float(max(x_coords)),
+                            "y2": float(max(y_coords))
                         }
-                    }
-                    text_blocks.append(block)
+                    })
             
-            logger.info(f"Extracted {len(text_blocks)} text blocks")
-            return text_blocks
+            return blocks
         
         except Exception as e:
-            logger.error(f"Failed to extract text with boxes: {e}")
-            return []
+            logger.error(f"Failed to extract text blocks: {e}")
+            raise
 
 
 # Global instance

@@ -22,16 +22,19 @@ rq==1.16.1
 torch==2.2.0+cu121
 torchvision==0.17.0+cu121
 --extra-index-url https://download.pytorch.org/whl/cu121
-transformers==4.37.2
-open-clip-torch==2.24.0
+transformers>=4.40.0
+open-clip-torch>=2.24.0
 pillow==10.2.0
 opencv-python-headless==4.9.0.80
-ultralytics==8.1.11
+ultralytics>=8.2.0
 insightface==0.7.3
 onnxruntime-gpu==1.17.0
+timm>=0.9.16
+einops>=0.8.0
 
-# OCR
-pytesseract==0.3.10
+# OCR (PaddleOCR - CPU)
+paddlepaddle>=2.6.0
+paddleocr>=2.7.3
 
 # Clustering and ML utilities
 scikit-learn==1.4.0

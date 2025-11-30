@@ -41,28 +41,37 @@ async def search_images(
     
     # Perform vector similarity search
     # Using cosine distance (1 - cosine similarity)
+    # Added threshold to filter irrelevant results
     query_sql = text("""
-        SELECT 
-            id,
-            filename,
-            minio_key,
-            status,
-            liked,
-            metadata_json,
-            cluster_id,
-            width,
-            height,
-            created_at,
-            1 - (vector <=> CAST(:embedding AS vector)) as similarity
-        FROM media
-        WHERE status = 'indexed' AND vector IS NOT NULL
-        ORDER BY vector <=> CAST(:embedding AS vector)
+        WITH ranked_results AS (
+            SELECT 
+                id,
+                filename,
+                minio_key,
+                status,
+                liked,
+                metadata_json,
+                cluster_id,
+                width,
+                height,
+                created_at,
+                1 - (vector <=> CAST(:embedding AS vector)) as similarity
+            FROM media
+            WHERE status = 'indexed' AND vector IS NOT NULL
+        )
+        SELECT * FROM ranked_results
+        WHERE similarity > :threshold
+        ORDER BY similarity DESC
         LIMIT :limit
     """)
     
+    # SigLIP similarities can be lower than OpenAI CLIP. 
+    # 0.15 is a conservative threshold for "somewhat relevant".
+    threshold = 0.15
+    
     result = db.execute(
         query_sql,
-        {"embedding": embedding_str, "limit": limit}
+        {"embedding": embedding_str, "limit": limit, "threshold": threshold}
     )
     
     # Build response
