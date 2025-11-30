@@ -1,18 +1,18 @@
 "use client";
 
+import { useMutation } from "@tanstack/react-query";
+import {
+  CheckCircle,
+  Image as ImageIcon,
+  Loader2,
+  Package,
+  Upload,
+  XCircle,
+} from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { useMutation } from "@tanstack/react-query";
-import { uploadImages, uploadImagesBulk, type UploadResult } from "@/lib/api";
 import { toast } from "sonner";
-import {
-  Upload,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  Image as ImageIcon,
-  Package,
-} from "lucide-react";
+import { type UploadResult, uploadImages, uploadImagesBulk } from "@/lib/api";
 
 type UploadMode = "single" | "bulk";
 
@@ -20,7 +20,7 @@ export default function UploadPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadResult[]>([]);
   const [mode, setMode] = useState<UploadMode>("single");
   const parsedBulkLimit = Number(
-    process.env.NEXT_PUBLIC_MAX_BULK_FILES ?? "200"
+    process.env.NEXT_PUBLIC_MAX_BULK_FILES ?? "200",
   );
   const maxBulkFiles =
     Number.isFinite(parsedBulkLimit) && parsedBulkLimit > 0
@@ -32,7 +32,7 @@ export default function UploadPage() {
     onSuccess: (data) => {
       setUploadedFiles((prev) => [...data.results, ...prev]);
       toast.success(
-        `Processed ${data.total} file${data.total === 1 ? "" : "s"}`
+        `Processed ${data.total} file${data.total === 1 ? "" : "s"}`,
       );
     },
     onError: () => {
@@ -45,12 +45,12 @@ export default function UploadPage() {
     onSuccess: (data) => {
       setUploadedFiles((prev) => [...data.results, ...prev]);
       const uploadedCount = data.results.filter(
-        (item) => item.status === "uploaded"
+        (item) => item.status === "uploaded",
       ).length;
       toast.success(
         `Archive processed (${uploadedCount} new upload${
           uploadedCount === 1 ? "" : "s"
-        })`
+        })`,
       );
     },
     onError: () => {
@@ -73,7 +73,7 @@ export default function UploadPage() {
 
       uploadMutation.mutate(fileList);
     },
-    [uploadMutation]
+    [uploadMutation],
   );
 
   const onBulkDrop = useCallback(
@@ -91,7 +91,7 @@ export default function UploadPage() {
 
       bulkUploadMutation.mutate(archive);
     },
-    [bulkUploadMutation]
+    [bulkUploadMutation],
   );
 
   const {
@@ -234,7 +234,7 @@ export default function UploadPage() {
           <div className="mt-8 space-y-3">
             {uploadedFiles.map((result, idx) => (
               <div
-                key={idx}
+                key={`${result.filename}-${idx}`}
                 className="flex items-center justify-between p-4 border border-gray-100 rounded-sm"
               >
                 <div className="flex items-center gap-3">

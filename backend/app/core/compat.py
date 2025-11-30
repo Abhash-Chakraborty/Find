@@ -4,6 +4,7 @@ This module centralizes small monkey patches required to keep
 upstream dependencies quiet until they ship fixes. Importing
 ``app.core`` runs :func:`apply_monkey_patches` once at startup.
 """
+
 from __future__ import annotations
 
 import importlib

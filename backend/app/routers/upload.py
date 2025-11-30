@@ -1,6 +1,7 @@
 """
 Upload endpoint for image ingestion
 """
+
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -29,17 +30,16 @@ task_queue = Queue(connection=redis_conn)
 
 @router.post("/upload")
 async def upload_images(
-    files: List[UploadFile] = File(...),
-    db: Session = Depends(get_db)
+    files: List[UploadFile] = File(...), db: Session = Depends(get_db)
 ):
     """
     Upload one or more images for processing
-    
+
     Returns:
         List of created media records with job IDs
     """
     results = []
-    
+
     for file in files:
         try:
             file_data = await file.read()
@@ -54,19 +54,16 @@ async def upload_images(
             raise
         except Exception as e:
             logger.error(f"Failed to upload {file.filename}: {e}")
-            results.append({
-                "filename": file.filename,
-                "status": "failed",
-                "error": str(e)
-            })
-    
+            results.append(
+                {"filename": file.filename, "status": "failed", "error": str(e)}
+            )
+
     return {"results": results, "total": len(results)}
 
 
 @router.post("/upload/bulk")
 async def upload_bulk_images(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    file: UploadFile = File(...), db: Session = Depends(get_db)
 ):
     """
     Upload images in bulk via ZIP archive
@@ -106,11 +103,13 @@ async def upload_bulk_images(
                     continue
 
                 if not file_data:
-                    results.append({
-                        "filename": filename,
-                        "status": "failed",
-                        "error": "File is empty",
-                    })
+                    results.append(
+                        {
+                            "filename": filename,
+                            "status": "failed",
+                            "error": "File is empty",
+                        }
+                    )
                     continue
 
                 guessed_type = mimetypes.guess_type(filename)[0]
@@ -125,18 +124,24 @@ async def upload_bulk_images(
                     results.append(result)
                 except HTTPException as e:
                     detail = e.detail if isinstance(e.detail, str) else str(e.detail)
-                    results.append({
-                        "filename": filename,
-                        "status": "failed",
-                        "error": detail,
-                    })
+                    results.append(
+                        {
+                            "filename": filename,
+                            "status": "failed",
+                            "error": detail,
+                        }
+                    )
                 except Exception as exc:
-                    logger.error(f"Failed to process {filename} from bulk upload: {exc}")
-                    results.append({
-                        "filename": filename,
-                        "status": "failed",
-                        "error": str(exc),
-                    })
+                    logger.error(
+                        f"Failed to process {filename} from bulk upload: {exc}"
+                    )
+                    results.append(
+                        {
+                            "filename": filename,
+                            "status": "failed",
+                            "error": str(exc),
+                        }
+                    )
 
     except zipfile.BadZipFile:
         raise HTTPException(400, "Uploaded file is not a valid ZIP archive")
@@ -168,13 +173,11 @@ def _ingest_image(
     existing = db.query(Media).filter(Media.file_hash == file_hash).first()
     if existing:
         logger.info(f"File {filename} already exists (hash: {file_hash})")
-        return {
-            "filename": filename,
-            "status": "duplicate",
-            "media_id": existing.id
-        }
+        return {"filename": filename, "status": "duplicate", "media_id": existing.id}
 
-    minio_key = f"images/{file_hash[:2]}/{file_hash}{_get_extension(filename, detected_type)}"
+    minio_key = (
+        f"images/{file_hash[:2]}/{file_hash}{_get_extension(filename, detected_type)}"
+    )
 
     upload_file(file_data, minio_key, detected_type)
 
@@ -184,7 +187,7 @@ def _ingest_image(
         filename=filename,
         content_type=detected_type,
         file_size=file_size,
-        status="pending"
+        status="pending",
     )
 
     db.add(media)
@@ -192,9 +195,7 @@ def _ingest_image(
     db.refresh(media)
 
     job = task_queue.enqueue(
-        analyze_image,
-        media.id,
-        job_timeout=settings.WORKER_TIMEOUT
+        analyze_image, media.id, job_timeout=settings.WORKER_TIMEOUT
     )
 
     logger.info(f"Uploaded {filename} (media_id: {media.id}, job_id: {job.id})")
@@ -203,7 +204,7 @@ def _ingest_image(
         "filename": filename,
         "status": "uploaded",
         "media_id": media.id,
-        "job_id": job.id
+        "job_id": job.id,
     }
 
 

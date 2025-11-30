@@ -1,5 +1,5 @@
+import { ArrowRight, Image as ImageIcon, Lock, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { ArrowRight, Lock, Sparkles, Image as ImageIcon } from "lucide-react";
 
 export default function HomePage() {
   return (

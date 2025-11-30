@@ -1,6 +1,7 @@
 """
 Gallery endpoint for browsing images
 """
+
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -20,33 +21,33 @@ async def get_gallery(
     limit: int = Query(50, ge=1, le=100),
     status: Optional[str] = None,
     liked: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Get paginated list of images
-    
+
     Args:
         skip: Number of records to skip
         limit: Max number of records to return
         status: Filter by status (pending, processing, indexed, failed)
-        
+
     Returns:
         Paginated list of media records
     """
     # Build query
     query = db.query(Media)
-    
+
     if status:
         query = query.filter(Media.status == status)
     if liked is not None:
         query = query.filter(Media.liked == liked)
-    
+
     # Get total count
     total = query.count()
-    
+
     # Get paginated results
     media_list = query.order_by(desc(Media.created_at)).offset(skip).limit(limit).all()
-    
+
     # Build response
     items = []
     for media in media_list:
@@ -55,7 +56,9 @@ async def get_gallery(
             "filename": media.filename,
             "status": media.status,
             "created_at": media.created_at.isoformat() if media.created_at else None,
-            "processed_at": media.processed_at.isoformat() if media.processed_at else None,
+            "processed_at": media.processed_at.isoformat()
+            if media.processed_at
+            else None,
             "width": media.width,
             "height": media.height,
             "file_size": media.file_size,
@@ -63,46 +66,42 @@ async def get_gallery(
             "minio_key": media.minio_key,
             "liked": media.liked,
         }
-        
+
         # Add thumbnail URL
         try:
             item["url"] = get_file_url(media.minio_key)
-        except:
+        except Exception:
             item["url"] = None
-        
+
         # Add metadata if indexed
         if media.status == "indexed" and media.metadata_json:
             item["caption"] = media.metadata_json.get("caption", "")
             item["objects"] = media.metadata_json.get("objects", [])
             item["has_text"] = bool(media.metadata_json.get("ocr_text", ""))
-        
+
         items.append(item)
-    
-    return {
-        "items": items,
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
+
+    return {"items": items, "total": total, "skip": skip, "limit": limit}
 
 
 @router.get("/image/{media_id}")
 async def get_image_detail(media_id: int, db: Session = Depends(get_db)):
     """
     Get detailed information about a specific image
-    
+
     Args:
         media_id: Media record ID
-        
+
     Returns:
         Complete media information including metadata
     """
     media = db.query(Media).filter(Media.id == media_id).first()
-    
+
     if not media:
         from fastapi import HTTPException
+
         raise HTTPException(404, "Image not found")
-    
+
     # Build response
     response = {
         "id": media.id,
@@ -121,13 +120,13 @@ async def get_image_detail(media_id: int, db: Session = Depends(get_db)):
         "error": media.error_message,
         "liked": media.liked,
     }
-    
+
     # Add presigned URL
     try:
         response["url"] = get_file_url(media.minio_key)
-    except:
+    except Exception:
         response["url"] = None
-    
+
     return response
 
 
@@ -162,7 +161,9 @@ async def delete_image(media_id: int, db: Session = Depends(get_db)):
     for cluster in clusters:
         current_members = cluster.member_ids or []
         if media_id in current_members:
-            cluster.member_ids = [member_id for member_id in current_members if member_id != media_id]
+            cluster.member_ids = [
+                member_id for member_id in current_members if member_id != media_id
+            ]
             cluster.member_count = len(cluster.member_ids)
 
     db.commit()

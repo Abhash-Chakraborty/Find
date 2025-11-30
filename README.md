@@ -33,6 +33,7 @@
 - shadcn/ui
 - TanStack Query
 - react-force-graph (3D clustering visualization)
+- Biome (Linting & Formatting)
 
 **Backend**
 
@@ -44,11 +45,11 @@
 
 **ML Pipeline**
 
-- YOLOv8 (object detection)
-- BLIP/BLIP-2 (image captioning)
-- OpenCLIP (embeddings)
-- Tesseract/PaddleOCR (text extraction)
-- InsightFace (face recognition)
+- YOLOv10 (object detection)
+- Florence-2 (image captioning)
+- SigLIP (embeddings)
+- PaddleOCR (text extraction)
+- AntelopeV2 (face recognition)
 - HDBSCAN (clustering)
 
 ## 🚀 Quick Start
@@ -225,8 +226,8 @@ uvicorn app.main:app --reload
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 ### Database Migrations

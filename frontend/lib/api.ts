@@ -140,7 +140,7 @@ export interface JobStatus {
 
 // API Functions
 export const uploadImages = async (
-  files: FileList | File[]
+  files: FileList | File[],
 ): Promise<UploadResponse> => {
   const formData = new FormData();
 
@@ -159,7 +159,7 @@ export const uploadImages = async (
 };
 
 export const uploadImagesBulk = async (
-  zipFile: File
+  zipFile: File,
 ): Promise<UploadResponse> => {
   const formData = new FormData();
   formData.append("file", zipFile);
@@ -171,7 +171,7 @@ export const uploadImagesBulk = async (
       headers: {
         "Content-Type": "multipart/form-data",
       },
-    }
+    },
   );
 
   return response.data;
@@ -188,9 +188,22 @@ export const getGallery = async (
     limit?: number;
     status?: string;
     liked?: boolean;
-  } = {}
+  } = {},
 ): Promise<GalleryResponse> => {
-  const response = await api.get<GalleryResponse>("/api/gallery", { params });
+  const page = params.page || 1;
+  const limit = params.limit || 50;
+  const skip = (page - 1) * limit;
+
+  const queryParams = {
+    skip,
+    limit,
+    status: params.status,
+    liked: params.liked,
+  };
+
+  const response = await api.get<GalleryResponse>("/api/gallery", {
+    params: queryParams,
+  });
   return response.data;
 };
 
@@ -200,19 +213,19 @@ export const getImageDetail = async (mediaId: number): Promise<MediaDetail> => {
 };
 
 export const toggleLike = async (
-  mediaId: number
+  mediaId: number,
 ): Promise<{ id: number; liked: boolean }> => {
   const response = await api.post<{ id: number; liked: boolean }>(
-    `/api/image/${mediaId}/like`
+    `/api/image/${mediaId}/like`,
   );
   return response.data;
 };
 
 export const deleteImage = async (
-  mediaId: number
+  mediaId: number,
 ): Promise<{ id: number; message: string }> => {
   const response = await api.delete<{ id: number; message: string }>(
-    `/api/image/${mediaId}`
+    `/api/image/${mediaId}`,
   );
   return response.data;
 };
@@ -233,7 +246,7 @@ export const getClusters = async (): Promise<ClustersResponse> => {
 };
 
 export const getClusterDetail = async (
-  clusterId: number
+  clusterId: number,
 ): Promise<ClusterDetail> => {
   const response = await api.get<ClusterDetail>(`/api/cluster/${clusterId}`);
   return response.data;
@@ -244,7 +257,7 @@ export const triggerClustering = async (): Promise<{
   job_id: string;
 }> => {
   const response = await api.post<{ message: string; job_id: string }>(
-    "/api/cluster/run"
+    "/api/cluster/run",
   );
   return response.data;
 };

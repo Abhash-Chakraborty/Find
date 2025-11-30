@@ -1,6 +1,7 @@
 """
 Database configuration and session management
 """
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -11,10 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Create SQLAlchemy engine
 engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20
+    settings.DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20
 )
 
 # Create session factory
@@ -41,8 +39,7 @@ def init_db():
     """
     try:
         # Import models to register them
-        from app.models import media, cluster
-        
+
         # Create pgvector extension when using PostgreSQL
         if engine.dialect.name == "postgresql":
             with engine.connect() as conn:
@@ -56,10 +53,10 @@ def init_db():
                 )
                 conn.execute(text("UPDATE media SET liked = false WHERE liked IS NULL"))
                 conn.commit()
-        
+
         # Create all tables
         Base.metadata.create_all(bind=engine)
-        
+
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")

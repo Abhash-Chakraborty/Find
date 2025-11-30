@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "biome check ."
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
@@ -23,12 +25,11 @@
     "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.8",
     "@types/node": "^22.8.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.20",
-    "eslint": "^9.13.0",
-    "eslint-config-next": "^16.0.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "tailwindcss-animate": "^1.0.7",

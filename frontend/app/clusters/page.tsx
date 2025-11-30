@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { getClusters } from "@/lib/api";
-import { Loader2, Grid3x3 } from "lucide-react";
+import { Grid3x3, Loader2 } from "lucide-react";
 import Image from "next/image";
+import { getClusters } from "@/lib/api";
 
 export default function ClustersPage() {
   const { data, isLoading, error } = useQuery({

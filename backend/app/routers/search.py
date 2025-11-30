@@ -1,6 +1,7 @@
 """
 Search endpoint for semantic image search
 """
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -10,7 +11,6 @@ from typing import Dict
 
 from app.core.database import get_db
 from app.core.storage import get_file_url
-from app.models.media import Media
 from app.ml.clip_embedder import get_clip_embedder
 
 router = APIRouter()
@@ -20,25 +20,25 @@ router = APIRouter()
 async def search_images(
     q: str = Query(..., min_length=1, description="Search query"),
     limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Semantic search for images using natural language
-    
+
     Args:
         q: Search query (natural language)
         limit: Maximum number of results
-        
+
     Returns:
         Ranked list of matching images
     """
     # Generate query embedding
     embedder = get_clip_embedder()
     query_embedding = embedder.embed_text(q)
-    
+
     # Convert to string format for pgvector
     embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
-    
+
     # Perform vector similarity search
     # Using cosine distance (1 - cosine similarity)
     # Added threshold to filter irrelevant results
@@ -64,16 +64,15 @@ async def search_images(
         ORDER BY similarity DESC
         LIMIT :limit
     """)
-    
-    # SigLIP similarities can be lower than OpenAI CLIP. 
+
+    # SigLIP similarities can be lower than OpenAI CLIP.
     # Lowering threshold to ensure results are returned.
     threshold = 0.45
-    
+
     result = db.execute(
-        query_sql,
-        {"embedding": embedding_str, "limit": limit, "threshold": threshold}
+        query_sql, {"embedding": embedding_str, "limit": limit, "threshold": threshold}
     )
-    
+
     # Build response
     results = []
     for row in result:
@@ -120,9 +119,5 @@ async def search_images(
                 "metadata": media_metadata,
             }
         )
-    
-    return {
-        "query": q,
-        "results": results,
-        "total": len(results)
-    }
+
+    return {"query": q, "results": results, "total": len(results)}

@@ -1,16 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  deleteImage,
-  getGallery,
-  getImageDetail,
-  toggleLike,
-  type GalleryResponse,
-  type MediaDetail,
-  type MediaItem,
-} from "@/lib/api";
 import {
   ChevronLeft,
   ChevronRight,
@@ -23,6 +13,16 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  deleteImage,
+  type GalleryResponse,
+  getGallery,
+  getImageDetail,
+  type MediaDetail,
+  type MediaItem,
+  toggleLike,
+} from "@/lib/api";
 import { formatBytes, formatDate, getStatusBadgeClass } from "@/lib/utils";
 
 function buildEncodedUrlFactory(bucket: string, baseUrl: string) {
@@ -63,12 +63,12 @@ export default function GalleryPage() {
     process.env.NEXT_PUBLIC_MINIO_URL ?? "http://localhost:9000";
   const buildEncodedUrl = useMemo(
     () => buildEncodedUrlFactory(bucket, minioBaseUrl),
-    [bucket, minioBaseUrl]
+    [bucket, minioBaseUrl],
   );
 
   const galleryQueryKey = useMemo(
     () => ["gallery", page, filter, likedOnly] as const,
-    [page, filter, likedOnly]
+    [page, filter, likedOnly],
   );
 
   const { data, isLoading, error } = useQuery<GalleryResponse, Error>({
@@ -166,7 +166,7 @@ export default function GalleryPage() {
         return;
       }
       const currentIndex = data.items.findIndex(
-        (item) => item.id === selectedMediaId
+        (item) => item.id === selectedMediaId,
       );
       if (currentIndex === -1) {
         return;
@@ -176,7 +176,7 @@ export default function GalleryPage() {
         setSelectedMediaId(next.id);
       }
     },
-    [data, selectedMediaId]
+    [data, selectedMediaId],
   );
 
   const closeDetail = useCallback(() => setSelectedMediaId(null), []);
@@ -207,7 +207,7 @@ export default function GalleryPage() {
   const isDetailLoading = detailQuery.isLoading || detailQuery.isFetching;
 
   const detailImageSrc = buildEncodedUrl(
-    detailData?.minio_key ?? selectedItem?.minio_key ?? null
+    detailData?.minio_key ?? selectedItem?.minio_key ?? null,
   );
   const detailLiked = detailData?.liked ?? selectedItem?.liked ?? false;
 
@@ -235,14 +235,14 @@ export default function GalleryPage() {
     (mediaId: number) => {
       likeMutation.mutate(mediaId);
     },
-    [likeMutation]
+    [likeMutation],
   );
 
   const handleDeleteRequest = useCallback(
     (mediaId: number, filename?: string) => {
       setDeleteTarget({ id: mediaId, filename });
     },
-    []
+    [],
   );
 
   const confirmDelete = useCallback(() => {
@@ -268,6 +268,7 @@ export default function GalleryPage() {
         <div className="mb-4 flex gap-2 border-b border-gray-100 pb-4">
           {filters.map(({ label, value }) => (
             <button
+              type="button"
               key={value}
               onClick={() => {
                 setFilter(value);
@@ -332,18 +333,12 @@ export default function GalleryPage() {
                 const downloadUrl = imageSrc ?? item.url ?? "";
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={item.id}
-                    className="group relative aspect-square overflow-hidden rounded-sm border border-gray-100 bg-gray-50 transition-all hover:border-gray-300"
+                    className="group relative aspect-square w-full overflow-hidden rounded-sm border border-gray-100 bg-gray-50 p-0 text-left transition-all hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
                     onClick={() => setSelectedMediaId(item.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSelectedMediaId(item.id);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
+                    aria-label={`View ${item.filename}`}
                   >
                     {imageSrc ? (
                       <Image
@@ -355,7 +350,11 @@ export default function GalleryPage() {
                         unoptimized
                       />
                     ) : (
-                      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gray-100 text-gray-400">
+                      <div
+                        className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gray-100 text-gray-400"
+                        role="img"
+                        aria-label="No preview available"
+                      >
                         <ImageOff className="h-8 w-8" />
                         <span className="text-xs">No preview</span>
                       </div>
@@ -433,7 +432,7 @@ export default function GalleryPage() {
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -441,6 +440,7 @@ export default function GalleryPage() {
             {data.total > limit && (
               <div className="mt-12 flex items-center justify-center gap-6">
                 <button
+                  type="button"
                   onClick={() => setPage((current) => Math.max(1, current - 1))}
                   disabled={page === 1}
                   className="rounded-full p-2 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-30"
@@ -451,6 +451,7 @@ export default function GalleryPage() {
                   Page {page} of {Math.ceil(data.total / limit)}
                 </span>
                 <button
+                  type="button"
                   onClick={() => setPage((current) => current + 1)}
                   disabled={page >= Math.ceil(data.total / limit)}
                   className="rounded-full p-2 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-30"
@@ -464,13 +465,19 @@ export default function GalleryPage() {
       </div>
 
       {selectedItem && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4"
+        <button
+          type="button"
+          className="fixed inset-0 z-50 flex h-full w-full cursor-default items-center justify-center bg-black/80 px-4"
           onClick={closeDetail}
+          aria-label="Close detail view"
         >
           <div
             className="relative max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-sm bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Image details"
           >
             <button
               type="button"
@@ -497,7 +504,11 @@ export default function GalleryPage() {
                     unoptimized
                   />
                 ) : (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-gray-400">
+                  <div
+                    className="flex h-full w-full flex-col items-center justify-center gap-3 text-gray-400"
+                    role="img"
+                    aria-label="Preview unavailable"
+                  >
                     <ImageOff className="h-12 w-12" />
                     <span className="text-sm">Preview unavailable</span>
                   </div>
@@ -514,14 +525,14 @@ export default function GalleryPage() {
                       !data ||
                       selectedMediaId === null ||
                       data.items.findIndex(
-                        (item) => item.id === selectedMediaId
+                        (item) => item.id === selectedMediaId,
                       ) <= 0
                     }
                     className={`pointer-events-auto rounded-full bg-black/60 p-2 text-white transition hover:bg-black ${
                       !data ||
                       selectedMediaId === null ||
                       data.items.findIndex(
-                        (item) => item.id === selectedMediaId
+                        (item) => item.id === selectedMediaId,
                       ) <= 0
                         ? "opacity-40"
                         : "opacity-100"
@@ -540,7 +551,7 @@ export default function GalleryPage() {
                       !data ||
                       selectedMediaId === null ||
                       data.items.findIndex(
-                        (item) => item.id === selectedMediaId
+                        (item) => item.id === selectedMediaId,
                       ) >=
                         data.items.length - 1
                     }
@@ -548,7 +559,7 @@ export default function GalleryPage() {
                       !data ||
                       selectedMediaId === null ||
                       data.items.findIndex(
-                        (item) => item.id === selectedMediaId
+                        (item) => item.id === selectedMediaId,
                       ) >=
                         data.items.length - 1
                         ? "opacity-40"
@@ -618,7 +629,7 @@ export default function GalleryPage() {
                     onClick={() =>
                       handleDeleteRequest(
                         selectedItem.id,
-                        selectedItem.filename
+                        selectedItem.filename,
                       )
                     }
                     disabled={deleteMutation.isPending}
@@ -719,7 +730,7 @@ export default function GalleryPage() {
               </div>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {deleteTarget && (

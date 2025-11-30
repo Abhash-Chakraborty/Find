@@ -1,20 +1,19 @@
 """
 Main FastAPI application entry point
 """
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
-from app.core.config import settings
 from app.core.database import init_db
 from app.core.storage import init_storage
 from app.routers import upload, gallery, search, clusters, status, cluster
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -23,19 +22,19 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
     logger.info("Starting Find API...")
-    
+
     # Initialize database
     logger.info("Initializing database...")
     init_db()
-    
+
     # Initialize MinIO storage
     logger.info("Initializing MinIO storage...")
     init_storage()
-    
+
     logger.info("Find API started successfully!")
-    
+
     yield
-    
+
     logger.info("Shutting down Find API...")
 
 
@@ -44,7 +43,7 @@ app = FastAPI(
     title="Find API",
     description="Local-first AI image intelligence platform",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -71,7 +70,7 @@ async def root():
     return {
         "message": "Find API - Local-first AI image intelligence",
         "version": "1.0.0",
-        "status": "operational"
+        "status": "operational",
     }
 
 

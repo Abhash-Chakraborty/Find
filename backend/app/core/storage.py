@@ -1,6 +1,7 @@
 """
 MinIO storage configuration and utilities
 """
+
 import json
 from datetime import timedelta
 from minio import Minio
@@ -16,7 +17,7 @@ minio_client = Minio(
     settings.MINIO_ENDPOINT,
     access_key=settings.MINIO_ACCESS_KEY,
     secret_key=settings.MINIO_SECRET_KEY,
-    secure=settings.MINIO_SECURE
+    secure=settings.MINIO_SECURE,
 )
 
 
@@ -40,9 +41,7 @@ def init_storage():
                             "Effect": "Allow",
                             "Principal": {"AWS": ["*"]},
                             "Action": ["s3:GetObject"],
-                            "Resource": [
-                                f"arn:aws:s3:::{settings.MINIO_BUCKET}/*"
-                            ],
+                            "Resource": [f"arn:aws:s3:::{settings.MINIO_BUCKET}/*"],
                         }
                     ],
                 }
@@ -55,23 +54,23 @@ def init_storage():
                     settings.MINIO_BUCKET,
                 )
             except S3Error as exc:
-                logger.warning(
-                    "Failed to apply public read policy: %s", exc
-                )
+                logger.warning("Failed to apply public read policy: %s", exc)
     except S3Error as e:
         logger.error(f"Failed to initialize MinIO storage: {e}")
         raise
 
 
-def upload_file(file_data: bytes, object_name: str, content_type: str = "image/jpeg") -> str:
+def upload_file(
+    file_data: bytes, object_name: str, content_type: str = "image/jpeg"
+) -> str:
     """
     Upload file to MinIO
-    
+
     Args:
         file_data: File bytes
         object_name: Object name in bucket
         content_type: MIME type
-        
+
     Returns:
         Object name in bucket
     """
@@ -81,7 +80,7 @@ def upload_file(file_data: bytes, object_name: str, content_type: str = "image/j
             object_name,
             BytesIO(file_data),
             length=len(file_data),
-            content_type=content_type
+            content_type=content_type,
         )
         logger.info(f"Uploaded file to MinIO: {object_name}")
         return object_name
@@ -93,10 +92,10 @@ def upload_file(file_data: bytes, object_name: str, content_type: str = "image/j
 def get_file(object_name: str) -> bytes:
     """
     Download file from MinIO
-    
+
     Args:
         object_name: Object name in bucket
-        
+
     Returns:
         File bytes
     """
@@ -114,11 +113,11 @@ def get_file(object_name: str) -> bytes:
 def get_file_url(object_name: str, expires: int = 3600) -> str:
     """
     Get presigned URL for file
-    
+
     Args:
         object_name: Object name in bucket
         expires: URL expiry in seconds
-        
+
     Returns:
         Presigned URL
     """
@@ -129,9 +128,7 @@ def get_file_url(object_name: str, expires: int = 3600) -> str:
             return f"{base}/{path}"
 
         return minio_client.presigned_get_object(
-            settings.MINIO_BUCKET,
-            object_name,
-            expires=timedelta(seconds=expires)
+            settings.MINIO_BUCKET, object_name, expires=timedelta(seconds=expires)
         )
     except S3Error as e:
         logger.error(f"Failed to generate presigned URL: {e}")
@@ -141,7 +138,7 @@ def get_file_url(object_name: str, expires: int = 3600) -> str:
 def delete_file(object_name: str):
     """
     Delete file from MinIO
-    
+
     Args:
         object_name: Object name in bucket
     """

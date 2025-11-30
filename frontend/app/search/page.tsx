@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { searchImages } from "@/lib/api";
-import { Search as SearchIcon, Loader2, Sparkles } from "lucide-react";
+import { Loader2, Search as SearchIcon, Sparkles } from "lucide-react";
 import Image from "next/image";
+import { useCallback, useMemo, useState } from "react";
+import { searchImages } from "@/lib/api";
 import { getStatusBadgeClass } from "@/lib/utils";
 
 export default function SearchPage() {
@@ -16,7 +16,7 @@ export default function SearchPage() {
   const sanitizedBase = useMemo(
     () =>
       minioBaseUrl.endsWith("/") ? minioBaseUrl.slice(0, -1) : minioBaseUrl,
-    [minioBaseUrl]
+    [minioBaseUrl],
   );
   const buildEncodedUrl = useCallback(
     (objectKey?: string | null) => {
@@ -29,7 +29,7 @@ export default function SearchPage() {
         .join("/");
       return `${sanitizedBase}/${bucket}/${encodedKey}`;
     },
-    [bucket, sanitizedBase]
+    [bucket, sanitizedBase],
   );
 
   const searchMutation = useMutation({
@@ -173,7 +173,7 @@ export default function SearchPage() {
                         )}
                         <span
                           className={getStatusBadgeClass(
-                            result.metadata.status
+                            result.metadata.status,
                           )}
                         >
                           {result.metadata.status}
