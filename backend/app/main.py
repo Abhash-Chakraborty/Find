@@ -9,7 +9,7 @@ import logging
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.storage import init_storage
-from app.routers import upload, gallery, search, clusters, status
+from app.routers import upload, gallery, search, clusters, status, cluster
 
 # Configure logging
 logging.basicConfig(
@@ -61,6 +61,7 @@ app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(gallery.router, prefix="/api", tags=["gallery"])
 app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(clusters.router, prefix="/api", tags=["clusters"])
+app.include_router(cluster.router, prefix="/api", tags=["cluster-ops"])
 app.include_router(status.router, prefix="/api", tags=["status"])
 
 

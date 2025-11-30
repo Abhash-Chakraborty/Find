@@ -106,11 +106,30 @@ def analyze_image(media_id: int):
         try:
             logger.info("Generating CLIP embedding...")
             embedder = get_clip_embedder()
-            embedding = embedder.embed_image(image)
+            # Generate Image Embedding
+            image_embedding = embedder.embed_image(image)
+            
+            # Generate Caption Embedding
+            caption_embedding = embedder.embed_text(metadata.get("caption", ""))
+            
+            # Generate Objects Embedding
+            objects = metadata.get("objects", [])
+            object_names = [obj["class"] for obj in objects]
+            if object_names:
+                objects_text = "detected objects: " + ", ".join(sorted(list(set(object_names))))
+            else:
+                objects_text = ""
+            objects_embedding = embedder.embed_text(objects_text)
+            
+            # Create Hybrid Vector (Average)
+            hybrid_vector = (image_embedding + caption_embedding + objects_embedding) / 3.0
+            
+            # Normalize
+            hybrid_vector = hybrid_vector / np.linalg.norm(hybrid_vector)
             
             # Store embedding as list for pgvector
-            media.vector = embedding.tolist()
-            logger.info("CLIP embedding generated")
+            media.vector = hybrid_vector.tolist()
+            logger.info("Hybrid embedding (Image + Caption + Objects) generated")
         except Exception as e:
             logger.error(f"CLIP embedding failed: {e}")
             raise  # This is critical, fail the job

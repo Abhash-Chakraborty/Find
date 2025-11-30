@@ -39,11 +39,11 @@ class Settings(BaseSettings):
     MAX_BULK_FILES: int = 200
     WORKER_TIMEOUT: int = 600
     BATCH_SIZE: int = 1
-    EMBEDDING_DIM: int = 512  # CLIP ViT-B-32 dimension
+    EMBEDDING_DIM: int = 768  # SigLIP ViT-B-16 dimension
     
     # Clustering
-    MIN_CLUSTER_SIZE: int = 5
-    MIN_SAMPLES: int = 3
+    MIN_CLUSTER_SIZE: int = 2
+    MIN_SAMPLES: int = 1
     
     class Config:
         env_file = ".env"

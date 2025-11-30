@@ -66,8 +66,8 @@ async def search_images(
     """)
     
     # SigLIP similarities can be lower than OpenAI CLIP. 
-    # 0.15 is a conservative threshold for "somewhat relevant".
-    threshold = 0.15
+    # Lowering threshold to ensure results are returned.
+    threshold = 0.45
     
     result = db.execute(
         query_sql,
