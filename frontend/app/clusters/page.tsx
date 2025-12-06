@@ -1,25 +1,58 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { Grid3x3, Loader2 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Grid3x3, Loader2, Play } from "lucide-react";
 import Image from "next/image";
-import { getClusters } from "@/lib/api";
+import { getClusters, triggerClustering } from "@/lib/api";
+import { toast } from "sonner";
 
 export default function ClustersPage() {
+  const queryClient = useQueryClient();
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["clusters"],
     queryFn: getClusters,
+  });
+
+  const clusterMutation = useMutation({
+    mutationFn: triggerClustering,
+    onSuccess: () => {
+      toast.success("Clustering job started");
+      // Invalidate clusters query to refresh data eventually
+      // Since it's async, we might want to poll or just let the user refresh
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["clusters"] });
+      }, 2000);
+    },
+    onError: (err) => {
+      toast.error("Failed to start clustering");
+      console.error(err);
+    },
   });
 
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-7xl mx-auto px-6 py-12">
         {/* Header */}
-        <div className="mb-12">
-          <h1 className="text-4xl font-light mb-3 text-black">Clusters</h1>
-          <p className="text-gray-500 text-sm">
-            Automatically grouped similar images
-          </p>
+        <div className="mb-12 flex justify-between items-end">
+          <div>
+            <h1 className="text-4xl font-light mb-3 text-black">Clusters</h1>
+            <p className="text-gray-500 text-sm">
+              Automatically grouped similar images
+            </p>
+          </div>
+          <button
+            onClick={() => clusterMutation.mutate()}
+            disabled={clusterMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {clusterMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Play className="w-4 h-4" />
+            )}
+            Run Clustering
+          </button>
         </div>
 
         {/* Loading */}
@@ -41,9 +74,16 @@ export default function ClustersPage() {
           <div className="text-center py-32">
             <Grid3x3 className="w-16 h-16 mx-auto mb-4 text-gray-200" />
             <p className="text-gray-400 mb-2">No clusters found</p>
-            <p className="text-gray-300 text-sm">
+            <p className="text-gray-300 text-sm mb-6">
               Clusters are created automatically after uploading multiple images
             </p>
+            <button
+              onClick={() => clusterMutation.mutate()}
+              disabled={clusterMutation.isPending}
+              className="text-sm text-black underline hover:text-gray-600"
+            >
+              Try running clustering manually
+            </button>
           </div>
         )}
 

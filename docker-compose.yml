@@ -20,7 +20,9 @@ services:
   # Redis for job queue
   redis:
     image: redis:7-alpine
+    command: redis-server --loglevel warning
     container_name: find-redis
+    hostname: redis
     ports:
       - "6379:6379"
     volumes:
@@ -102,7 +104,7 @@ services:
       args:
         BASE_IMAGE: ${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}
     container_name: find-worker
-    command: rq worker --url redis://redis:6379 high default low
+    command: rq worker --url ${REDIS_URL} high default low
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT}

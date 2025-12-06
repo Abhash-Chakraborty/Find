@@ -99,6 +99,8 @@ def cluster_images():
     from app.ml.clusterer import get_image_clusterer
     from app.models.cluster import Cluster
 
+    from app.core.config import settings
+
     db = SessionLocal()
 
     try:
@@ -111,8 +113,8 @@ def cluster_images():
             .all()
         )
 
-        if len(media_list) < 5:
-            logger.warning("Not enough images for clustering")
+        if len(media_list) < settings.MIN_CLUSTER_SIZE:
+            logger.warning(f"Not enough images for clustering (found {len(media_list)}, need {settings.MIN_CLUSTER_SIZE})")
             return
 
         # Extract embeddings and IDs

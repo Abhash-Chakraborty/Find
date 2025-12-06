@@ -15,6 +15,14 @@ from app.routers import upload, gallery, search, clusters, status, cluster
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+
+# Filter out health check logs
+class HealthCheckFilter(logging.Filter):
+    def filter(self, record):
+        return record.getMessage().find("/health") == -1
+
+logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
+
 logger = logging.getLogger(__name__)
 
 
