@@ -24,14 +24,14 @@ export default function RootLayout({
               <div className="flex items-center justify-between gap-4">
                 <Link
                   href="/"
-                  className="group flex shrink-0 items-center gap-3 text-sm font-semibold text-[#f0f0f0] transition-colors hover:text-white"
+                  className="group flex shrink-0 items-center gap-3 text-2xl font-semibold text-[#f0f0f0] transition-colors hover:text-white"
                 >
-                  <span className="relative grid h-7 w-7 place-items-center rounded-md border border-[var(--frost)] bg-white/[0.03] p-1 transition-transform group-hover:scale-105">
+                  <span className="relative grid h-8 w-8 place-items-center rounded-md border border-[var(--frost)] bg-white/[0.03] p-1 transition-transform group-hover:scale-105">
                     <Image
                       src="/Find-Logo.svg"
                       alt=""
-                      width={20}
-                      height={20}
+                      width={50}
+                      height={50}
                       priority
                     />
                   </span>
