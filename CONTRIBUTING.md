@@ -1,68 +1,48 @@
 # Contributing to Find
 
-First off, thanks for taking the time to contribute! 🎉
+Thanks for contributing to Find.
 
-We love your input! We want to make contributing to this project as easy and transparent as possible, whether it's:
+This project is part of **GSSoC'26**, and we want contributions to be beginner-friendly, reviewable, and production-safe.
 
-- Reporting a bug
-- Discussing the current state of the code
-- Submitting a fix
-- Proposing new features
-- Becoming a maintainer
+## Before you start
 
-## Development Process
+1. Check open issues and comment on one before starting work.
+2. Wait for maintainer confirmation/assignment.
+3. Fork the repository and branch from `main`.
 
-We use GitHub to host code, to track issues and feature requests, and to accept pull requests.
-
-1.  Fork the repo and create your branch from `master`.
-2.  If you've added code that should be tested, add tests.
-3.  If you've changed APIs, update the documentation.
-4.  Ensure the test suite passes.
-5.  Make sure your code lints.
-6.  Issue that pull request!
-
-## Getting Started
+## Local setup
 
 ### Prerequisites
 
-- **Node.js** (v18+) & **pnpm**
-- **Python** (3.10+) & **uv**
-- **Docker** & **Docker Compose**
-- **PostgreSQL** (with `pgvector` extension)
-- **Redis**
-- **MinIO** (or S3 compatible storage)
+- Node.js 18+ and `pnpm`
+- Python 3.12 and `uv`
+- Docker and Docker Compose (recommended path)
+- PostgreSQL + `pgvector`, Redis, and MinIO (for non-Docker local runs)
 
-### Local Setup
-
-#### 1. Clone the repository
+### Run with Docker (recommended)
 
 ```bash
-git clone https://github.com/AbhashChakraborty/Find.git
-cd Find
+docker compose up --build
 ```
 
-#### 2. Backend Setup
+### Run manually
+
+Backend:
 
 ```bash
 cd backend
-uv venv
-uv sync
-```
-
-**Environment Variables:**
-Copy `.env.example` to `.env` and configure your database, Redis, and MinIO credentials.
-
-**Run the Server:**
-```bash
+uv sync --group dev
 uv run uvicorn find_api.main:app --reload
 ```
 
-**Run the Worker:**
+Worker:
+
 ```bash
+cd backend
 uv run rq worker --url redis://localhost:6379 high default low
 ```
 
-#### 3. Frontend Setup
+Frontend:
 
 ```bash
 cd frontend
@@ -70,36 +50,79 @@ pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Commit message convention
 
-## Code Quality
+Use short conventional prefixes:
 
-### Frontend (Biome)
+- `feat:`
+- `fix:`
+- `docs:`
+- `refactor:`
+- `chore:`
+- `test:`
+- `ci:`
 
-We use [Biome](https://biomejs.dev/) for linting and formatting.
+Example:
+
+```text
+feat: add upload validation for large ZIP files
+```
+
+## Code style and quality checks
+
+Run these before opening a PR.
+
+Frontend:
 
 ```bash
 cd frontend
-pnpm lint      # Check for issues
-pnpm format    # Format code
+pnpm check
+pnpm build
 ```
 
-### Backend (Ruff & Black)
-
-We use `ruff` for linting and formatting (compatible with Black).
+Backend:
 
 ```bash
 cd backend
-ruff check .   # Check for lint errors
-ruff format .  # Format code
+uv run ruff check .
+uv run ruff format --check .
 ```
 
-## Pull Request Process
+## Pull request format
 
-1.  Update the `README.md` with details of changes to the interface, this includes new environment variables, exposed ports, useful file locations and container parameters.
-2.  Increase the version numbers in any examples files and the README.md to the new version that this Pull Request would represent.
-3.  You may merge the Pull Request in once you have the sign-off of two other developers, or if you do not have permission to do that, you may request the second reviewer to merge it for you.
+Each PR must:
+
+1. Link an issue (`Fixes #<issue-number>`).
+2. Explain what changed and why.
+3. Include manual test steps and expected result.
+4. Add screenshots/videos for UI changes.
+5. Keep scope focused to one issue.
+
+Use the PR template in `.github/pull_request_template.md`.
+
+## Review expectations
+
+- Maintainers usually respond within **24-48 hours**.
+- PRs without issue linkage, test notes, or clear scope can be sent back for updates.
+- Do not mark conversations as resolved unless feedback is addressed.
+- Do not force push over unresolved review comments without explanation.
+
+## Issue quality expectations
+
+If you open a new issue, include:
+
+- Problem statement
+- Reproduction steps (for bugs)
+- Expected vs actual behavior
+- Screenshots/logs where relevant
+- Suggested approach (optional but helpful)
+
+## Community standards
+
+- Be respectful and constructive.
+- Follow the [Code of Conduct](./CODE_OF_CONDUCT.md).
+- Use GitHub Issues/PR comments as the official project communication channel.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under its MIT License.
+By contributing, you agree your contributions are licensed under the [MIT License](./LICENSE).

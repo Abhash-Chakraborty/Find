@@ -1,27 +1,31 @@
 # Find
 
+[![GSSoC 2026](https://img.shields.io/badge/GSSoC-2026-ff4f8b?style=for-the-badge)](https://gssoc.girlscript.org/)
+[![CI](https://img.shields.io/github/actions/workflow/status/Abhash-Chakraborty/Find/ci.yml?branch=main&label=CI)](https://github.com/Abhash-Chakraborty/Find/actions/workflows/ci.yml)
+[![Good First Issues](https://img.shields.io/github/issues/Abhash-Chakraborty/Find/good%20first%20issue?label=good%20first%20issue)](https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue)
+[![Open PRs](https://img.shields.io/github/issues-pr/Abhash-Chakraborty/Find?label=open%20PRs)](https://github.com/Abhash-Chakraborty/Find/pulls)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
+![Find x GSSoC 2026](docs/assets/gssoc-2026-banner.svg)
+
 Find is a local-first AI image intelligence platform for uploading, indexing, searching, and clustering images on your own machine.
 
 All image processing, vector generation, and search stay inside your local stack.
 
-## What It Does
+## What it does
 
 - Upload individual images or ZIP archives
-- Extract captions, detected objects, OCR text, EXIF metadata, and image dimensions
-- Generate hybrid image embeddings for semantic search
+- Extract captions, detected objects, OCR text, EXIF metadata, and dimensions
+- Generate hybrid embeddings for semantic search
 - Automatically cluster related images after indexing completes
-- Browse a gallery, inspect image details, like/delete media, and review cluster members
+- Browse gallery, inspect details, like/delete media, and review cluster members
 
-## Stack
+## Tech stack
 
-- Frontend: Next.js 16.2, React 19, React Query, Tailwind CSS, Biome
-- Backend: FastAPI, SQLAlchemy, PostgreSQL, pgvector, Redis, RQ, MinIO
-- ML processing flow:
-  - Object detection: YOLOv10
-  - Captioning: Florence-2
-  - OCR: PaddleOCR
-  - Embeddings: SigLIP via `open-clip`
-  - Clustering: HDBSCAN
+- **Frontend:** Next.js 16, React 19, React Query, Tailwind CSS, Biome
+- **Backend:** FastAPI, SQLAlchemy, PostgreSQL + pgvector, Redis, RQ, MinIO
+- **ML pipeline:** YOLOv10, Florence-2, PaddleOCR, SigLIP (`open-clip`), HDBSCAN
 
 ## Architecture
 
@@ -39,96 +43,106 @@ FastAPI API
         ML worker
 ```
 
-## Core Flow
+## GSSoC'26 contributors
 
-1. The frontend uploads images to `/api/upload` or `/api/upload/bulk`.
-2. The backend stores files in MinIO and creates `media` rows in PostgreSQL.
-3. Each upload is queued for background processing through RQ.
-4. The worker extracts metadata and generates the hybrid embedding.
-5. After indexing succeeds, the backend automatically queues a clustering job.
-6. The frontend polls job status and updates gallery/search/cluster views.
+This project is open for **GSSoC'26** contributions.
 
-## One-Command Start
+- Start with issues labeled [`good first issue`](https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue)
+- For medium/advanced work, check [`level 2`](https://github.com/Abhash-Chakraborty/Find/labels/level%202) and [`level 3`](https://github.com/Abhash-Chakraborty/Find/labels/level%203)
+- Look for priority queue items via [`help wanted`](https://github.com/Abhash-Chakraborty/Find/labels/help%20wanted)
+- Follow the contribution rules in [CONTRIBUTING.md](./CONTRIBUTING.md)
 
-From the repository root:
+## Install and run
+
+### Option A: one-command demo stack (recommended)
+
+From repository root:
 
 ```bash
 docker compose up --build
 ```
 
-This is the intended demo command.
-
-Notes:
-
-- The current Docker setup is GPU-oriented and expects NVIDIA GPU access.
-- If you already have a root `.env`, Docker Compose will use it.
-- If you do not have a `.env`, the compose file now provides sensible defaults for local demo startup.
-
-## URLs
+Services:
 
 - Frontend: `http://localhost:3000`
 - Backend API: `http://localhost:8000`
 - MinIO API: `http://localhost:9000`
 - MinIO console: `http://localhost:9001`
 
-## Configuration
+Notes:
 
-The included `.env.example` matches the current stack.
+- Current Docker setup is GPU-oriented and expects NVIDIA GPU access.
+- If no root `.env` is present, compose defaults support local demo startup.
 
-Important variables:
+### Option B: local development without Docker
 
-```env
-DATABASE_URL=postgresql://find:find123@db:5432/find
+#### Prerequisites
 
-MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=minioadmin
-MINIO_ENDPOINT=minio:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET=images
-MINIO_SECURE=false
-MINIO_PUBLIC_READ=false
-MINIO_PUBLIC_ENDPOINT=http://localhost:9000/images
+- Node.js 18+ and `pnpm`
+- Python 3.12 and `uv`
+- PostgreSQL with `pgvector`
+- Redis
+- MinIO (or S3-compatible storage)
 
-REDIS_URL=redis://redis:6379
+#### 1. Clone and configure env
 
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_MINIO_BUCKET=images
-NEXT_PUBLIC_MINIO_URL=http://localhost:9000
-
-CLIP_MODEL=ViT-B-16-SigLIP
-CLIP_PRETRAINED=webli
-BLIP_MODEL=microsoft/Florence-2-base
-YOLO_MODEL=yolov10b.pt
-USE_GPU=true
+```bash
+git clone https://github.com/Abhash-Chakraborty/Find.git
+cd Find
+cp .env.example .env
 ```
 
-## Privacy Model
+#### 2. Backend API
 
-- Images stay in your local MinIO instance
-- Search embeddings stay in your local PostgreSQL database
-- The frontend now uses backend-issued image URLs, so private MinIO mode works correctly
-- Public object access is optional and disabled by default
+```bash
+cd backend
+uv sync --group dev
+uv run uvicorn find_api.main:app --reload
+```
 
-## Main Pages
+#### 3. Worker (separate terminal)
 
-- `/upload`
-  - Upload individual files or ZIP archives
-  - Live job status polling for indexing progress
-  - Automatic clustering notice and post-upload shortcuts
-- `/gallery`
-  - Paginated media browser
-  - Like, download, delete, and image detail modal
-  - Detail view includes caption, objects, OCR text, and metadata
-- `/search`
-  - Natural-language semantic search over indexed images
-  - Similarity score and overlay metadata in results
-- `/clusters`
-  - Automatic cluster discovery view
-  - Manual re-clustering trigger with job status
-  - Cluster detail modal with member previews and captions
+```bash
+cd backend
+uv run rq worker --url redis://localhost:6379 high default low
+```
 
-## Backend Endpoints
+#### 4. Frontend (separate terminal)
+
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
+
+## Local quality checks
+
+### Frontend
+
+```bash
+cd frontend
+pnpm check
+pnpm build
+```
+
+### Backend
+
+```bash
+cd backend
+uv run ruff check .
+uv run ruff format --check .
+```
+
+## Core flow
+
+1. Frontend uploads images to `/api/upload` or `/api/upload/bulk`.
+2. Backend stores files in MinIO and creates `media` rows in PostgreSQL.
+3. Uploads are queued through RQ.
+4. Worker extracts metadata and generates embeddings.
+5. Backend queues clustering once indexing succeeds.
+6. Frontend polls job status and updates gallery/search/cluster views.
+
+## Key endpoints
 
 - `POST /api/upload`
 - `POST /api/upload/bulk`
@@ -142,88 +156,23 @@ USE_GPU=true
 - `GET /api/cluster/{cluster_id}`
 - `POST /api/cluster/run`
 
-## Data Model
+## Configuration notes
 
-### `media`
+`.env.example` reflects the current stack. Keep `EMBEDDING_DIM` aligned with the selected CLIP/SigLIP model and pgvector dimensions.
 
-Stores:
+## Contribution quick start
 
-- file hash
-- object storage key
-- filename and content type
-- processing status
-- EXIF metadata
-- AI metadata JSON
-- liked flag
-- cluster ID
-- pgvector embedding
+1. Pick an issue and comment to get assigned.
+2. Fork and create a branch from `main`.
+3. Make changes with focused commits.
+4. Run quality checks from CONTRIBUTING.
+5. Open a PR using the project template and link the issue.
 
-### `clusters`
+## Contact and support
 
-Stores:
-
-- cluster type
-- optional label and description
-- member image IDs
-- member count
-- centroid vector
-
-## Clustering Behavior
-
-- Clustering runs automatically after indexing jobs finish.
-- Manual clustering is still exposed in the frontend for demos and refreshes.
-- Each clustering run rebuilds cluster state from the current indexed dataset.
-- Stale cluster rows and stale `cluster_id` references are cleared before rebuilding.
-
-## Local Development
-
-### Frontend
-
-```bash
-cd frontend
-pnpm install
-pnpm dev
-```
-
-### Backend
-
-```bash
-cd backend
-uv sync
-uv run uvicorn find_api.main:app --reload
-```
-
-## Database Notes
-
-- The backend creates tables on startup.
-- PostgreSQL `vector` extension is enabled automatically when available.
-- `backend/migrate_db.py` is included for vector column maintenance tasks.
-
-## Demo Tips
-
-- Upload a small themed batch first, such as pets, street scenes, or documents.
-- Wait for upload jobs to finish indexing on the upload page.
-- Show gallery detail view to demonstrate extracted caption, objects, and OCR text.
-- Run a semantic search with a natural language sentence.
-- Open the clusters page to show automatic grouping and drill into a cluster.
-
-## Troubleshooting
-
-### Images do not render
-
-- Confirm the API is returning image `url` values from MinIO.
-- If you enabled public MinIO reads, set `MINIO_PUBLIC_ENDPOINT` consistently.
-
-### Clusters do not appear
-
-- Make sure multiple images have completed indexing.
-- Check the worker logs.
-- Trigger clustering manually from `/clusters` if you want an immediate rerun.
-
-### Slow first run
-
-- Model downloads happen on the first startup.
-- Cached models are stored in the Docker volume mounted at `model_cache`.
+- Use [GitHub Issues](https://github.com/Abhash-Chakraborty/Find/issues) for bugs/features/questions.
+- For contributor context, tag maintainers in your issue or PR (`@Abhash-Chakraborty`).
+- Follow [Code of Conduct](./CODE_OF_CONDUCT.md) in all interactions.
 
 ## License
 

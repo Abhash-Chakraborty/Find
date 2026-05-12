@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contribution guide
+    url: https://github.com/Abhash-Chakraborty/Find/blob/main/CONTRIBUTING.md
+    about: Read contribution flow, checks, and PR requirements.
+  - name: GSSoC Project Admin Guidelines
+    url: https://gssoc.girlscript.org/guidelines/project-admin
+    about: Program-level expectations for contributors and maintainers.

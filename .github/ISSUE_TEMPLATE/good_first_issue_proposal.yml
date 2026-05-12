@@ -1,0 +1,44 @@
+name: "Good first issue proposal"
+description: "Propose a beginner-friendly task for GSSoC/new contributors"
+title: "good first issue: "
+labels: ["good first issue", "help wanted"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to propose a beginner-friendly issue that can be completed in a focused PR.
+  - type: textarea
+    id: task
+    attributes:
+      label: Task summary
+      placeholder: Describe the task in 1-2 lines
+    validations:
+      required: true
+  - type: textarea
+    id: background
+    attributes:
+      label: Background and files
+      description: Where should contributors start? Mention likely files/modules.
+      placeholder: frontend/src/... and backend/src/...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Suggested level
+      options:
+        - level 1
+        - level 2
+        - level 3
+    validations:
+      required: true

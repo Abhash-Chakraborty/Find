@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-label="Find x GSSoC 2026">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19"/>
+      <stop offset="50%" stop-color="#161f33"/>
+      <stop offset="100%" stop-color="#1f1538"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b9eff"/>
+      <stop offset="100%" stop-color="#ff4f8b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="360" fill="url(#bg)"/>
+  <circle cx="1100" cy="70" r="130" fill="#ffffff" opacity="0.04"/>
+  <circle cx="190" cy="300" r="170" fill="#ffffff" opacity="0.04"/>
+  <rect x="72" y="86" width="560" height="188" rx="24" fill="#ffffff" opacity="0.06"/>
+  <text x="108" y="166" fill="#f4f7ff" font-family="Segoe UI, Arial, sans-serif" font-size="64" font-weight="700">Find</text>
+  <text x="110" y="214" fill="#9db3d9" font-family="Segoe UI, Arial, sans-serif" font-size="28">Local-first AI Image Intelligence</text>
+  <rect x="720" y="116" width="488" height="130" rx="18" fill="url(#accent)" opacity="0.95"/>
+  <text x="756" y="178" fill="#0d1220" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700">GSSoC'26 Project</text>
+  <text x="756" y="215" fill="#0d1220" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="600">Contributions Welcome</text>
+</svg>

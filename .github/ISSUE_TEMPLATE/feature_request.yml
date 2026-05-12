@@ -1,0 +1,40 @@
+name: "Feature request"
+description: "Suggest an improvement or new feature"
+title: "feat: "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Suggest a feature with clear scope and implementation direction.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What user or developer problem does this solve?
+      placeholder: I am frustrated when...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should we build?
+      placeholder: Add a new...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and acceptance criteria
+      description: Define what is in/out of scope and done criteria.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, links, references, or related issues.
