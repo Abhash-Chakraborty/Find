@@ -10,6 +10,15 @@ This project is part of **GSSoC'26**, and we want contributions to be beginner-f
 2. Wait for maintainer confirmation/assignment.
 3. Fork the repository and branch from `main`.
 
+## Repository protection rules
+
+- Direct pushes to `main` are blocked.
+- Open a pull request from your branch.
+- PR merge requires:
+  - Passing CI checks
+  - At least one approval
+  - Resolved review conversations
+
 ## Local setup
 
 ### Prerequisites
@@ -97,6 +106,8 @@ Each PR must:
 3. Include manual test steps and expected result.
 4. Add screenshots/videos for UI changes.
 5. Keep scope focused to one issue.
+6. Target the `main` branch.
+7. Pass CI checks (`frontend-check`, `backend-check`).
 
 Use the PR template in `.github/pull_request_template.md`.
 
@@ -116,6 +127,13 @@ If you open a new issue, include:
 - Expected vs actual behavior
 - Screenshots/logs where relevant
 - Suggested approach (optional but helpful)
+
+Useful labels:
+
+- `good first issue`: beginner-friendly tasks
+- `help wanted`: priority items where maintainer help is needed
+- `gssoc26`: scoped for GSSoC'26
+- `level 1`, `level 2`, `level 3`: expected complexity
 
 ## Community standards
 
