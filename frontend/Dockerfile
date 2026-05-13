@@ -1,4 +1,5 @@
 FROM node:20-alpine AS base
+ARG PNPM_VERSION=10.17.1
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -6,7 +7,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Pin pnpm to a Node 20 compatible release instead of floating to latest.
-RUN corepack enable && corepack prepare pnpm@10.17.1 --activate
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
@@ -16,7 +17,7 @@ FROM base AS development
 WORKDIR /app
 
 # Reuse the same pinned pnpm version across stages.
-RUN corepack enable && corepack prepare pnpm@10.17.1 --activate
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -31,7 +32,7 @@ FROM base AS builder
 WORKDIR /app
 
 # Reuse the same pinned pnpm version across stages.
-RUN corepack enable && corepack prepare pnpm@10.17.1 --activate
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

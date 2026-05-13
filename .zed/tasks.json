@@ -1,14 +1,12 @@
 [
   {
     "label": "Docker: Start Full Stack",
-    "command": "powershell.exe",
+    "command": "docker",
     "args": [
-      "-NoLogo",
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      "Set-Location \"$env:ZED_WORKTREE_ROOT\"; docker compose up --build -d"
+      "compose",
+      "up",
+      "--build",
+      "-d"
     ],
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": false,
@@ -19,14 +17,10 @@
   },
   {
     "label": "Docker: Stop Stack",
-    "command": "powershell.exe",
+    "command": "docker",
     "args": [
-      "-NoLogo",
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      "Set-Location \"$env:ZED_WORKTREE_ROOT\"; docker compose down"
+      "compose",
+      "down"
     ],
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": false,
@@ -37,14 +31,14 @@
   },
   {
     "label": "Docker: Start Light Stack",
-    "command": "powershell.exe",
+    "command": "docker",
     "args": [
-      "-NoLogo",
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      "Set-Location \"$env:ZED_WORKTREE_ROOT\"; docker compose -f docker-compose.light.yml up --build -d"
+      "compose",
+      "-f",
+      "docker-compose.light.yml",
+      "up",
+      "--build",
+      "-d"
     ],
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": false,

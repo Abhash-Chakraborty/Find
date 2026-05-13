@@ -2,6 +2,7 @@
 
 import hashlib
 import re
+import threading
 from typing import Any
 
 import numpy as np
@@ -94,11 +95,14 @@ class MockEmbedder:
 
 
 _mock_embedder: MockEmbedder | None = None
+_mock_embedder_lock = threading.Lock()
 
 
 def get_mock_embedder() -> MockEmbedder:
     """Get or create the global mock embedder."""
     global _mock_embedder
     if _mock_embedder is None:
-        _mock_embedder = MockEmbedder()
+        with _mock_embedder_lock:
+            if _mock_embedder is None:
+                _mock_embedder = MockEmbedder()
     return _mock_embedder

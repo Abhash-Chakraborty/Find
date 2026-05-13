@@ -2,6 +2,7 @@ services:
   db:
     image: ankane/pgvector:latest
     container_name: find-light-db
+    # Local-only defaults for contributor setup. Override via .env for anything else.
     environment:
       POSTGRES_DB: find
       POSTGRES_USER: find
@@ -34,6 +35,7 @@ services:
     image: minio/minio:latest
     container_name: find-light-minio
     command: server /data --console-address ":9001"
+    # Local-only defaults for contributor setup. Never reuse these credentials in production.
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
