@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379"
 
     # ML Models
+    ML_MODE: str = "full"
     CLIP_MODEL: str = "ViT-B-16-SigLIP"
     CLIP_PRETRAINED: str = "webli"
     BLIP_MODEL: str = "microsoft/Florence-2-base"

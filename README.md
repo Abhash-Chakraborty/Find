@@ -74,7 +74,24 @@ Notes:
 - Current Docker setup is GPU-oriented and expects NVIDIA GPU access.
 - If no root `.env` is present, compose defaults support local demo startup.
 
-### Option B: local development without Docker
+### Option B: fast contributor mode
+
+For UI, API, upload, gallery, search, clustering, docs, and workflow changes, use the light stack:
+
+```bash
+docker compose -f docker-compose.light.yml up --build
+```
+
+This runs the same app flow with `ML_MODE=mock`, a Python slim backend image, and no GPU/model cache mount. It avoids downloading Florence-2, SigLIP, PaddleOCR, YOLO, CUDA PyTorch, and related model weights, so first-time setup is much smaller and faster.
+
+Light mode is deterministic but not AI-accurate:
+
+- Uploads still go through MinIO, PostgreSQL, Redis, RQ, and the worker.
+- The worker records image dimensions, EXIF, mock metadata, and schema-compatible vectors.
+- Search and clustering exercise the same API/database paths using mock embeddings.
+- Use the full stack before validating real ML quality or performance.
+
+### Option C: local development without Docker
 
 #### Prerequisites
 
@@ -99,6 +116,8 @@ cd backend
 uv sync --group dev
 uv run uvicorn find_api.main:app --reload
 ```
+
+Use `uv sync --group dev --extra ml` only when you need real local ML inference outside Docker.
 
 #### 3. Worker (separate terminal)
 
@@ -159,6 +178,14 @@ uv run ruff format --check .
 ## Configuration notes
 
 `.env.example` reflects the current stack. Keep `EMBEDDING_DIM` aligned with the selected CLIP/SigLIP model and pgvector dimensions.
+
+## Troubleshooting
+
+### Slow first run
+
+- Model downloads happen on the first startup of the full stack.
+- Cached models are stored in the Docker volume mounted at `model_cache`.
+- Use `docker compose -f docker-compose.light.yml up --build` when you only need to test contributor changes without real ML inference.
 
 ## Contribution quick start
 
