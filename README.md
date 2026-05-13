@@ -1,13 +1,16 @@
 # Find
 
-[![GSSoC 2026](https://img.shields.io/badge/GSSoC-2026-ff4f8b?style=for-the-badge)](https://gssoc.girlscript.org/)
-[![CI](https://img.shields.io/github/actions/workflow/status/Abhash-Chakraborty/Find/ci.yml?branch=main&label=CI)](https://github.com/Abhash-Chakraborty/Find/actions/workflows/ci.yml)
-[![Good First Issues](https://img.shields.io/github/issues/Abhash-Chakraborty/Find/good%20first%20issue?label=good%20first%20issue)](https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue)
-[![Open PRs](https://img.shields.io/github/issues-pr/Abhash-Chakraborty/Find?label=open%20PRs)](https://github.com/Abhash-Chakraborty/Find/pulls)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+<p align="center">
+  <a href="https://gssoc.girlscript.org/"><img src="https://img.shields.io/badge/GSSoC-2026-ff4f8b?style=for-the-badge" alt="GSSoC 2026"></a>
+  <a href="https://github.com/Abhash-Chakraborty/Find/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Abhash-Chakraborty/Find/ci.yml?branch=main&label=CI" alt="CI"></a>
+  <a href="https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue"><img src="https://img.shields.io/github/issues/Abhash-Chakraborty/Find/good%20first%20issue?label=good%20first%20issue" alt="Good first issue"></a>
+  <a href="https://github.com/Abhash-Chakraborty/Find/issues"><img src="https://img.shields.io/github/issues/Abhash-Chakraborty/Find?label=issues" alt="Open issues"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License MIT"></a>
+</p>
 
-![Find x GSSoC 2026](docs/assets/gssoc-2026-banner.svg)
+<p align="center">
+  <img src="docs/assets/gssoc-2026-banner.svg" alt="Find x GSSoC 2026">
+</p>
 
 Find is a local-first AI image intelligence platform for uploading, indexing, searching, and clustering images on your own machine.
 

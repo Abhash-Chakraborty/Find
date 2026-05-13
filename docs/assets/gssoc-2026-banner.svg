@@ -71,12 +71,7 @@
 
   <g transform="translate(806 93)">
     <rect x="0" y="0" width="104" height="104" rx="24" fill="#f6fbfb" filter="url(#shadow)"/>
-    <circle cx="52" cy="52" r="31" fill="#11ff99"/>
-    <circle cx="52" cy="52" r="23" fill="#050606"/>
-    <path d="M52 26C66.359 26 78 37.641 78 52C78 66.359 66.359 78 52 78" fill="none" stroke="#11ff99" stroke-width="8" stroke-linecap="round"/>
-    <path d="M52 36C43.163 36 36 43.163 36 52C36 60.837 43.163 68 52 68" fill="none" stroke="#f6fbfb" stroke-width="8" stroke-linecap="round"/>
-    <circle cx="64" cy="44" r="4" fill="#f6fbfb"/>
-    <circle cx="40" cy="60" r="4" fill="#11ff99"/>
+    <image x="16" y="16" width="72" height="72" href="https://gssoc.girlscript.org/logo.png" preserveAspectRatio="xMidYMid meet"/>
     <text x="132" y="45" fill="#f0f0f0" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="42" font-weight="800">GSSoC '26</text>
     <text x="134" y="80" fill="#9ca3a3" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="500">Open source project</text>
   </g>
