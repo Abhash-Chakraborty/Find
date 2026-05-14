@@ -46,7 +46,7 @@ export default function GalleryPage() {
     () => ["gallery", page, filter, likedOnly] as const,
     [page, filter, likedOnly],
   );
-
+ 
   const { data, isLoading, error } = useQuery<GalleryResponse, Error>({
     queryKey: galleryQueryKey,
     queryFn: () =>
@@ -57,6 +57,16 @@ export default function GalleryPage() {
         liked: likedOnly ? true : undefined,
       }),
     placeholderData: (previous) => previous,
+    refetchInterval: (query) => {
+      const gallery = query.state.data as GalleryResponse | undefined;
+
+      return gallery?.items.some(
+        (item) =>
+          item.status === "processing" || item.status === "pending",
+      )
+        ? 5000
+        : false;
+    },
   });
 
   const likeMutation = useMutation({
