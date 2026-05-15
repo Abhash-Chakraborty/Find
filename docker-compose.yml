@@ -57,7 +57,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      target: ${WORKER_BUILD_TARGET:-worker-ml-gpu}
+      target: api
       args:
         BASE_IMAGE: ${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}
         PYTHON_VERSION: ${BACKEND_PYTHON_VERSION:-3.12}
