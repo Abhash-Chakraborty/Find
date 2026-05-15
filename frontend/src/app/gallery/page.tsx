@@ -55,6 +55,7 @@ export default function GalleryPage() {
         status: filter === "all" ? undefined : filter,
         liked: likedOnly ? true : undefined,
       }),
+
     placeholderData: (previous) => previous,
     refetchInterval: (query) => {
       const gallery = query.state.data as GalleryResponse | undefined;
@@ -66,6 +67,22 @@ export default function GalleryPage() {
         : false;
     },
   });
+  useEffect(() => {
+    if (!selectedMediaId || !data) {
+      return;
+    }
+
+    const selectedItem = data.items.find((item) => item.id === selectedMediaId);
+
+    if (
+      selectedItem &&
+      (selectedItem.status === "indexed" || selectedItem.status === "failed")
+    ) {
+      queryClient.invalidateQueries({
+        queryKey: ["image-detail", selectedMediaId],
+      });
+    }
+  }, [data, selectedMediaId, queryClient]);
   const likeMutation = useMutation({
     mutationFn: (mediaId: number) => toggleLike(mediaId),
     onSuccess: ({ id }) => {
