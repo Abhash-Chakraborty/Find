@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   CheckCircle,
@@ -90,6 +90,7 @@ function getStatusClasses(item: UploadListItem) {
 export default function UploadPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadListItem[]>([]);
   const [mode, setMode] = useState<UploadMode>("single");
+  const queryClient = useQueryClient();
 
   const parsedBulkLimit = Number(
     process.env.NEXT_PUBLIC_MAX_BULK_FILES ?? "200",
@@ -103,6 +104,7 @@ export default function UploadPage() {
     mutationFn: uploadImages,
     onSuccess: (data) => {
       setUploadedFiles((prev) => [...hydrateResults(data), ...prev]);
+      void queryClient.invalidateQueries({ queryKey: ["gallery"] });
       toast.success(
         `Queued ${data.total} file${data.total === 1 ? "" : "s"} for analysis`,
       );
@@ -116,6 +118,7 @@ export default function UploadPage() {
     mutationFn: uploadImagesBulk,
     onSuccess: (data) => {
       setUploadedFiles((prev) => [...hydrateResults(data), ...prev]);
+      void queryClient.invalidateQueries({ queryKey: ["gallery"] });
       const uploadedCount = data.results.filter(
         (item) => item.status === "uploaded",
       ).length;
@@ -174,6 +177,14 @@ export default function UploadPage() {
         return;
       }
 
+      if (
+        jobStatuses.some(
+          (job) => job?.status === "finished" || job?.status === "failed",
+        )
+      ) {
+        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      }
+
       setUploadedFiles((current) =>
         current.map((item) => {
           if (!item.job_id) {
@@ -210,7 +221,7 @@ export default function UploadPage() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeJobs]);
+  }, [activeJobs, queryClient]);
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
