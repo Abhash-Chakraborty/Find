@@ -57,6 +57,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: ${WORKER_BUILD_TARGET:-worker-ml-gpu}
       args:
         BASE_IMAGE: ${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}
         PYTHON_VERSION: ${BACKEND_PYTHON_VERSION:-3.12}
@@ -81,14 +82,7 @@ services:
     volumes:
       - ./backend:/app
       - model_cache:/root/.cache
-    gpus: all
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+
     depends_on:
       db:
         condition: service_healthy
@@ -103,6 +97,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: ${WORKER_BUILD_TARGET:-worker-ml-gpu}
       args:
         BASE_IMAGE: ${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}
         PYTHON_VERSION: ${BACKEND_PYTHON_VERSION:-3.12}
@@ -128,16 +123,6 @@ services:
       - redis
       - db
     restart: unless-stopped
-    gpus: all
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 
   # Next.js Frontend
   web:

@@ -54,6 +54,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: api
       args:
         BASE_IMAGE: python:3.12-slim
         PYTHON_VERSION: "3.12"
@@ -92,6 +93,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: worker-mock
       args:
         BASE_IMAGE: python:3.12-slim
         PYTHON_VERSION: "3.12"
