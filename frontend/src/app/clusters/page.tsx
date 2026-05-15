@@ -53,7 +53,7 @@ export default function ClustersPage() {
   );
   const [previewMedia, setPreviewMedia] = useState<PreviewMedia | null>(null);
   const [clusterJobId, setClusterJobId] = useState<string | null>(null);
-
+  const [filterText, setFilterText] = useState("");
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ["clusters"],
     queryFn: getClusters,
@@ -123,6 +123,10 @@ export default function ClustersPage() {
   const activeJobStatus = clusterJobQuery.data?.status;
   const isJobActive =
     activeJobStatus === "queued" || activeJobStatus === "started";
+  const filteredMembers =
+    selectedClusterQuery.data?.members.filter((member) =>
+      member.filename.toLowerCase().includes(filterText.toLowerCase()),
+    ) ?? [];
 
   return (
     <div className="page-shell">
@@ -323,7 +327,10 @@ export default function ClustersPage() {
           <div className="frost-panel page-enter relative max-h-[90dvh] w-full max-w-6xl overflow-hidden rounded-3xl bg-black">
             <button
               type="button"
-              onClick={() => setSelectedClusterId(null)}
+              onClick={() => {
+                setSelectedClusterId(null);
+                setFilterText("");
+              }}
               className="icon-button absolute right-4 top-4 z-20 bg-black/60 backdrop-blur-md"
               aria-label="Close cluster detail"
             >
@@ -369,9 +376,24 @@ export default function ClustersPage() {
                       </span>
                     )}
                   </div>
+                  <div className="mb-6">
+                    <input
+                      type="text"
+                      placeholder="Filter by filename..."
+                      aria-label="Filter cluster members by filename"
+                      value={filterText}
+                      onChange={(e) => setFilterText(e.target.value)}
+                      className="w-full rounded-2xl border border-[var(--frost)] bg-white/[0.03] px-4 py-3 text-sm text-[#f0f0f0] outline-none transition focus:border-[#3b9eff]"
+                    />
+                  </div>
+                  {filteredMembers.length === 0 && (
+                    <div className="py-12 text-center text-[#a1a4a5]">
+                      No matching members found.
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {selectedClusterQuery.data.members.map((member) => {
+                    {filteredMembers.map((member) => {
                       const imageSrc = resolveMediaUrl(member.url);
 
                       return (

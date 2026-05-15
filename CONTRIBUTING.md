@@ -30,6 +30,16 @@ This project is part of **GSSoC'26**, and we want contributions to be beginner-f
 
 ### Run with Docker (recommended)
 
+For most UI, API, docs, and workflow contributions, start with the light stack:
+
+```bash
+docker compose -f docker-compose.light.yml up --build
+```
+
+This uses `ML_MODE=mock`, skips GPU access, and avoids downloading Florence-2, SigLIP, PaddleOCR, YOLO, and CUDA PyTorch assets. Upload, worker processing, gallery, search, and clustering still run end-to-end with deterministic mock metadata and vectors.
+
+Use the full stack only when your change needs real ML inference:
+
 ```bash
 docker compose up --build
 ```
@@ -43,6 +53,8 @@ cd backend
 uv sync --group dev
 uv run uvicorn find_api.main:app --reload
 ```
+
+Use `uv sync --group dev --extra ml` only when you need real local ML inference outside Docker.
 
 Worker:
 

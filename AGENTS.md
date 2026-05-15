@@ -52,7 +52,7 @@ Run the API and worker separately when not using Docker.
 
 Frontend code uses TypeScript strict mode, 2-space indentation, double quotes, and Biome formatting. Keep shared API types and functions in `frontend/src/lib/api.ts`.
 
-Backend code is Python 3.10 compatible and checked with Ruff. Use `snake_case` for Python functions/modules and `PascalCase` for SQLAlchemy model classes. Keep routers thin; put storage, queue, database, and ML logic in their existing modules.
+Backend code targets Python 3.12 and is checked with Ruff. Use `snake_case` for Python functions/modules and `PascalCase` for SQLAlchemy model classes. Keep routers thin; put storage, queue, database, and ML logic in their existing modules.
 
 ## Testing Guidelines
 

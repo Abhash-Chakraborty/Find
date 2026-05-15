@@ -9,9 +9,9 @@ import json
 
 from typing import Dict
 
+from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.storage import get_file_url
-from find_api.ml.clip_embedder import get_clip_embedder
 
 router = APIRouter()
 
@@ -33,7 +33,15 @@ def search_images(
         Ranked list of matching images
     """
     # Generate query embedding
-    embedder = get_clip_embedder()
+    if settings.ML_MODE.lower() == "mock":
+        from find_api.ml.mock_embedder import get_mock_embedder
+
+        embedder = get_mock_embedder()
+    else:
+        from find_api.ml.clip_embedder import get_clip_embedder
+
+        embedder = get_clip_embedder()
+
     query_embedding = embedder.embed_text(q)
 
     # Convert to string format for pgvector
@@ -69,7 +77,7 @@ def search_images(
 
     # SigLIP similarities can be lower than OpenAI CLIP.
     # Lowering threshold to ensure results are returned.
-    threshold = 0.45
+    threshold = -1.0 if settings.ML_MODE.lower() == "mock" else 0.45
 
     result = db.execute(
         query_sql, {"embedding": embedding_str, "limit": limit, "threshold": threshold}

@@ -1,6 +1,8 @@
 ARG BASE_IMAGE=nvidia/cuda:12.1.1-runtime-ubuntu22.04
 ARG PYTHON_VERSION=3.12
+ARG UV_SYNC_EXTRAS="--extra ml"
 FROM ${BASE_IMAGE}
+ARG UV_SYNC_EXTRAS="--extra ml"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -37,13 +39,13 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Install Python dependencies with uv
-RUN uv sync --no-dev --no-install-project
+RUN uv sync --no-dev --no-install-project ${UV_SYNC_EXTRAS}
 
 # Copy application code
 COPY . .
 
 # Install the local package after source is available.
-RUN uv sync --no-dev
+RUN uv sync --no-dev ${UV_SYNC_EXTRAS}
 
 # Create directories for model cache
 RUN mkdir -p /root/.cache/torch/hub/checkpoints \

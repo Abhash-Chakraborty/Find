@@ -1,0 +1,145 @@
+services:
+  db:
+    image: ankane/pgvector:latest
+    container_name: find-light-db
+    # Local-only defaults for contributor setup. Override via .env for anything else.
+    environment:
+      POSTGRES_DB: find
+      POSTGRES_USER: find
+      POSTGRES_PASSWORD: find123
+    ports:
+      - "5432:5432"
+    volumes:
+      - light_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U find"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --loglevel warning
+    container_name: find-light-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - light_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: find-light-minio
+    command: server /data --console-address ":9001"
+    # Local-only defaults for contributor setup. Never reuse these credentials in production.
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - light_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: python:3.12-slim
+        PYTHON_VERSION: "3.12"
+        UV_SYNC_EXTRAS: ""
+    container_name: find-light-api
+    command: uvicorn find_api.main:app --host 0.0.0.0 --port 8000 --log-level warning
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://find:find123@db:5432/find
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_PUBLIC_ENDPOINT=
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-images}
+      - MINIO_PUBLIC_READ=false
+      - MINIO_SECURE=false
+      - REDIS_URL=redis://redis:6379
+      - ML_MODE=mock
+      - USE_GPU=false
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: python:3.12-slim
+        PYTHON_VERSION: "3.12"
+        UV_SYNC_EXTRAS: ""
+    container_name: find-light-worker
+    command: rq worker --url redis://redis:6379 high default low
+    environment:
+      - DATABASE_URL=postgresql://find:find123@db:5432/find
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_PUBLIC_ENDPOINT=
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-images}
+      - MINIO_PUBLIC_READ=false
+      - MINIO_SECURE=false
+      - REDIS_URL=redis://redis:6379
+      - ML_MODE=mock
+      - USE_GPU=false
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - api
+      - redis
+      - db
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: find-light-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_MINIO_BUCKET=${NEXT_PUBLIC_MINIO_BUCKET:-images}
+      - NEXT_PUBLIC_MINIO_URL=${NEXT_PUBLIC_MINIO_URL:-http://localhost:9000}
+      - NODE_ENV=production
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  light_db_data:
+    driver: local
+  light_redis_data:
+    driver: local
+  light_minio_data:
+    driver: local
