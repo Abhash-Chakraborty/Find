@@ -254,15 +254,17 @@ export default function GalleryPage() {
         )}
 
         {data && data.items.length === 0 && (
-          <div className="frost-panel mx-auto max-w-md rounded-3xl px-8 py-16 text-center">
-            <ImageOff className="mx-auto mb-4 h-12 w-12 text-[#5f6568]" />
-            <p className="mb-2 text-[#f0f0f0]">No images found</p>
-            <Link
-              href="/upload"
-              className="text-sm text-[#3b9eff] hover:underline"
-            >
-              Upload your first images
-            </Link>
+          <div className="w-full">
+            <div className="frost-panel mx-auto rounded-3xl px-8 py-16 text-center">
+              <ImageOff className="mx-auto mb-4 h-12 w-12 text-[#5f6568]" />
+              <p className="mb-2 text-[#f0f0f0]">No images found</p>
+              <Link
+                href="/upload"
+                className="text-sm text-[#3b9eff] hover:underline"
+              >
+                Upload your first images
+              </Link>
+            </div>
           </div>
         )}
 

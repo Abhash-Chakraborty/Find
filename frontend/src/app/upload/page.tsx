@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   CheckCircle,
@@ -90,6 +90,15 @@ function getStatusClasses(item: UploadListItem) {
 export default function UploadPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadListItem[]>([]);
   const [mode, setMode] = useState<UploadMode>("single");
+  const queryClient = useQueryClient();
+
+  const parsedUploadLimit = Number(
+    process.env.NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB ?? "50",
+  );
+  const maxUploadSizeMb =
+    Number.isFinite(parsedUploadLimit) && parsedUploadLimit > 0
+      ? Math.floor(parsedUploadLimit)
+      : 50;
 
   const parsedBulkLimit = Number(
     process.env.NEXT_PUBLIC_MAX_BULK_FILES ?? "200",
@@ -103,6 +112,7 @@ export default function UploadPage() {
     mutationFn: uploadImages,
     onSuccess: (data) => {
       setUploadedFiles((prev) => [...hydrateResults(data), ...prev]);
+      void queryClient.invalidateQueries({ queryKey: ["gallery"] });
       toast.success(
         `Queued ${data.total} file${data.total === 1 ? "" : "s"} for analysis`,
       );
@@ -116,6 +126,7 @@ export default function UploadPage() {
     mutationFn: uploadImagesBulk,
     onSuccess: (data) => {
       setUploadedFiles((prev) => [...hydrateResults(data), ...prev]);
+      void queryClient.invalidateQueries({ queryKey: ["gallery"] });
       const uploadedCount = data.results.filter(
         (item) => item.status === "uploaded",
       ).length;
@@ -174,6 +185,14 @@ export default function UploadPage() {
         return;
       }
 
+      if (
+        jobStatuses.some(
+          (job) => job?.status === "finished" || job?.status === "failed",
+        )
+      ) {
+        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      }
+
       setUploadedFiles((current) =>
         current.map((item) => {
           if (!item.job_id) {
@@ -210,7 +229,7 @@ export default function UploadPage() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeJobs]);
+  }, [activeJobs, queryClient]);
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
@@ -255,7 +274,7 @@ export default function UploadPage() {
       "image/webp": [".webp"],
       "image/gif": [".gif"],
     },
-    maxSize: 50 * 1024 * 1024,
+    maxSize: maxUploadSizeMb * 1024 * 1024,
     multiple: true,
     disabled: mode !== "single" || isUploading,
   });
@@ -286,11 +305,11 @@ export default function UploadPage() {
 
   const helperText = useMemo(() => {
     if (mode === "single") {
-      return "JPEG, PNG, WebP, GIF. Max 50MB each";
+      return `JPEG, PNG, WebP, GIF. Max ${maxUploadSizeMb}MB each`;
     }
 
     return `ZIP archive up to ${maxBulkFiles} images`;
-  }, [mode, maxBulkFiles]);
+  }, [mode, maxUploadSizeMb, maxBulkFiles]);
 
   const stats = useMemo(
     () => ({
