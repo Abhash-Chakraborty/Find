@@ -33,6 +33,7 @@ export default function GalleryPage() {
   >("all");
   const [likedOnly, setLikedOnly] = useState(false);
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
+  const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: number;
     filename?: string;
@@ -117,6 +118,7 @@ export default function GalleryPage() {
       });
 
       setSelectedMediaId((current) => (current === mediaId ? null : current));
+      setSelectedMedia((current) => (current?.id === mediaId ? null : current));
       return { previousData };
     },
     onError: (mutationError, _variables, context) => {
@@ -138,11 +140,17 @@ export default function GalleryPage() {
     },
   });
 
-  const selectedItem = useMemo<MediaItem | null>(() => {
+  useEffect(() => {
     if (!data || selectedMediaId === null) {
-      return null;
+      return;
     }
-    return data.items.find((item) => item.id === selectedMediaId) ?? null;
+
+    const nextSelectedItem = data.items.find(
+      (item) => item.id === selectedMediaId,
+    );
+    if (nextSelectedItem) {
+      setSelectedMedia(nextSelectedItem);
+    }
   }, [data, selectedMediaId]);
 
   const selectedIndex = useMemo(() => {
@@ -150,15 +158,6 @@ export default function GalleryPage() {
       return -1;
     }
     return data.items.findIndex((item) => item.id === selectedMediaId);
-  }, [data, selectedMediaId]);
-
-  useEffect(() => {
-    if (!data || selectedMediaId === null) {
-      return;
-    }
-    if (!data.items.some((item) => item.id === selectedMediaId)) {
-      setSelectedMediaId(null);
-    }
   }, [data, selectedMediaId]);
 
   const goToAdjacent = useCallback(
@@ -180,7 +179,10 @@ export default function GalleryPage() {
     [data, selectedMediaId],
   );
 
-  const closeDetail = useCallback(() => setSelectedMediaId(null), []);
+  const closeDetail = useCallback(() => {
+    setSelectedMediaId(null);
+    setSelectedMedia(null);
+  }, []);
 
   const filters = [
     { label: "All", value: "all" as const },
@@ -307,7 +309,10 @@ export default function GalleryPage() {
                     <button
                       type="button"
                       className="relative block aspect-square w-full overflow-hidden bg-white/[0.025] text-left focus:outline-none"
-                      onClick={() => setSelectedMediaId(item.id)}
+                      onClick={() => {
+                        setSelectedMediaId(item.id);
+                        setSelectedMedia(item);
+                      }}
                       aria-label={`View ${item.filename}`}
                     >
                       {imageSrc ? (
@@ -427,9 +432,9 @@ export default function GalleryPage() {
         )}
       </div>
 
-      {selectedItem && (
+      {selectedMedia && (
         <ImagePreviewModal
-          media={selectedItem}
+          media={selectedMedia}
           onClose={closeDetail}
           onPrevious={() => goToAdjacent(-1)}
           onNext={() => goToAdjacent(1)}
@@ -441,7 +446,7 @@ export default function GalleryPage() {
           }
           onDeleted={(mediaId) => {
             if (selectedMediaId === mediaId) {
-              setSelectedMediaId(null);
+              closeDetail();
             }
           }}
         />
