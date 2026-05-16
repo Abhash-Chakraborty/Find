@@ -37,8 +37,16 @@ function GalleryPageContent() {
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<
     "all" | "indexed" | "processing" | "failed"
-  >("all");
-  const [likedOnly, setLikedOnly] = useState(false);
+  >(() => {
+    const param = searchParams.get("filter");
+    if (param && ["indexed", "processing", "failed"].includes(param)) {
+      return param as "indexed" | "processing" | "failed";
+    }
+    return "all";
+  });
+  const [likedOnly, setLikedOnly] = useState(() => {
+    return searchParams.get("liked") === "true";
+  });
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: number;
@@ -56,6 +64,36 @@ function GalleryPageContent() {
     () => ["gallery", page, filter, likedOnly] as const,
     [page, filter, likedOnly],
   );
+
+  // Sync filter and likedOnly to URL search params
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    let changed = false;
+
+    if (filter !== "all") {
+      if (url.searchParams.get("filter") !== filter) {
+        url.searchParams.set("filter", filter);
+        changed = true;
+      }
+    } else if (url.searchParams.has("filter")) {
+      url.searchParams.delete("filter");
+      changed = true;
+    }
+
+    if (likedOnly) {
+      if (url.searchParams.get("liked") !== "true") {
+        url.searchParams.set("liked", "true");
+        changed = true;
+      }
+    } else if (url.searchParams.has("liked")) {
+      url.searchParams.delete("liked");
+      changed = true;
+    }
+
+    if (changed) {
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [filter, likedOnly]);
 
   const { data, isLoading, error } = useQuery<GalleryResponse, Error>({
     queryKey: galleryQueryKey,
