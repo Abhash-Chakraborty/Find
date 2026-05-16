@@ -248,6 +248,13 @@ function GalleryPageContent() {
   const closeDetail = useCallback(() => {
     setSelectedMediaId(null);
     setQuerySelectedItem(null);
+
+    // Remove stale media query parameter from URL
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("media")) {
+      url.searchParams.delete("media");
+      window.history.replaceState({}, "", url.toString());
+    }
   }, []);
 
   const filters = [
