@@ -34,5 +34,14 @@
     "tailwindcss": "^3.4.14",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.6.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "sharp"
+    ],
+    "allowedDeprecatedVersions": {},
+    "allowBuild": [
+      "sharp"
+    ]
   }
 }

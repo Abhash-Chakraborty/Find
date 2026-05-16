@@ -8,7 +8,7 @@ import {
   Search as SearchIcon,
 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ImagePreviewModal } from "@/components/image-preview-modal";
 import { StatusIndicator } from "@/components/status-indicator";
 import { searchImages } from "@/lib/api";
@@ -24,6 +24,7 @@ const examples = [
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
+  const clearedRef = useRef(false);
 
   const searchMutation = useMutation({
     mutationFn: (searchQuery: string) =>
@@ -33,6 +34,7 @@ export default function SearchPage() {
   const handleSearch = (event: React.FormEvent) => {
     event.preventDefault();
     if (query.trim()) {
+      clearedRef.current = false;
       setSelectedMediaId(null);
       searchMutation.mutate(query.trim());
     }
@@ -102,6 +104,20 @@ export default function SearchPage() {
                 </>
               )}
             </button>
+            {(query.trim() || searchMutation.data) && (
+              <button
+                type="button"
+                onClick={() => {
+                  clearedRef.current = true;
+                  setQuery("");
+                  searchMutation.reset();
+                  setSelectedMediaId(null);
+                }}
+                className="frost-button h-11 px-5 text-sm font-semibold"
+              >
+                Clear
+              </button>
+            )}
           </div>
 
           <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -110,6 +126,7 @@ export default function SearchPage() {
                 key={example}
                 type="button"
                 onClick={() => {
+                  clearedRef.current = false;
                   setQuery(example);
                   setSelectedMediaId(null);
                   searchMutation.mutate(example);

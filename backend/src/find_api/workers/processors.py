@@ -7,10 +7,8 @@ import numpy as np
 from PIL import Image
 from typing import Dict, Any, List
 
-from find_api.ml.object_detector import get_object_detector
-from find_api.ml.captioner import get_image_captioner
-from find_api.ml.ocr import get_ocr_extractor
-from find_api.ml.clip_embedder import get_clip_embedder
+from find_api.core.config import settings
+from find_api.ml.mock_embedder import get_mock_embedder
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +17,23 @@ def extract_image_metadata(image: Image.Image) -> Dict[str, Any]:
     """
     Run all ML models to extract metadata from image
     """
+    if settings.ML_MODE.lower() == "mock":
+        logger.info("Using mock image metadata extractor")
+        return {
+            "caption": f"Mock caption for {image.width}x{image.height} image",
+            "objects": [],
+            "ocr_text": "",
+            "text_blocks": [],
+            "mock": True,
+        }
+
     metadata = {}
 
     # 1. Object Detection
     try:
         logger.info("Running object detection...")
+        from find_api.ml.object_detector import get_object_detector
+
         detector = get_object_detector()
         objects = detector.detect(image)
         metadata["objects"] = objects
@@ -35,6 +45,8 @@ def extract_image_metadata(image: Image.Image) -> Dict[str, Any]:
     # 2. Image Captioning
     try:
         logger.info("Generating caption...")
+        from find_api.ml.captioner import get_image_captioner
+
         captioner = get_image_captioner()
         caption = captioner.generate_caption(image)
         metadata["caption"] = caption
@@ -46,6 +58,8 @@ def extract_image_metadata(image: Image.Image) -> Dict[str, Any]:
     # 3. OCR Text Extraction
     try:
         logger.info("Extracting text...")
+        from find_api.ml.ocr import get_ocr_extractor
+
         ocr = get_ocr_extractor()
         ocr_text = ocr.extract_text(image)
         text_blocks = ocr.extract_text_with_boxes(image)
@@ -66,8 +80,14 @@ def generate_hybrid_embedding(
     """
     Generate hybrid embedding from image, caption, and objects
     """
+    if settings.ML_MODE.lower() == "mock":
+        logger.info("Using mock embedding generator")
+        return get_mock_embedder().embed_metadata(image, metadata)
+
     try:
         logger.info("Generating CLIP embedding...")
+        from find_api.ml.clip_embedder import get_clip_embedder
+
         embedder = get_clip_embedder()
 
         # Generate Image Embedding

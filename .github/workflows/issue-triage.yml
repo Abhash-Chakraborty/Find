@@ -1,0 +1,33 @@
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  label-community-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add 'needs approval' label for community-created issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // author_association is set by GitHub, based on the opener's relationship
+            // with the repository. Only OWNER, MEMBER, and COLLABORATOR have write
+            // access and only they are trusted to open pre-approved issues. Anyone else
+            // (CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR, NONE, etc.) gets flagged for
+            // maintainer review before they can start work on the issue.
+            const trusted = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            const association = context.payload.issue.author_association;
+
+            if (!trusted.includes(association)) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                labels: ['needs approval'],
+              });
+            }

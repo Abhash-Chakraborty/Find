@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import "./globals.css";
+import NavBar from "@/components/NavBar";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
@@ -38,32 +39,7 @@ export default function RootLayout({
                   FIND.
                 </Link>
 
-                <div className="flex min-w-0 items-center gap-1 overflow-x-auto rounded-full border border-[var(--frost)] bg-white/[0.03] p-1">
-                  <Link
-                    href="/upload"
-                    className="rounded-full px-3 py-1.5 text-sm font-medium text-[#a1a4a5] transition hover:bg-white/[0.08] hover:text-[#f0f0f0] sm:px-4"
-                  >
-                    Upload
-                  </Link>
-                  <Link
-                    href="/gallery"
-                    className="rounded-full px-3 py-1.5 text-sm font-medium text-[#a1a4a5] transition hover:bg-white/[0.08] hover:text-[#f0f0f0] sm:px-4"
-                  >
-                    Gallery
-                  </Link>
-                  <Link
-                    href="/search"
-                    className="rounded-full px-3 py-1.5 text-sm font-medium text-[#a1a4a5] transition hover:bg-white/[0.08] hover:text-[#f0f0f0] sm:px-4"
-                  >
-                    Search
-                  </Link>
-                  <Link
-                    href="/clusters"
-                    className="rounded-full px-3 py-1.5 text-sm font-medium text-[#a1a4a5] transition hover:bg-white/[0.08] hover:text-[#f0f0f0] sm:px-4"
-                  >
-                    Clusters
-                  </Link>
-                </div>
+                <NavBar />
               </div>
             </div>
           </nav>

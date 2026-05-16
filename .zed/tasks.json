@@ -1,0 +1,50 @@
+[
+  {
+    "label": "Docker: Start Full Stack",
+    "command": "docker",
+    "args": [
+      "compose",
+      "up",
+      "--build",
+      "-d"
+    ],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "save": "none",
+    "show_summary": true,
+    "show_command": true
+  },
+  {
+    "label": "Docker: Stop Stack",
+    "command": "docker",
+    "args": [
+      "compose",
+      "down"
+    ],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "save": "none",
+    "show_summary": true,
+    "show_command": true
+  },
+  {
+    "label": "Docker: Start Light Stack",
+    "command": "docker",
+    "args": [
+      "compose",
+      "-f",
+      "docker-compose.light.yml",
+      "up",
+      "--build",
+      "-d"
+    ],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "save": "none",
+    "show_summary": true,
+    "show_command": true
+  }
+]
