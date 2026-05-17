@@ -12,6 +12,7 @@ from sqlalchemy import desc
 from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.queue import get_task_queue
+from find_api.core.recovery import reconcile_abandoned_analysis_jobs
 from find_api.core.storage import get_file_url, delete_file
 from find_api.models.media import Media
 from find_api.models.cluster import Cluster
@@ -58,6 +59,8 @@ def get_gallery(
     Returns:
         Paginated list of media records
     """
+    reconcile_abandoned_analysis_jobs(db)
+
     # Build query
     query = db.query(Media)
 
@@ -127,6 +130,8 @@ def get_image_detail(media_id: int, db: Session = Depends(get_db)):
     Returns:
         Complete media information including metadata
     """
+    reconcile_abandoned_analysis_jobs(db)
+
     media = db.query(Media).filter(Media.id == media_id).first()
 
     if not media:
