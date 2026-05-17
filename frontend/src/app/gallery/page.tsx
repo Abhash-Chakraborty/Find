@@ -100,9 +100,10 @@ function GalleryPageContent() {
     },
   });
 
-  useEffect(() => {
-    setPage(1);
-  }, [filter, likedOnly]);
+ // biome-ignore lint/correctness/useExhaustiveDependencies:
+useEffect(() => {
+  setPage(1);
+}, [filter, likedOnly]);
 
   const updateGalleryParams = useCallback(
     (nextState: { filter?: GalleryFilter; likedOnly?: boolean }) => {
