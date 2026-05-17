@@ -48,6 +48,24 @@ FastAPI API
         ML worker
 ```
 
+## Screenshots
+
+### Upload
+
+![Upload](docs/assets/upload.png)
+
+### Gallery
+
+![Gallery](docs/assets/gallery.png)
+
+### Search
+
+![Search](docs/assets/search.png)
+
+### Clusters
+
+![Clusters](docs/assets/clusters.png)
+
 ## GSSoC'26 contributors
 
 This project is open for **GSSoC'26** contributions.
@@ -262,8 +280,6 @@ docker compose -f docker-compose.light.yml up --build
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for full details.
 Labels: [`good first issue`](https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue) · [`level:intermediate`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Aintermediate%22) · [`help wanted`](https://github.com/Abhash-Chakraborty/Find/labels/help%20wanted)
-
-
 
 ## Contact and support
 
