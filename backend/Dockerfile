@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 ARG BASE_IMAGE=nvidia/cuda:12.1.1-runtime-ubuntu22.04
 ARG PYTHON_VERSION=3.12
 ARG UV_SYNC_EXTRAS="--extra ml"
@@ -24,12 +26,14 @@ RUN if ! command -v python >/dev/null 2>&1; then \
       ln -s /usr/bin/python3 /usr/bin/python; \
     fi
 
-# Install uv and ensure binary directory on PATH. Keep the project venv
-# outside /app so the docker-compose bind mount cannot hide it at runtime.
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# Install uv into a stable system path. The installer writes to /root/.local/bin
+# by default, so copy the binaries into /usr/local/bin for later build steps.
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && install -m 0755 /root/.local/bin/uv /usr/local/bin/uv \
+    && install -m 0755 /root/.local/bin/uvx /usr/local/bin/uvx
 ENV UV_PROJECT_ENVIRONMENT="/opt/find/.venv"
 ENV UV_PYTHON="${PYTHON_VERSION}"
-ENV PATH="/opt/find/.venv/bin:/root/.local/bin:/root/.cargo/bin:$PATH"
+ENV PATH="/opt/find/.venv/bin:/usr/local/bin:/root/.local/bin:/root/.cargo/bin:$PATH"
 ENV PYTHONPATH="/app/src"
 
 # Set working directory
@@ -38,14 +42,17 @@ WORKDIR /app
 # Copy project dependency metadata first for better caching
 COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies with uv
-RUN uv sync --no-dev --no-install-project ${UV_SYNC_EXTRAS}
+# Install Python dependencies with uv. Keep uv's package cache in a BuildKit
+# cache mount so it speeds rebuilds without bloating the final runtime image.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-dev --no-install-project ${UV_SYNC_EXTRAS}
 
 # Copy application code
 COPY . .
 
 # Install the local package after source is available.
-RUN uv sync --no-dev ${UV_SYNC_EXTRAS}
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-dev ${UV_SYNC_EXTRAS}
 
 # Create directories for model cache
 RUN mkdir -p /root/.cache/torch/hub/checkpoints \

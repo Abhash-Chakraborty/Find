@@ -1,23 +1,32 @@
+# syntax=docker/dockerfile:1.7
+
 FROM node:20-alpine AS base
 ARG PNPM_VERSION=10.17.1
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
+# Keep the package manager setup in one reusable stage so every later stage
+# uses the same pinned pnpm binary.
+FROM base AS pnpm
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate \
+    && pnpm config set store-dir /pnpm/store
 
 # Install dependencies only when needed
-FROM base AS deps
+FROM pnpm AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Pin pnpm to a Node 20 compatible release instead of floating to latest.
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+COPY pnpm-lock.yaml* ./
+RUN --mount=type=cache,id=find-pnpm-store,target=/pnpm/store \
+    pnpm fetch
 
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile
+COPY package.json ./
+RUN --mount=type=cache,id=find-pnpm-store,target=/pnpm/store \
+    pnpm install --offline --frozen-lockfile
 
 # Development image
-FROM base AS development
+FROM pnpm AS development
 WORKDIR /app
-
-# Reuse the same pinned pnpm version across stages.
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -28,11 +37,8 @@ ENV PORT 3000
 CMD ["pnpm", "run", "dev"]
 
 # Production build
-FROM base AS builder
+FROM pnpm AS builder
 WORKDIR /app
-
-# Reuse the same pinned pnpm version across stages.
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

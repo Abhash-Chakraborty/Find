@@ -359,6 +359,7 @@ export default function UploadPage() {
           <div className="frost-panel flex rounded-full p-1">
             <button
               type="button"
+              aria-pressed={mode === "single"}
               onClick={() => setMode("single")}
               className={`rounded-full px-5 py-2 text-sm font-medium transition ${
                 mode === "single"
@@ -370,6 +371,7 @@ export default function UploadPage() {
             </button>
             <button
               type="button"
+              aria-pressed={mode === "bulk"}
               onClick={() => setMode("bulk")}
               className={`rounded-full px-5 py-2 text-sm font-medium transition ${
                 mode === "bulk"

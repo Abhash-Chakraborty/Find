@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -33,12 +33,29 @@ import {
 } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 
+type GalleryFilter = "all" | "indexed" | "processing" | "failed";
+
+const getFilterFromStatusParam = (status: string | null): GalleryFilter => {
+  if (status === "completed" || status === "indexed") {
+    return "indexed";
+  }
+
+  if (status === "processing" || status === "failed") {
+    return status;
+  }
+
+  return "all";
+};
+
+const getStatusParamFromFilter = (filter: GalleryFilter): string | null => {
+  if (filter === "all") {
+    return null;
+  }
+
+  return filter === "indexed" ? "completed" : filter;
+};
+
 function GalleryPageContent() {
-  const [page, setPage] = useState(1);
-  const [filter, setFilter] = useState<
-    "all" | "indexed" | "processing" | "failed"
-  >("all");
-  const [likedOnly, setLikedOnly] = useState(false);
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: number;
@@ -51,7 +68,18 @@ function GalleryPageContent() {
   const limit = 24;
 
   const queryClient = useQueryClient();
+  const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const filter = getFilterFromStatusParam(searchParams.get("status"));
+  const likedOnly = searchParams.get("liked") === "true";
+  const filterStateKey = `${filter}:${likedOnly}`;
+  const [pagination, setPagination] = useState({
+    filterStateKey,
+    page: 1,
+  });
+  const page =
+    pagination.filterStateKey === filterStateKey ? pagination.page : 1;
   const galleryQueryKey = useMemo(
     () => ["gallery", page, filter, likedOnly] as const,
     [page, filter, likedOnly],
@@ -77,6 +105,41 @@ function GalleryPageContent() {
         : false;
     },
   });
+
+  const buildGalleryHref = useCallback(
+    (nextState: { filter?: GalleryFilter; likedOnly?: boolean }) => {
+      const nextFilter = nextState.filter ?? filter;
+      const nextLikedOnly = nextState.likedOnly ?? likedOnly;
+      const nextParams = new URLSearchParams(searchParams.toString());
+      const statusParam = getStatusParamFromFilter(nextFilter);
+
+      if (statusParam) {
+        nextParams.set("status", statusParam);
+      } else {
+        nextParams.delete("status");
+      }
+
+      if (nextLikedOnly) {
+        nextParams.set("liked", "true");
+      } else {
+        nextParams.delete("liked");
+      }
+
+      const queryString = nextParams.toString();
+      return queryString ? `${pathname}?${queryString}` : pathname;
+    },
+    [filter, likedOnly, pathname, searchParams],
+  );
+
+  const updateGalleryParams = useCallback(
+    (nextState: { filter?: GalleryFilter; likedOnly?: boolean }) => {
+      router.push(buildGalleryHref(nextState), {
+        scroll: false,
+      });
+    },
+    [buildGalleryHref, router],
+  );
+
   useEffect(() => {
     if (hasOpenedFromQuery) {
       return;
@@ -248,14 +311,46 @@ function GalleryPageContent() {
   const closeDetail = useCallback(() => {
     setSelectedMediaId(null);
     setQuerySelectedItem(null);
-  }, []);
+
+    const params = new URLSearchParams(searchParams.toString());
+
+    params.delete("media");
+
+    const queryString = params.toString();
+    const url = queryString ? `${pathname}?${queryString}` : pathname;
+
+    router.replace(url, { scroll: false });
+  }, [router, pathname, searchParams]);
 
   const filters = [
-    { label: "All", value: "all" as const },
-    { label: "Indexed", value: "indexed" as const },
-    { label: "Processing", value: "processing" as const },
-    { label: "Failed", value: "failed" as const },
-  ];
+    { label: "All", value: "all" },
+    { label: "Indexed", value: "indexed" },
+    { label: "Processing", value: "processing" },
+    { label: "Failed", value: "failed" },
+  ] satisfies Array<{ label: string; value: GalleryFilter }>;
+
+  const handleLikedOnlyChange = useCallback(() => {
+    updateGalleryParams({ likedOnly: !likedOnly });
+  }, [likedOnly, updateGalleryParams]);
+
+  const handleClearLikedOnly = useCallback(() => {
+    updateGalleryParams({ likedOnly: false });
+  }, [updateGalleryParams]);
+
+  const updatePage = useCallback(
+    (updater: (currentPage: number) => number) => {
+      setPagination((current) => {
+        const currentPage =
+          current.filterStateKey === filterStateKey ? current.page : 1;
+
+        return {
+          filterStateKey,
+          page: updater(currentPage),
+        };
+      });
+    },
+    [filterStateKey],
+  );
 
   const handleToggleLike = useCallback(
     (mediaId: number) => {
@@ -298,13 +393,11 @@ function GalleryPageContent() {
         <div className="frost-panel delayed-enter mb-8 flex flex-col items-center justify-between gap-4 rounded-3xl px-4 py-3 md:flex-row">
           <div className="flex flex-wrap justify-center gap-1">
             {filters.map(({ label, value }) => (
-              <button
-                type="button"
+              <Link
                 key={value}
-                onClick={() => {
-                  setFilter(value);
-                  setPage(1);
-                }}
+                href={buildGalleryHref({ filter: value })}
+                scroll={false}
+                aria-current={filter === value ? "page" : undefined}
                 className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                   filter === value
                     ? "bg-white text-black"
@@ -312,16 +405,14 @@ function GalleryPageContent() {
                 }`}
               >
                 {label}
-              </button>
+              </Link>
             ))}
           </div>
 
           <button
             type="button"
-            onClick={() => {
-              setLikedOnly((previous) => !previous);
-              setPage(1);
-            }}
+            aria-pressed={likedOnly}
+            onClick={handleLikedOnlyChange}
             className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-colors ${
               likedOnly
                 ? "border border-[var(--red-soft)] bg-[var(--red-soft)] text-[#ff9bab]"
@@ -357,7 +448,7 @@ function GalleryPageContent() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => setLikedOnly(false)}
+                    onClick={handleClearLikedOnly}
                     className="text-sm text-[#3b9eff] hover:underline"
                   >
                     View all images
@@ -511,7 +602,9 @@ function GalleryPageContent() {
               <div className="mt-12 flex items-center justify-center gap-6">
                 <button
                   type="button"
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  onClick={() =>
+                    updatePage((current) => Math.max(1, current - 1))
+                  }
                   disabled={page === 1}
                   className="icon-button disabled:cursor-not-allowed disabled:opacity-30"
                 >
@@ -522,7 +615,7 @@ function GalleryPageContent() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setPage((current) => current + 1)}
+                  onClick={() => updatePage((current) => current + 1)}
                   disabled={page >= Math.ceil(data.total / limit)}
                   className="icon-button disabled:cursor-not-allowed disabled:opacity-30"
                 >
