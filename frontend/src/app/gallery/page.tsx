@@ -35,6 +35,85 @@ import { resolveMediaUrl } from "@/lib/media";
 
 type GalleryFilter = "all" | "indexed" | "processing" | "failed";
 
+type GalleryEmptyState = {
+  title: string;
+  subtitle: string | null;
+  showUploadLink: boolean;
+  showClearLikedOnly: boolean;
+};
+
+function getGalleryEmptyState(
+  filter: GalleryFilter,
+  likedOnly: boolean,
+): GalleryEmptyState {
+  if (filter === "all") {
+    if (likedOnly) {
+      return {
+        title: "No liked images yet",
+        subtitle: "Like an image to save it here.",
+        showUploadLink: false,
+        showClearLikedOnly: true,
+      };
+    }
+
+    return {
+      title: "No images found",
+      subtitle: null,
+      showUploadLink: true,
+      showClearLikedOnly: false,
+    };
+  }
+
+  if (filter === "indexed") {
+    return likedOnly
+      ? {
+          title: "No liked indexed images yet",
+          subtitle:
+            "Try uploading images or check the Processing tab for items still in progress.",
+          showUploadLink: false,
+          showClearLikedOnly: true,
+        }
+      : {
+          title: "No indexed images yet",
+          subtitle:
+            "Try uploading images or check the Processing tab for items still in progress.",
+          showUploadLink: false,
+          showClearLikedOnly: false,
+        };
+  }
+
+  if (filter === "processing") {
+    return likedOnly
+      ? {
+          title: "No liked images are processing",
+          subtitle:
+            "None of your liked images are queued or running right now.",
+          showUploadLink: false,
+          showClearLikedOnly: true,
+        }
+      : {
+          title: "All clear",
+          subtitle: "No images are processing right now.",
+          showUploadLink: false,
+          showClearLikedOnly: false,
+        };
+  }
+
+  return likedOnly
+    ? {
+        title: "No failed liked images",
+        subtitle: "None of your liked images have failed recently.",
+        showUploadLink: false,
+        showClearLikedOnly: true,
+      }
+    : {
+        title: "No failed images",
+        subtitle: "Nothing failed recently.",
+        showUploadLink: false,
+        showClearLikedOnly: false,
+      };
+}
+
 const getFilterFromStatusParam = (status: string | null): GalleryFilter => {
   if (status === "completed" || status === "indexed") {
     return "indexed";
@@ -378,6 +457,14 @@ function GalleryPageContent() {
     setDeleteTarget(null);
   }, []);
 
+  const emptyGalleryCopy = useMemo(() => {
+    if (!data || data.items.length > 0) {
+      return null;
+    }
+
+    return getGalleryEmptyState(filter, likedOnly);
+  }, [data, filter, likedOnly]);
+
   return (
     <div className="page-shell">
       <div className="container-shell py-10 md:py-14">
@@ -436,34 +523,32 @@ function GalleryPageContent() {
           </div>
         )}
 
-        {data && data.items.length === 0 && (
+        {emptyGalleryCopy && (
           <div className="w-full">
             <div className="frost-panel mx-auto rounded-3xl px-8 py-16 text-center">
               <ImageOff className="mx-auto mb-4 h-12 w-12 text-[#5f6568]" />
-              {likedOnly ? (
-                <>
-                  <p className="mb-2 text-[#f0f0f0]">No liked images yet</p>
-                  <p className="mb-4 text-sm text-[#a1a4a5]">
-                    Like an image to save it here.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleClearLikedOnly}
-                    className="text-sm text-[#3b9eff] hover:underline"
-                  >
-                    View all images
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p className="mb-2 text-[#f0f0f0]">No images found</p>
-                  <Link
-                    href="/upload"
-                    className="text-sm text-[#3b9eff] hover:underline"
-                  >
-                    Upload your first images
-                  </Link>
-                </>
+              <p className="mb-2 text-[#f0f0f0]">{emptyGalleryCopy.title}</p>
+              {emptyGalleryCopy.subtitle && (
+                <p className="mb-4 text-sm text-[#a1a4a5]">
+                  {emptyGalleryCopy.subtitle}
+                </p>
+              )}
+              {emptyGalleryCopy.showUploadLink && (
+                <Link
+                  href="/upload"
+                  className="text-sm text-[#3b9eff] hover:underline"
+                >
+                  Upload your first images
+                </Link>
+              )}
+              {emptyGalleryCopy.showClearLikedOnly && (
+                <button
+                  type="button"
+                  onClick={handleClearLikedOnly}
+                  className="text-sm text-[#3b9eff] hover:underline"
+                >
+                  View all images
+                </button>
               )}
             </div>
           </div>

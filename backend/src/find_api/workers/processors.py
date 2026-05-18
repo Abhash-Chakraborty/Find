@@ -3,9 +3,11 @@ Image processing utilities for worker jobs
 """
 
 import logging
+from collections.abc import Callable
+from typing import Any, Dict, List
+
 import numpy as np
 from PIL import Image
-from typing import Dict, Any, List
 
 from find_api.core.config import settings
 from find_api.ml.mock_embedder import get_mock_embedder
@@ -13,11 +15,16 @@ from find_api.ml.mock_embedder import get_mock_embedder
 logger = logging.getLogger(__name__)
 
 
-def extract_image_metadata(image: Image.Image) -> Dict[str, Any]:
+def extract_image_metadata(
+    image: Image.Image,
+    on_stage: Callable[[str], None] | None = None,
+) -> Dict[str, Any]:
     """
     Run all ML models to extract metadata from image
     """
     if settings.ML_MODE.lower() == "mock":
+        if on_stage:
+            on_stage("generating mock metadata")
         logger.info("Using mock image metadata extractor")
         return {
             "caption": f"Mock caption for {image.width}x{image.height} image",
@@ -31,6 +38,8 @@ def extract_image_metadata(image: Image.Image) -> Dict[str, Any]:
 
     # 1. Object Detection
     try:
+        if on_stage:
+            on_stage("detecting objects")
         logger.info("Running object detection...")
         from find_api.ml.object_detector import get_object_detector
 
@@ -44,6 +53,8 @@ def extract_image_metadata(image: Image.Image) -> Dict[str, Any]:
 
     # 2. Image Captioning
     try:
+        if on_stage:
+            on_stage("generating caption")
         logger.info("Generating caption...")
         from find_api.ml.captioner import get_image_captioner
 
@@ -57,6 +68,8 @@ def extract_image_metadata(image: Image.Image) -> Dict[str, Any]:
 
     # 3. OCR Text Extraction
     try:
+        if on_stage:
+            on_stage("running OCR")
         logger.info("Extracting text...")
         from find_api.ml.ocr import get_ocr_extractor
 

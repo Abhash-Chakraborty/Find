@@ -14,26 +14,40 @@ jobs:
         working-directory: ./frontend
     steps:
     - uses: actions/checkout@v4
+    
+    # Only run frontend checks if code in frontend/ actually changed
     - uses: dorny/paths-filter@v3
       id: changes
       with:
         filters: |
           frontend:
             - 'frontend/**'
+    
+    # Skip everything if frontend didn't change — save CI minutes
     - uses: pnpm/action-setup@v3
       if: steps.changes.outputs.frontend == 'true'
       with:
-        version: 8
+        version: 10.16.0
+    
     - uses: actions/setup-node@v4
       if: steps.changes.outputs.frontend == 'true'
       with:
         node-version: 22
         cache: 'pnpm'
         cache-dependency-path: frontend/pnpm-lock.yaml
+    
     - run: pnpm install
       if: steps.changes.outputs.frontend == 'true'
+    
+    # Report high/critical vulnerabilities for maintainer review.
+    - run: pnpm audit --audit-level=high || true
+      if: steps.changes.outputs.frontend == 'true'
+    
+    # Type-check, lint, format all in one pass (Biome handles lint + format)
     - run: pnpm check
       if: steps.changes.outputs.frontend == 'true'
+    
+    # Ensure the production bundle actually builds — catches tree-shake bugs, type errors
     - run: pnpm build
       if: steps.changes.outputs.frontend == 'true'
 
@@ -44,27 +58,36 @@ jobs:
         working-directory: ./backend
     steps:
     - uses: actions/checkout@v4
+    
+    # Only run backend checks if code in backend/ actually changed
     - uses: dorny/paths-filter@v3
       id: changes
       with:
         filters: |
           backend:
             - 'backend/**'
-    - name: Set up Python
+    
+    - uses: actions/setup-python@v5
       if: steps.changes.outputs.backend == 'true'
-      uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-    - name: Set up uv
+    
+    - uses: astral-sh/setup-uv@v7
       if: steps.changes.outputs.backend == 'true'
-      uses: astral-sh/setup-uv@v7
-    - name: Install dependencies
+    
+    # Lock dependencies deterministically (uv.lock is our source of truth)
+    - run: uv sync --group dev --locked
       if: steps.changes.outputs.backend == 'true'
-      run: |
-        uv sync --group dev
-    - name: Lint with Ruff
+    
+    # Report known vulnerabilities from the locked backend dependency set.
+    # --desc adds advisory details for maintainer review.
+    - run: uv run pip-audit --desc || true
       if: steps.changes.outputs.backend == 'true'
-      run: uv run ruff check .
-    - name: Check formatting with Ruff
+    
+    # Catch type errors and obvious mistakes (before runtime surprises)
+    - run: uv run ruff check .
       if: steps.changes.outputs.backend == 'true'
-      run: uv run ruff format --check .
+    
+    # Enforce consistent style — don't waste review time on whitespace
+    - run: uv run ruff format --check .
+      if: steps.changes.outputs.backend == 'true'

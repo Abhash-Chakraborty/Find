@@ -142,6 +142,7 @@ export interface SearchResponse {
 export interface JobStatus {
   job_id: string;
   status: "queued" | "started" | "finished" | "failed";
+  stage?: string;
   created_at?: string | null;
   started_at?: string | null;
   ended_at?: string | null;

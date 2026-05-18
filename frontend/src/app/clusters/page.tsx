@@ -82,7 +82,18 @@ export default function ClustersPage() {
     }
 
     if (clusterJobQuery.data.status === "finished") {
-      toast.success("Clustering finished. The page has been refreshed.");
+      const result = clusterJobQuery.data.result as
+        | { message?: string }
+        | undefined;
+      const message = result?.message || "Clustering completed successfully";
+
+      if (message.includes("Not enough")) {
+        toast.info(message);
+      } else if (message.toLowerCase().includes("no stable")) {
+        toast.info(message);
+      } else {
+        toast.success(message);
+      }
       queryClient.invalidateQueries({ queryKey: ["clusters"] });
       setClusterJobId(null);
     }
