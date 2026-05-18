@@ -379,7 +379,7 @@ export default function UploadPage() {
               className={`rounded-full px-5 py-2 text-sm font-medium transition ${
                 mode === "single"
                   ? "bg-white text-black"
-                  : "text-[#a1a4a5] hover:bg-white/[0.08] hover:text-[#f0f0f0]"
+                  : "text-[color:var(--silver)] hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)]"
               }`}
             >
               Files
@@ -391,7 +391,7 @@ export default function UploadPage() {
               className={`rounded-full px-5 py-2 text-sm font-medium transition ${
                 mode === "bulk"
                   ? "bg-white text-black"
-                  : "text-[#a1a4a5] hover:bg-white/[0.08] hover:text-[#f0f0f0]"
+                  : "text-[color:var(--silver)] hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)]"
               }`}
             >
               ZIP
@@ -403,29 +403,30 @@ export default function UploadPage() {
           {...activeRootProps()}
           className={`frost-panel scan-line cursor-pointer rounded-3xl p-10 text-center transition md:p-14 ${
             isDragActive
-              ? "scale-[1.01] border-[#3b9eff] bg-[var(--blue-soft)]"
-              : "hover:border-[var(--frost-strong)] hover:bg-white/[0.045]"
+              ? "scale-[1.01] border-[color:var(--blue)] bg-[var(--blue-soft)]"
+              : "hover:border-[var(--frost-strong)] hover:bg-[color:var(--frost-soft)]"
           } ${isUploading ? "pointer-events-none opacity-50" : ""}`}
         >
           <input {...activeInputProps()} />
-          <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full border border-[var(--frost)] bg-white/[0.04]">
+
+          <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)]">
             {mode === "single" ? (
-              <Upload className="h-6 w-6 text-[#3b9eff]" />
+              <Upload className="h-6 w-6 text-[color:var(--blue)]" />
             ) : (
-              <Package className="h-6 w-6 text-[#ff801f]" />
+              <Package className="h-6 w-6 text-[color:var(--orange)]" />
             )}
           </div>
 
-          <p className="mb-2 text-base font-medium text-[#f0f0f0]">
+          <p className="mb-2 text-base font-medium text-[color:var(--near-white)]">
             {isDragActive
               ? "Drop to upload"
               : mode === "single"
                 ? "Drop images here"
                 : "Drop a ZIP archive here"}
           </p>
-          <p className="text-sm text-[#a1a4a5]">{helperText}</p>
-        </div>
 
+          <p className="text-sm text-[color:var(--silver)]">{helperText}</p>
+        </div>
         {fileRejections.length > 0 && (
           <div className="mt-6 rounded-3xl border border-[var(--red-soft)] bg-[var(--red-soft)] p-4">
             <p className="mb-2 text-sm font-medium text-[#ff9bab]">
@@ -443,16 +444,18 @@ export default function UploadPage() {
 
         {(isUploading || activeJobs.length > 0) && (
           <div className="frost-panel mt-8 flex items-center gap-4 rounded-3xl p-4">
-            <Loader2 className="h-5 w-5 animate-spin text-[#3b9eff]" />
+            <Loader2 className="h-5 w-5 animate-spin text-[color:var(--blue)]" />
             <div>
-              <p className="text-sm font-medium text-[#f0f0f0]">
+              <p className="text-sm font-medium text-[color:var(--near-white)]">
                 {isUploading
                   ? "Uploading"
                   : `Analyzing ${activeJobs.length} image${
                       activeJobs.length === 1 ? "" : "s"
                     }`}
               </p>
-              <p className="text-xs text-[#a1a4a5]">Indexing updates live.</p>
+              <p className="text-xs text-[color:var(--silver)]">
+                Indexing updates live.
+              </p>
             </div>
           </div>
         )}
@@ -478,10 +481,10 @@ export default function UploadPage() {
         {uploadedFiles.length > 0 && (
           <div className="page-enter mt-12">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-[#f0f0f0]">
+              <h3 className="text-sm font-medium text-[color:var(--near-white)]">
                 Recent uploads
               </h3>
-              <span className="text-xs text-[#a1a4a5]">
+              <span className="text-xs text-[color:var(--silver)]">
                 {uploadedFiles.length} total
               </span>
             </div>
@@ -504,15 +507,15 @@ export default function UploadPage() {
                       ) : result.processingState === "indexed" ? (
                         <CheckCircle className="h-4 w-4 shrink-0 text-[#7dffc7]" />
                       ) : (
-                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#3b9eff]" />
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[color:var(--blue)]" />
                       )}
 
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[#f0f0f0]">
+                        <p className="truncate text-sm font-medium text-[color:var(--near-white)]">
                           {result.filename}
                         </p>
                         {displayStage && (
-                          <p className="truncate text-xs text-[#a1a4a5]">
+                          <p className="truncate text-xs text-[color:var(--silver)]">
                             {displayStage}
                           </p>
                         )}
@@ -534,7 +537,7 @@ export default function UploadPage() {
                         result.media_id != null && (
                           <Link
                             href={`/gallery?media=${result.media_id}`}
-                            className="text-xs text-[#3b9eff] hover:underline"
+                            className="text-xs text-[color:var(--blue)] hover:underline"
                           >
                             View existing
                           </Link>

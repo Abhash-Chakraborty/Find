@@ -82,8 +82,8 @@ Services:
 
 - Frontend: `http://localhost:3000`
 - Backend API: `http://localhost:8000`
-- MinIO API: `http://localhost:9000`
-- MinIO console: `http://localhost:9001`
+- MinIO API: `http://localhost:9200`
+- MinIO console: `http://localhost:9201`
 
 Notes:
 

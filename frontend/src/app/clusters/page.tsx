@@ -188,13 +188,13 @@ export default function ClustersPage() {
           <div className="mb-8 flex justify-center">
             <div className="frost-panel inline-flex flex-wrap items-center justify-center gap-3 rounded-full px-5 py-3">
               {isJobActive && (
-                <Loader2 className="h-4 w-4 animate-spin text-[#3b9eff]" />
+                <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />
               )}
               <span className={getJobStatusClass(activeJobStatus)}>
                 {formatJobStatus(activeJobStatus)}
               </span>
               {clusterJobQuery.data?.job_id && (
-                <span className="text-xs text-[#a1a4a5]">
+                <span className="text-xs text-[color:var(--silver)]">
                   ID {clusterJobQuery.data.job_id.slice(0, 8)}
                 </span>
               )}
@@ -204,7 +204,7 @@ export default function ClustersPage() {
 
         {isLoading && (
           <div className="flex items-center justify-center py-32">
-            <Loader2 className="h-8 w-8 animate-spin text-[#a1a4a5]" />
+            <Loader2 className="h-8 w-8 animate-spin text-[color:var(--silver)]" />
           </div>
         )}
 
@@ -216,9 +216,11 @@ export default function ClustersPage() {
 
         {data && data.clusters.length === 0 && (
           <div className="frost-panel mx-auto max-w-md rounded-3xl px-8 py-14 text-center">
-            <Grid3x3 className="mx-auto mb-4 h-10 w-10 text-[#5f6568]" />
-            <p className="mb-2 text-[#f0f0f0]">No clusters yet</p>
-            <p className="mb-6 text-sm leading-6 text-[#a1a4a5]">
+            <Grid3x3 className="mx-auto mb-4 h-10 w-10 text-[color:var(--muted)]" />
+            <p className="mb-2 text-[color:var(--near-white)]">
+              No clusters yet
+            </p>
+            <p className="mb-6 text-sm leading-6 text-[color:var(--silver)]">
               Index a few related images, then run clustering.
             </p>
             <button
@@ -241,18 +243,18 @@ export default function ClustersPage() {
           <div className="page-enter">
             <div className="mb-8 grid gap-3 sm:grid-cols-2">
               <div className="frost-panel rounded-2xl p-4">
-                <p className="text-xs uppercase text-[#5f6568]">
+                <p className="text-xs uppercase text-[color:var(--muted)]">
                   Total clusters
                 </p>
-                <p className="mt-2 text-3xl font-light text-[#f0f0f0]">
+                <p className="mt-2 text-3xl font-light text-[color:var(--near-white)]">
                   {totals.totalClusters}
                 </p>
               </div>
               <div className="frost-panel rounded-2xl p-4">
-                <p className="text-xs uppercase text-[#5f6568]">
+                <p className="text-xs uppercase text-[color:var(--muted)]">
                   Clustered images
                 </p>
-                <p className="mt-2 text-3xl font-light text-[#f0f0f0]">
+                <p className="mt-2 text-3xl font-light text-[color:var(--near-white)]">
                   {totals.totalImages}
                 </p>
               </div>
@@ -267,7 +269,7 @@ export default function ClustersPage() {
                   <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-medium text-[#f0f0f0]">
+                        <h2 className="text-lg font-medium text-[color:var(--near-white)]">
                           Cluster {cluster.id}
                         </h2>
                         <span className="accent-badge status-default">
@@ -276,12 +278,12 @@ export default function ClustersPage() {
                         </span>
                       </div>
                       {cluster.label && (
-                        <p className="text-sm text-[#a1a4a5]">
+                        <p className="text-sm text-[color:var(--silver)]">
                           {cluster.label}
                         </p>
                       )}
                       {cluster.description && (
-                        <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#5f6568]">
+                        <p className="mt-1 line-clamp-2 text-sm leading-6 text-[color:var(--muted)]">
                           {cluster.description}
                         </p>
                       )}
@@ -311,7 +313,7 @@ export default function ClustersPage() {
                               url: sample.url,
                             })
                           }
-                          className="group relative aspect-square overflow-hidden rounded-2xl border border-[var(--frost)] bg-white/[0.025]"
+                          className="group relative aspect-square overflow-hidden rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)]"
                           aria-label={`Preview ${sample.filename}`}
                         >
                           {imageSrc ? (
@@ -324,7 +326,7 @@ export default function ClustersPage() {
                               unoptimized
                             />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center text-[#5f6568]">
+                            <div className="flex h-full w-full items-center justify-center text-[color:var(--muted)]">
                               <ImageOff className="h-5 w-5" />
                             </div>
                           )}
@@ -341,24 +343,24 @@ export default function ClustersPage() {
 
       {selectedClusterId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-xl">
-          <div className="frost-panel page-enter relative max-h-[90dvh] w-full max-w-6xl overflow-hidden rounded-3xl bg-black">
+          <div className="frost-panel page-enter relative max-h-[90dvh] w-full max-w-6xl overflow-hidden rounded-3xl bg-[color:var(--void)]">
             <button
               type="button"
               onClick={() => {
                 setSelectedClusterId(null);
                 setFilterText("");
               }}
-              className="icon-button absolute right-4 top-4 z-20 bg-black/60 backdrop-blur-md"
+              className="icon-button absolute right-4 top-4 z-20 bg-[color:var(--overlay)] text-white backdrop-blur-md"
               aria-label="Close cluster detail"
             >
               <X className="h-4 w-4" />
             </button>
 
             <div className="border-b border-[var(--frost)] px-6 py-5">
-              <h2 className="text-xl font-medium text-[#f0f0f0]">
+              <h2 className="text-xl font-medium text-[color:var(--near-white)]">
                 Cluster {selectedClusterId}
               </h2>
-              <p className="mt-1 text-sm text-[#a1a4a5]">
+              <p className="mt-1 text-sm text-[color:var(--silver)]">
                 Images grouped by visual and semantic similarity.
               </p>
             </div>
@@ -366,7 +368,7 @@ export default function ClustersPage() {
             <div className="max-h-[calc(90dvh-88px)] overflow-y-auto p-6">
               {selectedClusterQuery.isLoading && (
                 <div className="flex items-center justify-center py-24">
-                  <Loader2 className="h-8 w-8 animate-spin text-[#a1a4a5]" />
+                  <Loader2 className="h-8 w-8 animate-spin text-[color:var(--silver)]" />
                 </div>
               )}
 
@@ -383,12 +385,12 @@ export default function ClustersPage() {
                       {selectedClusterQuery.data.member_count} members
                     </span>
                     {selectedClusterQuery.data.label && (
-                      <span className="text-sm text-[#a1a4a5]">
+                      <span className="text-sm text-[color:var(--silver)]">
                         {selectedClusterQuery.data.label}
                       </span>
                     )}
                     {selectedClusterQuery.data.description && (
-                      <span className="text-sm text-[#5f6568]">
+                      <span className="text-sm text-[color:var(--muted)]">
                         {selectedClusterQuery.data.description}
                       </span>
                     )}
@@ -400,11 +402,11 @@ export default function ClustersPage() {
                       aria-label="Filter cluster members by filename"
                       value={filterText}
                       onChange={(e) => setFilterText(e.target.value)}
-                      className="w-full rounded-2xl border border-[var(--frost)] bg-white/[0.03] px-4 py-3 text-sm text-[#f0f0f0] outline-none transition focus:border-[#3b9eff]"
+                      className="w-full rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm text-[color:var(--near-white)] outline-none transition focus:border-[#3b9eff]"
                     />
                   </div>
                   {filteredMembers.length === 0 && (
-                    <div className="py-12 text-center text-[#a1a4a5]">
+                    <div className="py-12 text-center text-[color:var(--silver)]">
                       No matching members found.
                     </div>
                   )}
@@ -428,7 +430,7 @@ export default function ClustersPage() {
                           className="frost-panel card-hover overflow-hidden rounded-3xl text-left"
                           aria-label={`Preview ${member.filename}`}
                         >
-                          <div className="relative aspect-[4/3] bg-white/[0.025]">
+                          <div className="relative aspect-[4/3] bg-[color:var(--surface-soft)]">
                             {imageSrc ? (
                               <Image
                                 src={imageSrc}
@@ -439,17 +441,17 @@ export default function ClustersPage() {
                                 unoptimized
                               />
                             ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[#5f6568]">
+                              <div className="flex h-full w-full items-center justify-center text-[color:var(--muted)]">
                                 <ImageOff className="h-6 w-6" />
                               </div>
                             )}
                           </div>
                           <div className="space-y-2 p-4">
-                            <p className="truncate text-sm font-medium text-[#f0f0f0]">
+                            <p className="truncate text-sm font-medium text-[color:var(--near-white)]">
                               {member.filename}
                             </p>
                             {member.caption && (
-                              <p className="line-clamp-2 text-sm leading-6 text-[#a1a4a5]">
+                              <p className="line-clamp-2 text-sm leading-6 text-[color:var(--silver)]">
                                 {member.caption}
                               </p>
                             )}
