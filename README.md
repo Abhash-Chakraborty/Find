@@ -16,6 +16,8 @@ Find is a local-first AI image intelligence platform for uploading, indexing, se
 
 All image processing, vector generation, and search stay inside your local stack.
 
+See the mobile direction in [`docs/mobile-strategy.md`](./docs/mobile-strategy.md), the desktop framework tradeoff analysis in [`docs/desktop-tauri-vs-electron-adr.md`](./docs/desktop-tauri-vs-electron-adr.md), and the broader installable local-first roadmap in [`docs/installable-local-first-architecture-roadmap.md`](./docs/installable-local-first-architecture-roadmap.md).
+
 ## What it does
 
 - Upload individual images or ZIP archives
@@ -156,6 +158,19 @@ uv run ruff check .
 uv run ruff format --check .
 uv run pytest tests/ -v
 ```
+## ML troubleshooting
+
+For debugging real caption generation, OCR extraction, embeddings, object detection, and semantic search quality issues, see:
+
+* [Real ML Troubleshooting Guide](docs/REAL_ML_TROUBLESHOOTING.md)
+
+The guide covers:
+
+* Full ML mode vs mock mode
+* Worker log inspection
+* Caption/OCR debugging
+* GPU and model-loading issues
+* Manual validation workflows for search quality
 
 ## Core flow
 
