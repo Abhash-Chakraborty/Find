@@ -29,7 +29,10 @@ dependencies = [
   "httpx>=0.28.1,<0.29",
   "aiofiles>=25.1.0,<26",
 ]
-
+[tool.uv]
+override-dependencies = [
+  "pyasn1>=0.6.3",
+]
 [project.optional-dependencies]
 ml = [
   "torch==2.2.0+cu121",
@@ -61,7 +64,7 @@ dev = [
   "pytest-asyncio==0.23.3",
   "black==26.3.1",
   "ruff==0.1.14",
-  "pip-audit",
+  "pip-audit==2.9.0",
 ]
 
 [tool.pytest.ini_options]
