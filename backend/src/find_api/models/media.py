@@ -24,39 +24,69 @@ class Media(Base):
     __tablename__ = "media"
 
     id = Column(Integer, primary_key=True, index=True)
+
     file_hash = Column(String(64), unique=True, index=True, nullable=False)
+
     minio_key = Column(String(255), nullable=False)
+
     filename = Column(String(255), nullable=False)
+
     content_type = Column(String(100))
+
     file_size = Column(Integer)
+
     liked = Column(
-        Boolean, nullable=False, default=False, server_default=sa_text("false")
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=sa_text("false"),
     )
 
     # Status tracking
     status = Column(String(50), default="pending", index=True)
-    # Status values: pending, processing, indexed, failed
+    # pending, processing, indexed, failed
 
     error_message = Column(Text, nullable=True)
 
+    # NEW: store linked RQ analysis job id
+    analysis_job_id = Column(String(255), nullable=True, index=True)
+
     # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    processed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        onupdate=func.now(),
+    )
+
+    processed_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     # Image metadata
     width = Column(Integer)
-    height = Column(Integer)
-    exif_json = Column(JSON)  # EXIF data
 
-    # AI-generated metadata
-    metadata_json = Column(JSON)  # Contains: caption, objects, ocr_text, faces, etc.
+    height = Column(Integer)
+
+    exif_json = Column(JSON)
+
+    # AI metadata
+    metadata_json = Column(JSON)
 
     # Clustering
     cluster_id = Column(Integer, index=True, nullable=True)
 
-    # Vector embedding for semantic search
+    # Vector embedding
     vector = Column(Vector(settings.EMBEDDING_DIM))
 
     def __repr__(self):
-        return f"<Media(id={self.id}, filename={self.filename}, status={self.status})>"
+        return (
+            f"<Media(id={self.id}, "
+            f"filename={self.filename}, "
+            f"status={self.status})>"
+        )
