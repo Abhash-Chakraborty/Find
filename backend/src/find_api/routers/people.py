@@ -9,7 +9,10 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 from find_api.core.database import get_db
+from find_api.core.config import settings
+from find_api.core.queue import get_task_queue
 from find_api.models.face import Face
+from find_api.models.media import Media
 from find_api.models.person import Person
 import logging
 
@@ -37,6 +40,21 @@ class PersonUpdate(BaseModel):
     """What the user sends when naming a person"""
 
     name: str
+
+
+class PersonImageFace(BaseModel):
+    """Face data for one image in a person group."""
+
+    bounding_box: dict
+    confidence: float
+
+
+class PersonImageResponse(BaseModel):
+    """Image shown inside a person group."""
+
+    media_id: int
+    filename: str
+    faces: List[PersonImageFace]
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -92,8 +110,10 @@ def get_person_images(person_id: int, db: Session = Depends(get_db)):
 
     # Get all unique media IDs where this person appears
     face_rows = (
-        db.query(Face.media_id, Face.bounding_box, Face.confidence)
+        db.query(Face.media_id, Media.filename, Face.bounding_box, Face.confidence)
+        .join(Media, Media.id == Face.media_id)
         .filter(Face.person_id == person_id)
+        .order_by(Media.created_at.desc())
         .all()
     )
 
@@ -103,6 +123,7 @@ def get_person_images(person_id: int, db: Session = Depends(get_db)):
         if row.media_id not in images:
             images[row.media_id] = {
                 "media_id": row.media_id,
+                "filename": row.filename,
                 "faces": [],
             }
         images[row.media_id]["faces"].append(
@@ -149,7 +170,7 @@ def update_person_name(
 
 
 @router.post("/people/cluster")
-def trigger_face_clustering(db: Session = Depends(get_db)):
+def trigger_face_clustering():
     """
     Manually trigger face clustering job.
     Groups all detected faces into person groups.
@@ -157,8 +178,17 @@ def trigger_face_clustering(db: Session = Depends(get_db)):
     try:
         from find_api.workers.jobs import cluster_faces
 
-        result = cluster_faces()
-        return result
+        job = get_task_queue().enqueue(
+            cluster_faces,
+            job_timeout=settings.WORKER_TIMEOUT,
+            result_ttl=300,
+        )
+        return {
+            "job_id": job.id,
+            "message": "Face clustering job queued",
+            "status": "queued",
+            "enqueued": True,
+        }
     except Exception:
         logger.exception("Face clustering failed")
         raise HTTPException(

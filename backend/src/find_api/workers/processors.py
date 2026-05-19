@@ -191,24 +191,44 @@ def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
         detector = get_face_detector()
         faces = detector.detect_faces(image)
 
+        db.query(Face).filter(Face.media_id == media_id).delete(
+            synchronize_session=False
+        )
+
         if not faces:
+            db.commit()
             logger.info("No faces detected in media %s", media_id)
             return 0
 
         # Save each detected face to the database
+        stored_count = 0
         for face_data in faces:
-            face = Face(
-                media_id=media_id,
-                bounding_box=face_data["bbox"],
-                embedding=face_data["embedding"],
-                confidence=face_data["confidence"],
-                # person_id is None for now - set after clustering
+            bbox = face_data.get("bbox")
+            embedding = face_data.get("embedding")
+            confidence = face_data.get("confidence")
+            if bbox is None or embedding is None or confidence is None:
+                logger.warning("Skipping malformed face payload for media %s", media_id)
+                continue
+
+            db.add(
+                Face(
+                    media_id=media_id,
+                    bounding_box=bbox,
+                    embedding=embedding,
+                    confidence=confidence,
+                    # person_id is None for now - set after clustering
+                )
             )
-            db.add(face)
+            stored_count += 1
+
+        if stored_count == 0:
+            db.commit()
+            logger.info("No valid faces to store for media %s", media_id)
+            return 0
 
         db.commit()
-        logger.info("Stored %s faces for media %s", len(faces), media_id)
-        return len(faces)
+        logger.info("Stored %s faces for media %s", stored_count, media_id)
+        return stored_count
 
     except Exception:
         logger.exception("Face detection failed for media %s", media_id)
