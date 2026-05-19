@@ -151,6 +151,10 @@ export interface JobStatus {
   error?: string;
 }
 
+export interface AppConfig {
+  ml_mode: "full" | "mock";
+}
+
 // API Functions
 export const uploadImages = async (
   files: FileList | File[],
@@ -192,6 +196,11 @@ export const uploadImagesBulk = async (
 
 export const getJobStatus = async (jobId: string): Promise<JobStatus> => {
   const response = await api.get<JobStatus>(`/api/status/${jobId}`);
+  return response.data;
+};
+
+export const getAppConfig = async (): Promise<AppConfig> => {
+  const response = await api.get<AppConfig>("/api/config");
   return response.data;
 };
 

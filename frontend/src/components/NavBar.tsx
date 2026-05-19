@@ -4,6 +4,7 @@ import { Moon, Sun } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { getAppConfig } from "@/lib/api";
 
 const navLinks = [
   { href: "/upload", label: "Upload" },
@@ -22,6 +23,8 @@ export default function NavBar() {
 
   // Theme state
   const [theme, setTheme] = useState<Theme>("light");
+  const [isMockMode, setIsMockMode] = useState(false);
+
   useEffect(() => {
     setMounted(true);
 
@@ -50,6 +53,14 @@ export default function NavBar() {
     document.documentElement.style.colorScheme = initialTheme;
 
     setTheme(initialTheme);
+
+    void getAppConfig()
+      .then((config) => {
+        setIsMockMode(config.ml_mode === "mock");
+      })
+      .catch(() => {
+        setIsMockMode(false);
+      });
   }, []);
 
   const toggleTheme = () => {
@@ -84,6 +95,22 @@ export default function NavBar() {
           </Link>
         );
       })}
+
+      {isMockMode && (
+        <div className="relative flex shrink-0">
+          <div
+            className="group rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] px-3 py-1.5 text-xs font-medium text-[color:var(--silver)]"
+            aria-label="Mock ML mode active"
+          >
+            Mock ML Mode
+
+            <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-[var(--frost)] bg-[color:var(--frost-soft)] p-3 text-xs leading-relaxed text-[color:var(--near-white)] shadow-xl group-hover:block">
+              Captions, OCR, embeddings, search, and clustering use mock-backed
+              data in this environment.
+            </div>
+          </div>
+        </div>
+      )}
 
       <button
         type="button"
