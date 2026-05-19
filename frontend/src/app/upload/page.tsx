@@ -356,33 +356,6 @@ export default function UploadPage() {
     [uploadedFiles],
   );
 
-  const trackedUploads = useMemo(
-    () => uploadedFiles.filter((item) => item.status === "uploaded"),
-    [uploadedFiles],
-  );
-
-  const completedUploads = useMemo(
-    () =>
-      trackedUploads.filter(
-        (item) =>
-          item.processingState === "indexed" ||
-          item.processingState === "failed",
-      ),
-    [trackedUploads],
-  );
-
-  const progressPercent =
-    trackedUploads.length > 0
-      ? Math.round((completedUploads.length / trackedUploads.length) * 100)
-      : 0;
-
-  const progressLabel = isUploading
-    ? "Uploading"
-    : `Analyzing ${activeJobs.length} image${activeJobs.length === 1 ? "" : "s"}`;
-  const progressDetail =
-    activeJobs.find((item) => item.processingStage)?.processingStage ??
-    "Indexing updates live";
-
   const showActions = stats.indexed > 0 || stats.duplicates > 0;
 
   return (
@@ -470,36 +443,19 @@ export default function UploadPage() {
         )}
 
         {(isUploading || activeJobs.length > 0) && (
-          <div className="frost-panel mt-8 rounded-2xl px-4 py-3">
-            <div className="mb-2 flex items-center justify-between gap-4">
-              <div className="flex min-w-0 items-center gap-2">
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[color:var(--silver)]" />
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--near-white)]">
-                    {progressLabel}
-                  </p>
-                  <p className="truncate text-xs text-[color:var(--silver)]">
-                    {progressDetail}
-                  </p>
-                </div>
-              </div>
-              <span className="shrink-0 text-xs tabular-nums text-[color:var(--silver)]">
-                {progressPercent}%
-              </span>
-            </div>
-
-            <div
-              aria-label={`${progressLabel} progress`}
-              aria-valuemax={100}
-              aria-valuemin={0}
-              aria-valuenow={progressPercent}
-              className="h-1 w-full overflow-hidden rounded-full bg-[color:var(--surface-hover)]"
-              role="progressbar"
-            >
-              <div
-                className="h-full rounded-full bg-[color:var(--near-white)] transition-[width] duration-500 ease-out"
-                style={{ width: `${progressPercent}%` }}
-              />
+          <div className="frost-panel mt-8 flex items-center gap-4 rounded-3xl p-4">
+            <Loader2 className="h-5 w-5 animate-spin text-[color:var(--blue)]" />
+            <div>
+              <p className="text-sm font-medium text-[color:var(--near-white)]">
+                {isUploading
+                  ? "Uploading"
+                  : `Analyzing ${activeJobs.length} image${
+                      activeJobs.length === 1 ? "" : "s"
+                    }`}
+              </p>
+              <p className="text-xs text-[color:var(--silver)]">
+                Indexing updates live.
+              </p>
             </div>
           </div>
         )}
