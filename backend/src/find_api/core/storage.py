@@ -22,6 +22,23 @@ minio_client = Minio(
 )
 
 
+def _get_public_minio_client() -> Minio | None:
+    if not settings.MINIO_PUBLIC_ENDPOINT:
+        return None
+
+    parsed = urlparse(settings.MINIO_PUBLIC_ENDPOINT.rstrip("/"))
+    if not parsed.netloc:
+        return None
+
+    return Minio(
+        parsed.netloc,
+        access_key=settings.MINIO_ACCESS_KEY,
+        secret_key=settings.MINIO_SECRET_KEY,
+        secure=parsed.scheme == "https",
+        region="us-east-1",
+    )
+
+
 def init_storage():
     """
     Initialize MinIO storage - create bucket if not exists
@@ -56,6 +73,15 @@ def init_storage():
                 )
             except S3Error as exc:
                 logger.warning("Failed to apply public read policy: %s", exc)
+        else:
+            try:
+                minio_client.delete_bucket_policy(settings.MINIO_BUCKET)
+                logger.info(
+                    "Removed public read policy from MinIO bucket '%s'",
+                    settings.MINIO_BUCKET,
+                )
+            except S3Error as exc:
+                logger.warning("Failed to remove public read policy: %s", exc)
     except S3Error as e:
         logger.error(f"Failed to initialize MinIO storage: {e}")
         raise
@@ -144,7 +170,8 @@ def get_file_url(object_name: str, expires: int = 3600) -> str:
                 )
             )
 
-        return minio_client.presigned_get_object(
+        signing_client = _get_public_minio_client() or minio_client
+        return signing_client.presigned_get_object(
             settings.MINIO_BUCKET, object_name, expires=timedelta(seconds=expires)
         )
     except S3Error as e:

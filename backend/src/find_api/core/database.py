@@ -58,6 +58,18 @@ def init_db():
                         "ADD COLUMN IF NOT EXISTS liked BOOLEAN DEFAULT false"
                     )
                 )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS analysis_job_id VARCHAR(64)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_analysis_job_id "
+                        "ON media (analysis_job_id)"
+                    )
+                )
                 conn.execute(text("UPDATE media SET liked = false WHERE liked IS NULL"))
                 conn.execute(
                     text(

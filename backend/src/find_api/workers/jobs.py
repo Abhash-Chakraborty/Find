@@ -7,6 +7,7 @@ import io
 import logging
 from datetime import datetime
 import numpy as np
+from rq import get_current_job
 
 from find_api.core.database import SessionLocal
 from find_api.core.queue import clear_clustering_job_state, enqueue_clustering_job
@@ -17,47 +18,56 @@ from find_api.utils.exif import extract_exif_data
 logger = logging.getLogger(__name__)
 
 
+def set_stage(job, stage: str):
+    """Persist the current upload-processing stage in RQ metadata."""
+    if job:
+        job.meta["stage"] = stage
+        job.save_meta()
+
+
+def set_error(job, error: str):
+    """Persist a safe user-facing processing error in RQ metadata."""
+    if job:
+        job.meta["error"] = error
+        job.save_meta()
+
+
 def analyze_image(media_id: int):
     """
     Main worker job to analyze an uploaded image
-
-    Args:
-        media_id: Database ID of media record
     """
+
     from find_api.workers.processors import (
         extract_image_metadata,
         generate_hybrid_embedding,
     )
 
-    # job = get_current_job()
+    job = get_current_job()
+
     db = SessionLocal()
     media = None
 
     try:
-        # Get media record
+        set_stage(job, "loading image")
+
         media = db.query(Media).filter(Media.id == media_id).first()
         if not media:
             logger.error(f"Media {media_id} not found")
             return
 
-        logger.info(f"Processing media {media_id}: {media.filename}")
-
-        # Update status
         media.status = "processing"
         db.commit()
 
-        # Download image from MinIO
         image_data = get_file(media.minio_key)
         image = Image.open(io.BytesIO(image_data))
 
-        # Convert to RGB if needed
         if image.mode != "RGB":
             image = image.convert("RGB")
 
-        # Store dimensions
         media.width, media.height = image.size
 
-        # Extract EXIF data
+        set_stage(job, "extracting EXIF")
+
         try:
             exif_data = extract_exif_data(image)
             media.exif_json = exif_data
@@ -65,18 +75,24 @@ def analyze_image(media_id: int):
             logger.warning(f"Failed to extract EXIF: {e}")
             media.exif_json = {}
 
-        # Extract metadata (Objects, Caption, OCR)
-        metadata = extract_image_metadata(image)
+        metadata = extract_image_metadata(
+            image,
+            on_stage=lambda stage: set_stage(job, stage),
+        )
 
-        # Generate Hybrid Embedding
+        set_stage(job, "generating embedding")
+
         media.vector = generate_hybrid_embedding(image, metadata)
 
-        # Store metadata
+        set_stage(job, "indexing complete")
+
         media.metadata_json = metadata
         media.status = "indexed"
         media.processed_at = datetime.utcnow()
 
         db.commit()
+
+        set_stage(job, "clustering queued")
 
         try:
             enqueue_clustering_job(reason=f"media:{media_id}")
@@ -95,7 +111,9 @@ def analyze_image(media_id: int):
         logger.error(f"Failed to process media {media_id}: {e}")
         db.rollback()
 
-        # Update status to failed
+        set_stage(job, "failed")
+        set_error(job, str(e))
+
         if media:
             media.status = "failed"
             media.error_message = str(e)
@@ -111,9 +129,9 @@ def cluster_images():
     """
     Background job to cluster all indexed images
     """
+
     from find_api.ml.clusterer import get_image_clusterer
     from find_api.models.cluster import Cluster
-
     from find_api.core.config import settings
 
     db = SessionLocal()
@@ -147,13 +165,11 @@ def cluster_images():
                 "message": "Not enough indexed images for clustering",
             }
 
-        # Extract embeddings and IDs
         embeddings = np.asarray([row.vector for row in media_rows], dtype=np.float32)
         media_ids = [row.id for row in media_rows]
 
         logger.info(f"Clustering {len(media_rows)} images...")
 
-        # Run clustering
         clusterer = get_image_clusterer()
         labels, info = clusterer.cluster(embeddings)
 
@@ -168,7 +184,6 @@ def cluster_images():
                 "cluster_ids": [],
             }
 
-        # Compute centroids
         centroids = clusterer.compute_centroids(embeddings, labels)
 
         cluster_records = {}
@@ -188,7 +203,6 @@ def cluster_images():
             db.flush()
             cluster_records[cluster_label] = cluster
 
-        # Update media with cluster assignments
         db.bulk_update_mappings(
             Media,
             [

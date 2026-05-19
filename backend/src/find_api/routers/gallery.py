@@ -211,6 +211,7 @@ def reprocess_image(media_id: int, db: Session = Depends(get_db)):
         job = get_task_queue().enqueue(
             analyze_image, media.id, job_timeout=settings.WORKER_TIMEOUT
         )
+        media.analysis_job_id = job.id
         db.commit()
     except Exception as exc:  # noqa: BLE001
         db.rollback()

@@ -36,6 +36,7 @@ class Media(Base):
     # Status tracking
     status = Column(String(50), default="pending", index=True)
     # Status values: pending, processing, indexed, failed
+    analysis_job_id = Column(String(64), nullable=True, index=True)
 
     error_message = Column(Text, nullable=True)
 

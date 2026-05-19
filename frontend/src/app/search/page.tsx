@@ -80,7 +80,7 @@ export default function SearchPage() {
           className="delayed-enter mx-auto mb-10 max-w-3xl"
         >
           <div className="frost-panel flex items-center gap-3 rounded-3xl p-2 transition focus-within:border-[var(--frost-strong)]">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[var(--frost)] bg-white/[0.04] text-[#3b9eff]">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[var(--frost)] bg-[color:var(--surface-soft)] text-[color:var(--blue)]">
               <SearchIcon className="h-5 w-5" />
             </div>
             <input
@@ -88,7 +88,7 @@ export default function SearchPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="A visual memory, object, scene, or mood"
-              className="min-w-0 flex-1 bg-transparent py-3 text-base text-[#f0f0f0] outline-none placeholder:text-[#5f6568]"
+              className="min-w-0 flex-1 bg-transparent py-3 text-base text-[color:var(--near-white)] outline-none placeholder:text-[color:var(--muted)]"
             />
             <button
               type="submit"
@@ -131,7 +131,7 @@ export default function SearchPage() {
                   setSelectedMediaId(null);
                   searchMutation.mutate(example);
                 }}
-                className="frost-button px-3 py-1.5 text-xs text-[#a1a4a5]"
+                className="frost-button px-3 py-1.5 text-xs text-[color:var(--silver)]"
               >
                 {example}
               </button>
@@ -141,7 +141,7 @@ export default function SearchPage() {
 
         {searchMutation.isPending && (
           <div className="flex items-center justify-center py-28">
-            <Loader2 className="h-8 w-8 animate-spin text-[#a1a4a5]" />
+            <Loader2 className="h-8 w-8 animate-spin text-[color:var(--silver)]" />
           </div>
         )}
 
@@ -153,8 +153,8 @@ export default function SearchPage() {
 
         {!searchMutation.data && !searchMutation.isPending && (
           <div className="frost-panel mx-auto max-w-md rounded-3xl px-8 py-14 text-center">
-            <SearchIcon className="mx-auto mb-4 h-10 w-10 text-[#5f6568]" />
-            <p className="text-sm text-[#a1a4a5]">
+            <SearchIcon className="mx-auto mb-4 h-10 w-10 text-[color:var(--muted)]" />
+            <p className="text-sm text-[color:var(--silver)]">
               Start with a place, subject, color, text, or moment.
             </p>
           </div>
@@ -162,9 +162,11 @@ export default function SearchPage() {
 
         {searchMutation.data && searchMutation.data.results.length === 0 && (
           <div className="frost-panel mx-auto max-w-md rounded-3xl px-8 py-14 text-center">
-            <ImageOff className="mx-auto mb-4 h-10 w-10 text-[#5f6568]" />
-            <p className="mb-2 text-[#f0f0f0]">No results found</p>
-            <p className="text-sm text-[#a1a4a5]">
+            <ImageOff className="mx-auto mb-4 h-10 w-10 text-[color:var(--muted)]" />
+            <p className="mb-2 text-[color:var(--near-white)]">
+              No results found
+            </p>
+            <p className="text-sm text-[color:var(--silver)]">
               Try a broader phrase or a visible object.
             </p>
           </div>
@@ -173,10 +175,10 @@ export default function SearchPage() {
         {searchMutation.data && searchMutation.data.results.length > 0 && (
           <div className="page-enter">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-[#a1a4a5]">
+              <p className="text-sm text-[color:var(--silver)]">
                 {searchMutation.data.results.length} result
                 {searchMutation.data.results.length !== 1 ? "s" : ""} for{" "}
-                <span className="text-[#f0f0f0]">
+                <span className="text-[color:var(--near-white)]">
                   {searchMutation.data.query}
                 </span>
               </p>
@@ -197,7 +199,7 @@ export default function SearchPage() {
                     className="frost-panel card-hover group relative overflow-hidden rounded-2xl text-left"
                     aria-label={`Preview ${result.metadata.filename}`}
                   >
-                    <div className="relative aspect-square overflow-hidden bg-white/[0.025]">
+                    <div className="relative aspect-square overflow-hidden bg-[color:var(--surface-soft)]">
                       {imageSrc ? (
                         <Image
                           src={imageSrc}
@@ -208,13 +210,13 @@ export default function SearchPage() {
                           unoptimized
                         />
                       ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-[#5f6568]">
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-[color:var(--muted)]">
                           <ImageOff className="h-7 w-7" />
                           <span className="text-xs">No preview</span>
                         </div>
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent opacity-70 transition-opacity group-hover:opacity-95" />
-                      <span className="absolute right-3 top-3 rounded-full border border-[var(--frost)] bg-black/[0.55] px-2.5 py-1 text-xs font-medium text-[#f0f0f0] backdrop-blur-md">
+                      <span className="absolute right-3 top-3 rounded-full border border-[var(--frost)] bg-[color:var(--overlay)] px-2.5 py-1 text-xs font-medium text-white backdrop-blur-md">
                         {Math.round(result.similarity * 100)}%
                       </span>
                       <StatusIndicator
@@ -224,11 +226,11 @@ export default function SearchPage() {
                     </div>
 
                     <div className="space-y-3 p-3">
-                      <p className="truncate text-xs font-medium text-[#f0f0f0]">
+                      <p className="truncate text-xs font-medium text-[color:var(--near-white)]">
                         {result.metadata.filename}
                       </p>
                       {result.metadata.caption && (
-                        <p className="line-clamp-2 text-xs leading-5 text-[#a1a4a5]">
+                        <p className="line-clamp-2 text-xs leading-5 text-[color:var(--silver)]">
                           {result.metadata.caption}
                         </p>
                       )}

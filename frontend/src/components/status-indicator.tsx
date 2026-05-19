@@ -21,27 +21,23 @@ export function StatusIndicator({
       case "indexed":
         return {
           Icon: CheckCircle2,
-          classes:
-            "border-[rgba(17,255,153,0.26)] bg-[rgba(17,255,153,0.14)] text-[#7dffc7]",
+          classes: "status-indexed",
         };
       case "processing":
         return {
           Icon: Loader2,
-          classes:
-            "border-[rgba(59,158,255,0.3)] bg-[rgba(0,129,253,0.18)] text-[#9fceff]",
+          classes: "status-processing",
           iconClass: "animate-spin",
         };
       case "failed":
         return {
           Icon: AlertCircle,
-          classes:
-            "border-[rgba(255,32,71,0.32)] bg-[rgba(255,32,71,0.16)] text-[#ff9bab]",
+          classes: "status-failed",
         };
       default:
         return {
           Icon: Clock3,
-          classes:
-            "border-[rgba(255,197,61,0.28)] bg-[rgba(255,197,61,0.14)] text-[#ffe08a]",
+          classes: "status-pending",
         };
     }
   })();

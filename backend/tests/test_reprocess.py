@@ -46,6 +46,7 @@ class FakeMedia(Base):
     file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     liked: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(50), default="pending")
+    analysis_job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(
         DateTime, nullable=True
@@ -164,6 +165,21 @@ class TestReprocessEndpoint:
         assert updated.status == "pending"
         assert updated.error_message is None
         assert updated.processed_at is None
+        db.close()
+
+    @patch("find_api.routers.gallery.get_task_queue")
+    def test_reprocess_persists_latest_analysis_job_id(self, mock_queue, client):
+        mock_job = MagicMock()
+        mock_job.id = "fake-job-latest"
+        mock_queue.return_value.enqueue.return_value = mock_job
+
+        media = make_media(status="failed", error_message="old error")
+
+        client.post(f"/api/image/{media.id}/reprocess")
+
+        db = _fresh_db()
+        updated = db.query(FakeMedia).filter(FakeMedia.id == media.id).first()
+        assert updated.analysis_job_id == "fake-job-latest"
         db.close()
 
     @patch("find_api.routers.gallery.get_task_queue")

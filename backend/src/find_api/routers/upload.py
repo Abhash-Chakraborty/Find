@@ -206,6 +206,8 @@ def _ingest_image(
     job = get_task_queue().enqueue(
         analyze_image, media.id, job_timeout=settings.WORKER_TIMEOUT
     )
+    media.analysis_job_id = job.id
+    db.commit()
 
     logger.info(f"Uploaded {filename} (media_id: {media.id}, job_id: {job.id})")
 

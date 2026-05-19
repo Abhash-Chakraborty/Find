@@ -33,7 +33,7 @@ Important paths:
 
 ## Contribution workflow
 
-1. Find an issue labeled `good first issue`, `help wanted`, `gssoc26`, `level:beginner`, `level:intermediate`, or `level:advanced`.
+1. Find an issue labeled `good first issue`, `help wanted`, `gssoc26`, `level:beginner`, `level:intermediate`, `level:advanced`, or `level:critical`.
 2. Comment on the issue and wait for maintainer assignment before starting.
 3. Fork the repository and create a branch from `main`.
 4. Keep the change scoped to one issue.

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
+from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.queue import enqueue_clustering_job
 from find_api.core.storage import get_file_url
@@ -52,7 +53,11 @@ def get_clusters(db: Session = Depends(get_db)):
 
         result.append(cluster_info)
 
-    return {"clusters": result, "total": len(result)}
+    return {
+        "clusters": result,
+        "total": len(result),
+        "min_cluster_size": settings.MIN_CLUSTER_SIZE,
+    }
 
 
 @router.get("/cluster/{cluster_id}")
@@ -105,11 +110,29 @@ def get_cluster_detail(cluster_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/cluster/run")
-def trigger_clustering():
+def trigger_clustering(db: Session = Depends(get_db)):
     """
     Manually trigger clustering job
 
     Returns:
         Job information
     """
+    indexed_count = (
+        db.query(Media)
+        .filter(Media.status == "indexed", Media.vector.isnot(None))
+        .count()
+    )
+    if indexed_count < settings.MIN_CLUSTER_SIZE:
+        message = (
+            "Not enough indexed images for clustering "
+            f"(found {indexed_count}, need at least {settings.MIN_CLUSTER_SIZE})."
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": message,
+                "current_count": indexed_count,
+                "required_minimum": settings.MIN_CLUSTER_SIZE,
+            },
+        )
     return enqueue_clustering_job(reason="manual")

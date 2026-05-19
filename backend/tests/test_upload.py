@@ -1,5 +1,6 @@
 import io
 from PIL import Image
+from find_api.models.media import Media
 
 
 def get_valid_image_bytes():
@@ -30,6 +31,16 @@ class TestUploadSuccess:
         assert result["status"] == "uploaded"
         assert "media_id" in result
         assert "job_id" in result
+
+    def test_single_image_persists_analysis_job_id(self, client, db):
+        response = client.post(
+            "/api/upload",
+            files=[("files", ("photo.png", get_valid_image_bytes(), "image/png"))],
+        )
+
+        result = response.json()["results"][0]
+        media = db.query(Media).filter(Media.id == result["media_id"]).one()
+        assert media.analysis_job_id == result["job_id"]
 
     def test_duplicate_returns_duplicate_status(self, client):
         data = get_valid_image_bytes()
