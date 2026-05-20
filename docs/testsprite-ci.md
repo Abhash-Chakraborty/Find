@@ -50,6 +50,11 @@ Optional inputs:
 
 Keep committed TestSprite tests in `testsprite_tests/`.
 
+`testsprite_tests/PRD.md` is the canonical project brief for TestSprite. The
+GitHub App and AI test generation flow may ask for a PRD before it can detect or
+generate tests, so keep this file committed and updated when core product flows
+change.
+
 Best practice:
 
 - keep the default PR suite stable and useful for every PR type
