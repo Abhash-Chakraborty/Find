@@ -29,14 +29,20 @@ export function resolveMediaUrl(
   url?: string | null,
   objectKey?: string | null,
 ) {
-  if (
-    url &&
-    (url.startsWith("http://") || url.startsWith("https://")) &&
-    !url.includes("localhost") &&
-    !url.includes("127.0.0.1") &&
-    !url.includes("minio")
-  ) {
-    return url;
+  if (url) {
+    try {
+      const urlObj = new URL(url);
+      if (
+        (urlObj.protocol === "http:" || urlObj.protocol === "https:") &&
+        urlObj.hostname !== "localhost" &&
+        urlObj.hostname !== "127.0.0.1" &&
+        !urlObj.hostname.includes("minio")
+      ) {
+        return url;
+      }
+    } catch {
+      // Invalid URLs fall through to the MinIO fallback
+    }
   }
 
   const fallback = buildEncodedUrl(objectKey);
