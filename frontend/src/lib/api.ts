@@ -138,6 +138,10 @@ export interface SearchResponse {
   results: SearchResult[];
   total: number;
   query: string;
+  page: number;
+  limit: number;
+  skip: number;
+  has_more: boolean;
 }
 
 export interface JobStatus {
@@ -246,9 +250,14 @@ export const deleteImage = async (
 export const searchImages = async (params: {
   query: string;
   limit?: number;
+  skip?: number;
 }): Promise<SearchResponse> => {
   const response = await api.get<SearchResponse>("/api/search", {
-    params: { q: params.query, limit: params.limit || 20 },
+    params: { 
+      q: params.query, 
+      limit: params.limit || 24,
+      skip: params.skip || 0,
+    },
   });
   return response.data;
 };
