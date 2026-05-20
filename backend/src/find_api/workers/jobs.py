@@ -12,10 +12,21 @@ from rq import get_current_job
 from find_api.core.database import SessionLocal
 from find_api.core.queue import clear_clustering_job_state, enqueue_clustering_job
 from find_api.core.storage import get_file
+from find_api.core.model_manager import get_model_manager
+from find_api.core.config import settings
 from find_api.models.media import Media
 from find_api.utils.exif import extract_exif_data
 
 logger = logging.getLogger(__name__)
+
+# Start ML model cleanup for the worker process
+try:
+    get_model_manager().start_autocleanup(
+        ttl_seconds=settings.ML_MODEL_IDLE_TTL_SECONDS
+    )
+except Exception as e:
+    logger.error(f"Failed to start model cleanup thread in worker: {e}")
+
 FACE_CLUSTER_NAME_MATCH_THRESHOLD = 0.72
 
 
@@ -129,6 +140,14 @@ def analyze_image(media_id: int):
             )
 
         logger.info(f"Successfully processed media {media_id}")
+
+        # Post-job memory cleanup
+        try:
+            from find_api.core.model_manager import get_model_manager
+
+            get_model_manager().unload_idle_models(settings.ML_MODEL_IDLE_TTL_SECONDS)
+        except Exception as e:
+            logger.warning(f"Cleanup failed after processing media {media_id}: {e}")
 
         return {"media_id": media_id, "status": "success", "metadata": metadata}
 
@@ -249,6 +268,15 @@ def cluster_images():
             "cluster_ids": [cluster.id for cluster in cluster_records.values()],
         }
         logger.info("Clustering complete: %s", result)
+
+        # Post-job memory cleanup
+        try:
+            from find_api.core.model_manager import get_model_manager
+
+            get_model_manager().unload_idle_models(settings.ML_MODEL_IDLE_TTL_SECONDS)
+        except Exception as e:
+            logger.warning(f"Cleanup failed after clustering images: {e}")
+
         return result
 
     except Exception as e:
@@ -410,6 +438,15 @@ def cluster_faces():
             "message": "Face clustering completed successfully",
         }
         logger.info("Face clustering complete: %s", result)
+
+        # Post-job memory cleanup
+        try:
+            from find_api.core.model_manager import get_model_manager
+
+            get_model_manager().unload_idle_models(settings.ML_MODEL_IDLE_TTL_SECONDS)
+        except Exception as e:
+            logger.warning(f"Cleanup failed after clustering faces: {e}")
+
         return result
 
     except Exception as e:

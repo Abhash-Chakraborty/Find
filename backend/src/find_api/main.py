@@ -11,6 +11,8 @@ import logging
 from find_api.core.database import init_db
 from find_api.core.recovery import run_analysis_recovery_loop
 from find_api.core.storage import init_storage
+from find_api.core.model_manager import get_model_manager
+from find_api.core.config import settings
 from find_api.routers import upload, gallery, search, clusters, status, cluster, people
 
 # Configure logging
@@ -42,6 +44,12 @@ async def lifespan(app: FastAPI):
     # Initialize MinIO storage
     logger.info("Initializing MinIO storage...")
     init_storage()
+
+    # Start ML model cleanup
+    logger.info("Starting ML model cleanup thread...")
+    get_model_manager().start_autocleanup(
+        ttl_seconds=settings.ML_MODEL_IDLE_TTL_SECONDS
+    )
 
     recovery_task = asyncio.create_task(run_analysis_recovery_loop())
 

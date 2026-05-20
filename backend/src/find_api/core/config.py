@@ -33,6 +33,8 @@ class Settings(BaseSettings):
 
     # ML Models
     ML_MODE: Literal["full", "mock"] = "full"
+    ML_MODEL_IDLE_TTL_SECONDS: int = 300
+    ML_MAX_LOADED_MODELS: int = 5
     CLIP_MODEL: str = "ViT-B-16-SigLIP"
     CLIP_PRETRAINED: str = "webli"
     BLIP_MODEL: str = "microsoft/Florence-2-base"

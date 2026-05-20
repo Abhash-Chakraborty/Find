@@ -71,3 +71,22 @@ class TestJobStatus:
             response = client.get("/api/status/nonexistent")
 
         assert response.status_code == 404
+
+
+def test_loaded_models_endpoint(client):
+    """Test the /api/status/models endpoint"""
+    from find_api.core.model_manager import get_model_manager
+
+    manager = get_model_manager()
+
+    # Force a mock model for testing
+    manager.models["mock_test_model"] = "loaded"
+
+    response = client.get("/api/status/models")
+    assert response.status_code == 200
+    body = response.json()
+    assert "mock_test_model" in body["loaded_models"]
+    assert "ttl_seconds" in body
+
+    # Cleanup
+    del manager.models["mock_test_model"]

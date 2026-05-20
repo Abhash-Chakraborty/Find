@@ -3,8 +3,18 @@ Model Manager for efficient GPU resource management
 """
 
 import asyncio
+import gc
 import logging
-from typing import Any, Callable, Dict
+import threading
+import time
+from typing import Any, Callable, Dict, List
+
+from find_api.core.config import settings
+
+try:
+    import torch
+except ImportError:
+    torch = None
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +23,7 @@ class ModelManager:
     """
     Singleton class to manage ML models and GPU resources.
     Ensures that heavy GPU tasks are serialized to prevent OOM on 4GB VRAM.
+    Also supports lazy-loading and idle unloading to save memory.
     """
 
     _instance = None
@@ -28,9 +39,40 @@ class ModelManager:
             return
 
         self.models: Dict[str, Any] = {}
+        self.last_used: Dict[str, float] = {}
+        self._lock = threading.Lock()
         self.gpu_lock = asyncio.Lock()
+        self._cleanup_thread = None
         self._initialized = True
-        logger.info("ModelManager initialized with GPU Lock")
+        self.max_loaded_models = settings.ML_MAX_LOADED_MODELS
+        logger.info(
+            f"ModelManager initialized (max_models={self.max_loaded_models}) with GPU Lock and Lazy Loading support"
+        )
+
+    def set_max_models(self, count: int):
+        """Set maximum number of concurrent models to keep in memory"""
+        with self._lock:
+            self.max_loaded_models = count
+
+    def start_autocleanup(self, interval_seconds: int = 60, ttl_seconds: int = 300):
+        """Start background thread for automatic idle unloading"""
+        with self._lock:
+            if self._cleanup_thread and self._cleanup_thread.is_alive():
+                return
+
+            def cleanup_loop():
+                logger.info(
+                    f"Background ML model cleanup started (interval={interval_seconds}s, ttl={ttl_seconds}s)"
+                )
+                while True:
+                    try:
+                        time.sleep(interval_seconds)
+                        self.unload_idle_models(ttl_seconds)
+                    except Exception as e:
+                        logger.error(f"Error in model cleanup thread: {e}")
+
+            self._cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
+            self._cleanup_thread.start()
 
     async def acquire_lock(self):
         """Acquire GPU lock"""
@@ -56,16 +98,71 @@ class ModelManager:
         Returns:
             The model instance
         """
-        if name not in self.models:
-            logger.info(f"Loading model: {name}")
-            try:
-                self.models[name] = loader()
-                logger.info(f"Model loaded successfully: {name}")
-            except Exception:
-                logger.exception("Failed to load model %s", name)
-                raise
+        with self._lock:
+            if name not in self.models:
+                # Check if we need to unload something to make room
+                if len(self.models) >= self.max_loaded_models:
+                    # Unload oldest (least recently used)
+                    # We sort by last_used time
+                    sorted_models = sorted(self.last_used.items(), key=lambda x: x[1])
+                    for oldest_name, _ in sorted_models:
+                        if oldest_name in self.models and oldest_name != name:
+                            logger.info(
+                                f"Max models reached ({self.max_loaded_models}). Unloading oldest: {oldest_name}"
+                            )
+                            del self.models[oldest_name]
+                            del self.last_used[oldest_name]
+                            # Only need to unload one to make room
+                            break
 
-        return self.models[name]
+                logger.info(f"Lazy-loading model: {name}")
+                try:
+                    self.models[name] = loader()
+                    logger.info(f"Model loaded successfully: {name}")
+                except Exception:
+                    logger.exception("Failed to load model %s", name)
+                    raise
+
+            self.last_used[name] = time.time()
+            return self.models[name]
+
+    def unload_idle_models(self, ttl_seconds: int):
+        """
+        Unload models that haven't been used for ttl_seconds.
+        """
+        now = time.time()
+        to_unload = []
+
+        with self._lock:
+            for name, last_ts in self.last_used.items():
+                if name in self.models and (now - last_ts) > ttl_seconds:
+                    to_unload.append(name)
+
+            if not to_unload:
+                return
+
+            for name in to_unload:
+                logger.info(
+                    f"Unloading idle model: {name} (idle for {now - self.last_used[name]:.1f}s)"
+                )
+                del self.models[name]
+                del self.last_used[name]
+
+        # Force garbage collection outside the lock to avoid blocking other threads
+        gc.collect()
+
+        # Clear CUDA cache if possible
+        if torch is not None and torch.cuda.is_available():
+            try:
+                torch.cuda.empty_cache()
+                logger.debug("CUDA cache cleared after model unloading")
+            except Exception as e:
+                logger.warning(f"Failed to clear CUDA cache: {e}")
+
+    def get_loaded_models(self) -> List[str]:
+        """Get list of currently loaded model names"""
+        with self._lock:
+            return list(self.models.keys())
 
 
 # Global instance

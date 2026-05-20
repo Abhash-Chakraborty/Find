@@ -7,10 +7,23 @@ from redis import Redis
 from rq.job import Job
 
 from find_api.core.config import settings
+from find_api.core.model_manager import get_model_manager
 
 router = APIRouter()
 
 redis_conn = Redis.from_url(settings.REDIS_URL)
+
+
+@router.get("/status/models")
+def get_loaded_models():
+    """
+    Get list of currently loaded ML models in the API process
+    """
+    manager = get_model_manager()
+    return {
+        "loaded_models": manager.get_loaded_models(),
+        "ttl_seconds": settings.ML_MODEL_IDLE_TTL_SECONDS,
+    }
 
 
 @router.get("/status/{job_id}")
