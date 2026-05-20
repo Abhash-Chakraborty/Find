@@ -17,6 +17,7 @@ import {
   ImagePreviewModal,
   type PreviewMedia,
 } from "@/components/image-preview-modal";
+import { FeedbackActions } from "@/components/person-feedback-actions";
 import {
   getPeople,
   getPersonImages,
@@ -358,6 +359,20 @@ export default function PeoplePage() {
                 {selectedPersonQuery.data?.person_name?.trim() ||
                   "Unknown person"}
               </h2>
+              {selectedPersonQuery.data && (
+                <div className="mt-4 flex gap-3">
+                  <FeedbackActions
+                    personId={selectedPersonId!}
+                    personName={selectedPersonQuery.data?.person_name}
+                    images={selectedPersonQuery.data?.images || []}
+                    onFeedbackApplied={() => {
+                      queryClient.invalidateQueries({
+                        queryKey: ["person-images", selectedPersonId],
+                      });
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="max-h-[calc(90dvh-76px)] overflow-y-auto bg-[hsl(var(--background))] p-6">
