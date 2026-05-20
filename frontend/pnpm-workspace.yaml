@@ -1,4 +1,5 @@
 minimumReleaseAge: 10080
-
+minimumReleaseAgeExclude:
+  - baseline-browser-mapping
 allowBuilds:
   sharp: true

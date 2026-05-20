@@ -6,6 +6,7 @@ import json
 import logging
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -130,8 +131,6 @@ def get_image_detail(media_id: int, db: Session = Depends(get_db)):
     media = db.query(Media).filter(Media.id == media_id).first()
 
     if not media:
-        from fastapi import HTTPException
-
         raise HTTPException(404, "Image not found")
 
     metadata = normalize_metadata(media.metadata_json)
@@ -168,6 +167,24 @@ def get_image_detail(media_id: int, db: Session = Depends(get_db)):
     return response
 
 
+@router.get("/image/{media_id}/thumbnail")
+def get_image_thumbnail(media_id: int, db: Session = Depends(get_db)):
+    """
+    Get a redirect to the image file for use as a thumbnail.
+    Returns a redirect to the MinIO presigned URL.
+    """
+    media = db.query(Media).filter(Media.id == media_id).first()
+    if not media:
+        raise HTTPException(404, "Image not found")
+
+    try:
+        url = get_file_url(media.minio_key)
+    except Exception:
+        raise HTTPException(500, "Could not generate image URL")
+
+    return RedirectResponse(url=url)
+
+
 @router.post("/image/{media_id}/like")
 def toggle_like(media_id: int, db: Session = Depends(get_db)):
     media = db.query(Media).filter(Media.id == media_id).first()
@@ -200,7 +217,8 @@ def reprocess_image(media_id: int, db: Session = Depends(get_db)):
     if media.status != "failed" and not is_indexed_incomplete:
         raise HTTPException(
             400,
-            "Reprocess is only available for failed images or indexed images with incomplete metadata.",
+            "Reprocess is only available for failed images or indexed images "
+            "with incomplete metadata.",
         )
 
     media.status = "pending"

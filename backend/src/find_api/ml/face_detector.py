@@ -1,13 +1,10 @@
-"""
-Face detection and recognition using InsightFace (AntelopeV2)
-"""
+import logging
 
+import cv2
+import numpy as np
 from insightface.app import FaceAnalysis
 from PIL import Image
-import numpy as np
-from typing import List, Dict, Union
-import logging
-import cv2
+from typing import Dict, List, Union
 
 from find_api.core.config import settings
 from find_api.core.model_manager import get_model_manager
@@ -31,8 +28,15 @@ class FaceDetector:
             ["CUDAExecutionProvider"] if settings.USE_GPU else ["CPUExecutionProvider"]
         )
 
-        # Initialize FaceAnalysis with antelopev2
-        app = FaceAnalysis(name="antelopev2", providers=providers)
+        # InsightFace's antelopev2 release currently extracts ONNX files under
+        # antelopev2/antelopev2. Try the documented name first so fresh installs
+        # download normally, then retry the nested layout when needed.
+        try:
+            app = FaceAnalysis(name="antelopev2", providers=providers)
+        except AssertionError:
+            logger.info("Retrying InsightFace with nested antelopev2 model layout")
+            app = FaceAnalysis(name="antelopev2/antelopev2", providers=providers)
+
         app.prepare(ctx_id=0 if settings.USE_GPU else -1, det_size=(640, 640))
 
         return app
@@ -86,8 +90,8 @@ class FaceDetector:
             logger.info(f"Detected {len(results)} faces")
             return results
 
-        except Exception as e:
-            logger.error(f"Failed to detect faces: {e}")
+        except Exception:
+            logger.exception("Failed to detect faces")
             raise
 
 

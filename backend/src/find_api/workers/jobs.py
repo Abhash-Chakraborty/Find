@@ -16,6 +16,16 @@ from find_api.models.media import Media
 from find_api.utils.exif import extract_exif_data
 
 logger = logging.getLogger(__name__)
+FACE_CLUSTER_NAME_MATCH_THRESHOLD = 0.72
+
+
+def cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
+    """Return cosine similarity for two vectors, guarding empty norms."""
+    left_norm = np.linalg.norm(left)
+    right_norm = np.linalg.norm(right)
+    if left_norm == 0 or right_norm == 0:
+        return 0.0
+    return float(np.dot(left, right) / (left_norm * right_norm))
 
 
 def set_stage(job, stage: str):
@@ -91,6 +101,21 @@ def analyze_image(media_id: int):
         media.processed_at = datetime.utcnow()
 
         db.commit()
+
+        from find_api.workers.processors import (
+            detect_and_store_faces,
+            has_person_object,
+        )
+
+        if has_person_object(metadata):
+            set_stage(job, "detecting faces")
+            face_count = detect_and_store_faces(image, media_id, db)
+            logger.info("Face detection complete: %s faces found", face_count)
+        else:
+            logger.info(
+                "Skipping face detection for media %s: no person object detected",
+                media_id,
+            )
 
         set_stage(job, "clustering queued")
 
@@ -233,4 +258,164 @@ def cluster_images():
 
     finally:
         clear_clustering_job_state()
+        db.close()
+
+
+def cluster_faces():
+    """
+    Background job to cluster all detected faces into person groups.
+
+    How it works:
+    1. Load all face embeddings from the database
+    2. Check we have enough faces BEFORE deleting anything
+    3. Run HDBSCAN to group similar faces together
+    4. Create a Person row for each group
+    5. Link each face to its Person group
+    """
+    from find_api.ml.clusterer import get_image_clusterer
+    from find_api.models.face import Face
+    from find_api.models.person import Person
+
+    db = SessionLocal()
+
+    try:
+        logger.info("Starting face clustering job...")
+
+        # Step 1: Load all faces that have embeddings.
+        # Check BEFORE changing assignments so names are not lost on no-op runs.
+        face_rows = (
+            db.query(Face.id, Face.embedding).filter(Face.embedding.isnot(None)).all()
+        )
+
+        # Need at least 2 faces to cluster
+        if len(face_rows) < 2:
+            db.commit()
+            logger.warning(
+                "Not enough faces for clustering (found %s, need 2)",
+                len(face_rows),
+            )
+            return {
+                "n_clusters": 0,
+                "total_faces": len(face_rows),
+                "message": "Not enough faces for clustering",
+            }
+
+        named_person_centroids = {}
+        named_people = db.query(Person).filter(Person.name.isnot(None)).all()
+        for person in named_people:
+            person_faces = (
+                db.query(Face.embedding)
+                .filter(Face.person_id == person.id, Face.embedding.isnot(None))
+                .all()
+            )
+            embeddings_for_person = [
+                row.embedding for row in person_faces if row.embedding is not None
+            ]
+            if embeddings_for_person:
+                named_person_centroids[person.id] = {
+                    "name": person.name,
+                    "centroid": np.asarray(
+                        embeddings_for_person, dtype=np.float32
+                    ).mean(axis=0),
+                }
+
+        # Step 2: Prepare embeddings as numpy array
+        embeddings = np.asarray([row.embedding for row in face_rows], dtype=np.float32)
+        face_ids = [row.id for row in face_rows]
+
+        logger.info("Clustering %s faces...", len(face_rows))
+
+        # Step 4: Run HDBSCAN clustering
+        clusterer = get_image_clusterer()
+        labels, info = clusterer.cluster(embeddings)
+
+        # Step 5: Create Person rows for each cluster
+        # label -1 means noise - skip those
+        unique_labels = sorted({int(label) for label in labels if int(label) != -1})
+
+        if not unique_labels:
+            db.commit()
+            logger.info("Face clustering found no stable person groups")
+            return {
+                **info,
+                "message": "No stable person groups found",
+            }
+
+        # Step 5: Only reset assignments once we know clustering will proceed.
+        # Keep named people available so stable re-clusters can preserve labels.
+        db.query(Face).update({Face.person_id: None}, synchronize_session=False)
+        db.query(Person).filter(Person.name.is_(None)).delete(synchronize_session=False)
+        db.flush()
+
+        cluster_centroids = {}
+        for label in unique_labels:
+            cluster_embeddings = embeddings[
+                np.asarray([int(item) == label for item in labels])
+            ]
+            cluster_centroids[label] = cluster_embeddings.mean(axis=0)
+
+        # Create one Person per cluster label, reusing named people when the
+        # new cluster is close enough to its previous centroid.
+        person_records = {}
+        reused_person_ids = set()
+        for label in unique_labels:
+            best_person_id = None
+            best_score = FACE_CLUSTER_NAME_MATCH_THRESHOLD
+            for person_id, person_info in named_person_centroids.items():
+                if person_id in reused_person_ids:
+                    continue
+                score = cosine_similarity(
+                    cluster_centroids[label], person_info["centroid"]
+                )
+                if score > best_score:
+                    best_score = score
+                    best_person_id = person_id
+
+            if best_person_id is not None:
+                person = db.query(Person).filter(Person.id == best_person_id).first()
+                reused_person_ids.add(best_person_id)
+            else:
+                person = Person()
+                db.add(person)
+                db.flush()
+
+            if person is None:
+                person = Person()
+                db.add(person)
+                db.flush()
+            person_records[label] = person
+
+        # Step 6: Link each face to its Person
+        for face_id, label in zip(face_ids, labels):
+            if int(label) == -1:
+                continue
+            person = person_records[int(label)]
+            db.query(Face).filter(Face.id == face_id).update(
+                {Face.person_id: person.id},
+                synchronize_session=False,
+            )
+
+        assigned_person_ids = (
+            db.query(Face.person_id).filter(Face.person_id.isnot(None)).distinct()
+        )
+        db.query(Person).filter(Person.id.notin_(assigned_person_ids)).delete(
+            synchronize_session=False
+        )
+
+        db.commit()
+
+        result = {
+            **info,
+            "n_persons": len(unique_labels),
+            "message": "Face clustering completed successfully",
+        }
+        logger.info("Face clustering complete: %s", result)
+        return result
+
+    except Exception as e:
+        logger.error("Face clustering failed: %s", e)
+        db.rollback()
+        raise
+
+    finally:
         db.close()
