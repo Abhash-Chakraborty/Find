@@ -7,12 +7,14 @@ This document evaluates approaches for personalizing Find's ML models based on u
 ## Problem Statement
 
 After deploying the feedback collection system (#189, #190), Find will have rich data about:
+
 - Which person clusters are correct/incorrect
 - Which faces were misclassified
 - Which search results were irrelevant
 - Which captions were inaccurate
 
 **Challenge**: How do we learn from this feedback to improve local models without:
+
 - Uploading data to cloud servers
 - Fine-tuning models (computationally expensive, GPU-intensive)
 - Modifying model weights (risky, requires retraining)
@@ -20,11 +22,13 @@ After deploying the feedback collection system (#189, #190), Find will have rich
 ## Existing System
 
 ### Current Clustering Pipeline
+
 1. **Face detection** → YOLOv10 → bounding boxes + confidence
 2. **Face embeddings** → SigLIP (open-clip) → 768-dim vectors
 3. **Clustering** → HDBSCAN(eps=0.45, min_samples=5) → person groups
 
 ### Current Parameters
+
 - SigLIP embedding model: Open-CLIP community weights
 - HDBSCAN epsilon (eps): Fixed at 0.45
 - Min samples: Fixed at 5
@@ -37,6 +41,7 @@ After deploying the feedback collection system (#189, #190), Find will have rich
 **Idea**: Adjust HDBSCAN's `eps` parameter based on user feedback patterns.
 
 **Implementation**:
+
 ```python
 # backend/ml/personalization.py
 
@@ -73,12 +78,14 @@ class AdaptiveEpsilonTuner:
 ```
 
 **Pros**:
+
 - ✅ No model retraining
 - ✅ Low computation (clustering only)
 - ✅ Easy to implement
 - ✅ Reversible (can always reset)
 
 **Cons**:
+
 - ❌ Only affects clustering, not search quality
 - ❌ Single global parameter (not per-user customizable yet)
 - ⚠️ Slow feedback loop (need 20+ feedbacks to see effect)
@@ -94,6 +101,7 @@ class AdaptiveEpsilonTuner:
 **Idea**: Boost embedding quality for commonly-correct faces, suppress for commonly-wrong faces.
 
 **Implementation**:
+
 ```python
 # backend/ml/personalization.py
 
@@ -126,12 +134,14 @@ class EmbeddingReweighter:
 ```
 
 **Pros**:
+
 - ✅ Improves clustering accuracy directly
 - ✅ Per-face granularity
 - ✅ Non-invasive (doesn't modify model)
 - ✅ Can combine with epsilon tuning
 
 **Cons**:
+
 - ❌ Requires re-clustering after updates
 - ⚠️ Scores need regularization (to avoid extreme values)
 - ⚠️ Forgets old faces if not reclustered regularly
@@ -147,6 +157,7 @@ class EmbeddingReweighter:
 **Idea**: Use "this is NOT person X" feedback to improve search ranking.
 
 **Implementation**:
+
 ```python
 # backend/ml/personalization.py
 
@@ -172,11 +183,13 @@ class NegativeSamplingRanker:
 ```
 
 **Pros**:
+
 - ✅ Direct impact on search quality
 - ✅ Simple to implement
 - ✅ No model retraining
 
 **Cons**:
+
 - ❌ Only works for search (not clustering)
 - ❌ Requires manual negative annotation
 - ⚠️ Cold start problem (need feedback first)
@@ -192,6 +205,7 @@ class NegativeSamplingRanker:
 **Idea**: Use user feedback to create training signals for fine-tuning.
 
 **Implementation** (future, when user opts in):
+
 ```python
 # Collect hard negatives from feedback
 hard_negatives = {
@@ -205,10 +219,12 @@ model.fine_tune(hard_negatives, lr=1e-6, epochs=1)
 ```
 
 **Pros**:
+
 - ✅✅ Highest potential accuracy improvement
 - ✅ Leverages feedback directly
 
 **Cons**:
+
 - ❌ Requires GPU (not local-first on CPU)
 - ❌ Risk of catastrophic forgetting
 - ❌ Complex to implement correctly
@@ -223,21 +239,25 @@ model.fine_tune(hard_negatives, lr=1e-6, epochs=1)
 ## Recommended Roadmap
 
 ### Phase 1 (Now): Feedback Collection
+
 - ✅ Implement feedback models + API (#189, #190)
 - ✅ Frontend split/merge/correct UI
 - ✅ Feedback storage (local SQLite)
 
 ### Phase 2 (1-2 weeks after): Approach A + C
+
 - Add epsilon tuning (Approach A)
 - Add negative sampling for search (Approach C)
 - Monitor feedback trends
 
 ### Phase 3 (3-4 weeks after): Approach B
+
 - Implement embedding re-weighting (Approach B)
 - Re-cluster nightly with adjusted embeddings
 - A/B test: with vs. without re-weighting
 
 ### Phase 4+ (Future): Approach D
+
 - Research optimal fine-tuning strategy
 - Benchmark on community datasets
 - Only if Approach A-C reach accuracy plateau
@@ -273,6 +293,7 @@ class PersonalizationMetrics:
 ```
 
 **Targets**:
+
 - Collect 50+ feedbacks per user per week
 - Apply 80%+ of feedback automatically
 - Achieve 5-15% accuracy improvement after 4 weeks of feedback
@@ -280,6 +301,7 @@ class PersonalizationMetrics:
 ## Storage & Performance
 
 ### Feedback Storage
+
 ```sql
 -- PostgreSQL feedback tables (already in models/feedback.py)
 CREATE TABLE person_feedback (
@@ -300,6 +322,7 @@ CREATE TABLE general_feedback (
 ```
 
 ### Persistence Across Sessions
+
 ```python
 # backend/ml/personalization.py
 
@@ -344,10 +367,10 @@ class PersonalizationState:
 
 ## References
 
-- HDBSCAN parameters: https://hdbscan.readthedocs.io/
-- Open-CLIP models: https://github.com/mlfoundations/open_clip
-- Hard negatives mining: https://arxiv.org/abs/2104.14294
-- Local ML personalization: https://arxiv.org/abs/2007.14861
+- HDBSCAN parameters: <https://hdbscan.readthedocs.io/>
+- Open-CLIP models: <https://github.com/mlfoundations/open_clip>
+- Hard negatives mining: <https://arxiv.org/abs/2104.14294>
+- Local ML personalization: <https://arxiv.org/abs/2007.14861>
 
 ## Timeline
 
@@ -364,6 +387,7 @@ class PersonalizationState:
 **Recommended starting point: Approach A + C (Phase 2)**
 
 These provide quick wins with minimal complexity:
+
 - Epsilon tuning gives ~5% accuracy improvement at zero cost
 - Negative sampling directly improves search quality
 - Both ship in 4-5 days
@@ -373,7 +397,8 @@ These provide quick wins with minimal complexity:
 
 ---
 
-**Next steps**: 
+**Next steps**:
+
 1. Review this document in #191 discussion
 2. Confirm roadmap with team
 3. Start Phase 2 implementation after Phase 1 feedback collection ships
