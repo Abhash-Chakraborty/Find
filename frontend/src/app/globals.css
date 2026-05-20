@@ -36,14 +36,21 @@
     --scrollbar-thumb: rgba(214, 235, 253, 0.34);
     --scrollbar-thumb-hover: rgba(214, 235, 253, 0.62);
     --scrollbar-arrow: rgba(214, 235, 253, 0.48);
+    --status-indexed-bg: rgba(17, 255, 153, 0.16);
     --status-indexed-border: rgba(17, 255, 153, 0.24);
     --status-indexed-text: #7dffc7;
+    --status-processing-bg: rgba(59, 158, 255, 0.18);
     --status-processing-border: rgba(59, 158, 255, 0.28);
     --status-processing-text: #9fceff;
+    --status-pending-bg: rgba(255, 197, 61, 0.16);
     --status-pending-border: rgba(255, 197, 61, 0.28);
     --status-pending-text: #ffe08a;
+    --status-failed-bg: rgba(255, 32, 71, 0.18);
     --status-failed-border: rgba(255, 32, 71, 0.3);
     --status-failed-text: #ff9bab;
+    --status-liked-bg: rgba(255, 32, 71, 0.18);
+    --status-liked-border: rgba(255, 32, 71, 0.3);
+    --status-liked-text: #ff9bab;
     --nav-height: 72px;
   }
   html.light,
@@ -86,14 +93,21 @@
     --scrollbar-thumb: rgba(71, 85, 105, 0.42);
     --scrollbar-thumb-hover: rgba(51, 65, 85, 0.68);
     --scrollbar-arrow: rgba(71, 85, 105, 0.58);
+    --status-indexed-bg: #ffffff;
     --status-indexed-border: rgba(5, 150, 105, 0.28);
     --status-indexed-text: #047857;
+    --status-processing-bg: #ffffff;
     --status-processing-border: rgba(37, 99, 235, 0.26);
     --status-processing-text: #1d4ed8;
+    --status-pending-bg: #ffffff;
     --status-pending-border: rgba(217, 119, 6, 0.28);
     --status-pending-text: #b45309;
+    --status-failed-bg: #ffffff;
     --status-failed-border: rgba(220, 38, 38, 0.28);
     --status-failed-text: #b91c1c;
+    --status-liked-bg: #ffffff;
+    --status-liked-border: rgba(239, 68, 68, 0.3);
+    --status-liked-text: #ef4444;
 
     --nav-height: 72px;
   }
@@ -138,14 +152,21 @@
     --scrollbar-thumb: rgba(214, 235, 253, 0.34);
     --scrollbar-thumb-hover: rgba(214, 235, 253, 0.62);
     --scrollbar-arrow: rgba(214, 235, 253, 0.48);
+    --status-indexed-bg: rgba(17, 255, 153, 0.16);
     --status-indexed-border: rgba(17, 255, 153, 0.24);
     --status-indexed-text: #7dffc7;
+    --status-processing-bg: rgba(59, 158, 255, 0.18);
     --status-processing-border: rgba(59, 158, 255, 0.28);
     --status-processing-text: #9fceff;
+    --status-pending-bg: rgba(255, 197, 61, 0.16);
     --status-pending-border: rgba(255, 197, 61, 0.28);
     --status-pending-text: #ffe08a;
+    --status-failed-bg: rgba(255, 32, 71, 0.18);
     --status-failed-border: rgba(255, 32, 71, 0.3);
     --status-failed-text: #ff9bab;
+    --status-liked-bg: rgba(255, 32, 71, 0.18);
+    --status-liked-border: rgba(255, 32, 71, 0.3);
+    --status-liked-text: #ff9bab;
 
     --nav-height: 72px;
   }
@@ -375,26 +396,32 @@
 
   .status-indexed {
     border-color: var(--status-indexed-border);
-    background: var(--green-soft);
+    background: var(--status-indexed-bg);
     color: var(--status-indexed-text);
   }
 
   .status-processing {
     border-color: var(--status-processing-border);
-    background: var(--blue-soft);
+    background: var(--status-processing-bg);
     color: var(--status-processing-text);
   }
 
   .status-pending {
     border-color: var(--status-pending-border);
-    background: var(--yellow-soft);
+    background: var(--status-pending-bg);
     color: var(--status-pending-text);
   }
 
   .status-failed {
     border-color: var(--status-failed-border);
-    background: var(--red-soft);
+    background: var(--status-failed-bg);
     color: var(--status-failed-text);
+  }
+
+  .status-liked {
+    border-color: var(--status-liked-border);
+    background: var(--status-liked-bg);
+    color: var(--status-liked-text);
   }
 
   .status-default {

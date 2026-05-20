@@ -603,10 +603,19 @@ function GalleryPageContent() {
                       )}
 
                       <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/12 to-transparent opacity-60 transition-opacity group-hover:opacity-90" />
-                      <StatusIndicator
-                        status={item.status}
-                        className="absolute bottom-3 right-3"
-                      />
+                      <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5">
+                        <StatusIndicator status={item.status} />
+                        {item.liked && (
+                          <span
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur-md status-liked"
+                            title="Liked"
+                            role="img"
+                            aria-label="Status: Liked"
+                          >
+                            <Heart className="h-3.5 w-3.5 fill-current" />
+                          </span>
+                        )}
+                      </div>
                       <div className="absolute inset-0 grid place-items-center opacity-0 transition duration-200 group-hover:opacity-100">
                         <span className="icon-button h-10 w-10 bg-[color:var(--overlay)] text-white backdrop-blur-md">
                           <Eye className="h-4 w-4" />

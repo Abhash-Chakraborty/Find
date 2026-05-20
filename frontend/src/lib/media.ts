@@ -29,6 +29,16 @@ export function resolveMediaUrl(
   url?: string | null,
   objectKey?: string | null,
 ) {
+  if (
+    url &&
+    (url.startsWith("http://") || url.startsWith("https://")) &&
+    !url.includes("localhost") &&
+    !url.includes("127.0.0.1") &&
+    !url.includes("minio")
+  ) {
+    return url;
+  }
+
   const fallback = buildEncodedUrl(objectKey);
 
   if (url?.includes("X-Amz-Signature=")) {

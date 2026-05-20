@@ -3,6 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 import {
   ArrowRight,
+  Heart,
   ImageOff,
   Loader2,
   Search as SearchIcon,
@@ -231,10 +232,19 @@ export default function SearchPage() {
                       <span className="absolute right-3 top-3 rounded-full border border-[var(--frost)] bg-[color:var(--overlay)] px-2.5 py-1 text-xs font-medium text-white backdrop-blur-md">
                         {Math.round(result.similarity * 100)}%
                       </span>
-                      <StatusIndicator
-                        status={result.metadata.status}
-                        className="absolute bottom-3 right-3"
-                      />
+                      <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5">
+                        <StatusIndicator status={result.metadata.status} />
+                        {result.metadata.liked && (
+                          <span
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur-md status-liked"
+                            title="Liked"
+                            role="img"
+                            aria-label="Status: Liked"
+                          >
+                            <Heart className="h-3.5 w-3.5 fill-current" />
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="space-y-3 p-3">

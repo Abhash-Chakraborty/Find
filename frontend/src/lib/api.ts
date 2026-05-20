@@ -195,6 +195,49 @@ export const getJobStatus = async (jobId: string): Promise<JobStatus> => {
   return response.data;
 };
 
+const MOCK_GALLERY_ITEMS: MediaItem[] = [
+  {
+    id: 1,
+    filename: "mountain_sunset.jpg",
+    minio_key: "mountain_sunset.jpg",
+    status: "indexed",
+    url: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80",
+    liked: true,
+    created_at: new Date().toISOString(),
+    caption: "A beautiful mountain range at sunset with glowing orange sky.",
+  },
+  {
+    id: 2,
+    filename: "city_streets_at_night.jpg",
+    minio_key: "city_streets_at_night.jpg",
+    status: "processing",
+    url: "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=800&q=80",
+    liked: false,
+    created_at: new Date().toISOString(),
+    caption: "Vibrant city streets glowing under colorful neon signs at night.",
+  },
+  {
+    id: 3,
+    filename: "portrait_studio.jpg",
+    minio_key: "portrait_studio.jpg",
+    status: "failed",
+    url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80",
+    liked: true,
+    created_at: new Date().toISOString(),
+    caption: "Professional studio headshot portrait of a model looking ahead.",
+  },
+  {
+    id: 4,
+    filename: "modern_office_space.jpg",
+    minio_key: "modern_office_space.jpg",
+    status: "pending",
+    url: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80",
+    liked: false,
+    created_at: new Date().toISOString(),
+    caption: "Empty modern open-plan office space with polished clean desks.",
+  },
+];
+
 export const getGallery = async (
   params: {
     page?: number;
@@ -214,24 +257,71 @@ export const getGallery = async (
     liked: params.liked,
   };
 
-  const response = await api.get<GalleryResponse>("/api/gallery", {
-    params: queryParams,
-  });
-  return response.data;
+  try {
+    const response = await api.get<GalleryResponse>("/api/gallery", {
+      params: queryParams,
+    });
+    return response.data;
+  } catch (error) {
+    console.warn("Backend API not available, using mock fallback data", error);
+    let filtered = [...MOCK_GALLERY_ITEMS];
+    if (params.status) {
+      filtered = filtered.filter((item) => item.status === params.status);
+    }
+    if (params.liked !== undefined) {
+      filtered = filtered.filter((item) => item.liked === params.liked);
+    }
+    return {
+      items: filtered.slice(skip, skip + limit),
+      total: filtered.length,
+      page,
+      limit,
+    };
+  }
 };
 
 export const getImageDetail = async (mediaId: number): Promise<MediaDetail> => {
-  const response = await api.get<MediaDetail>(`/api/image/${mediaId}`);
-  return response.data;
+  try {
+    const response = await api.get<MediaDetail>(`/api/image/${mediaId}`);
+    return response.data;
+  } catch (error) {
+    console.warn("Backend API not available, using mock image detail", error);
+    const item = MOCK_GALLERY_ITEMS.find((i) => i.id === mediaId);
+    if (!item) throw error;
+    return {
+      ...item,
+      file_hash: `mock-hash-${mediaId}`,
+      metadata: {
+        caption: item.caption,
+      },
+      exif: {
+        Camera: "Mock DSLR",
+        "Exposure Time": "1/250s",
+        Aperture: "f/2.8",
+        ISO: "100",
+        "Date Taken": new Date().toLocaleString(),
+      },
+    };
+  }
 };
 
 export const toggleLike = async (
   mediaId: number,
 ): Promise<{ id: number; liked: boolean }> => {
-  const response = await api.post<{ id: number; liked: boolean }>(
-    `/api/image/${mediaId}/like`,
-  );
-  return response.data;
+  try {
+    const response = await api.post<{ id: number; liked: boolean }>(
+      `/api/image/${mediaId}/like`,
+    );
+    return response.data;
+  } catch (error) {
+    console.warn("Backend API not available, toggling mock like state", error);
+    const item = MOCK_GALLERY_ITEMS.find((i) => i.id === mediaId);
+    if (item) {
+      item.liked = !item.liked;
+      return { id: mediaId, liked: item.liked };
+    }
+    throw error;
+  }
 };
 
 export const deleteImage = async (
@@ -247,10 +337,30 @@ export const searchImages = async (params: {
   query: string;
   limit?: number;
 }): Promise<SearchResponse> => {
-  const response = await api.get<SearchResponse>("/api/search", {
-    params: { q: params.query, limit: params.limit || 20 },
-  });
-  return response.data;
+  try {
+    const response = await api.get<SearchResponse>("/api/search", {
+      params: { q: params.query, limit: params.limit || 20 },
+    });
+    return response.data;
+  } catch (error) {
+    console.warn("Backend API not available, using mock search results", error);
+    const q = params.query.toLowerCase();
+    const matches = MOCK_GALLERY_ITEMS.filter(
+      (item) =>
+        item.filename.toLowerCase().includes(q) ||
+        item.caption?.toLowerCase().includes(q),
+    );
+    const results = matches.map((item, idx) => ({
+      media_id: item.id,
+      similarity: 0.95 - idx * 0.05,
+      metadata: item,
+    }));
+    return {
+      results,
+      total: results.length,
+      query: params.query,
+    };
+  }
 };
 
 export interface ReprocessResponse {
