@@ -1,4 +1,8 @@
 import io
+import os
+import zipfile
+from unittest.mock import patch
+
 from PIL import Image
 from find_api.models.media import Media
 
@@ -86,8 +90,6 @@ class TestBulkUpload:
 
     def test_bulk_upload_mixed_content(self, client):
         """ZIP with some valid and some invalid images should report individual failures."""
-        import zipfile
-
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("valid.png", get_valid_image_bytes())
@@ -122,3 +124,89 @@ class TestBulkUpload:
         txt = next(r for r in results if r["filename"] == "readme.txt")
         assert txt["status"] == "failed"
         assert "not an image" in txt["error"].lower()
+
+    def test_bulk_upload_nested_zip_rejected(self, client):
+        """ZIP containing another ZIP archive is rejected."""
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("inner.zip", b"fake zip content")
+        zip_buffer.seek(0)
+        response = client.post(
+            "/api/upload/bulk",
+            files=[("file", ("images.zip", zip_buffer.read(), "application/zip"))],
+        )
+        assert response.status_code == 400
+        assert "nested" in response.json()["detail"].lower()
+
+    def test_bulk_upload_uses_basename_for_windows_style_paths(self, client):
+        """ZIP member paths using backslashes should store only the base filename."""
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(r"nested\windows-path.png", get_valid_image_bytes())
+        zip_buffer.seek(0)
+
+        response = client.post(
+            "/api/upload/bulk",
+            files=[("file", ("images.zip", zip_buffer.read(), "application/zip"))],
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "uploaded"
+        assert result["filename"] == "windows-path.png"
+
+    def test_bulk_upload_total_size_exceeded(self, client):
+        """ZIP whose total uncompressed size exceeds limit is rejected."""
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("img.png", get_valid_image_bytes())
+        zip_buffer.seek(0)
+
+        with patch("find_api.routers.upload.settings.MAX_BULK_TOTAL_SIZE_MB", 0):
+            response = client.post(
+                "/api/upload/bulk",
+                files=[("file", ("images.zip", zip_buffer.read(), "application/zip"))],
+            )
+        assert response.status_code == 400
+        assert "uncompressed" in response.json()["detail"].lower()
+
+    def test_bulk_upload_suspicious_ratio(self, client):
+        """ZIP with suspicious compression ratio is rejected."""
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
+            # Highly compressible data (zeros) produces a high compression ratio
+            zf.writestr("bomb.png", b"\x00" * 100_000)
+        zip_buffer.seek(0)
+
+        response = client.post(
+            "/api/upload/bulk",
+            files=[("file", ("images.zip", zip_buffer.read(), "application/zip"))],
+        )
+        assert response.status_code == 400
+        assert "ratio" in response.json()["detail"].lower()
+
+    def test_bulk_upload_oversized_file_skipped(self, client):
+        """Individual file exceeding MAX_UPLOAD_SIZE_MB is skipped, others proceed."""
+        large_data = os.urandom(2 * 1024 * 1024)
+
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("valid.png", get_valid_image_bytes())
+            zf.writestr("huge.jpg", large_data)
+        zip_buffer.seek(0)
+
+        with patch("find_api.routers.upload.settings.MAX_UPLOAD_SIZE_MB", 1):
+            response = client.post(
+                "/api/upload/bulk",
+                files=[("file", ("images.zip", zip_buffer.read(), "application/zip"))],
+            )
+        assert response.status_code == 200
+        results = response.json()["results"]
+        assert len(results) == 2
+
+        valid = next(r for r in results if r["filename"] == "valid.png")
+        assert valid["status"] == "uploaded"
+
+        huge = next(r for r in results if r["filename"] == "huge.jpg")
+        assert huge["status"] == "failed"
+        assert "exceeds max upload size" in huge["error"].lower()
