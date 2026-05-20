@@ -18,7 +18,7 @@ to the repository.
 
 - The workflow triggers on pull requests to `main`.
 - Draft pull requests are skipped.
-- Docs-only PRs are skipped to avoid wasting TestSprite credits.
+- Every non-draft PR is tested when the TestSprite secret is available.
 - App PRs start `docker-compose.light.yml` in GitHub Actions.
 - The light stack runs in mock ML mode, so it avoids GPU/model downloads.
 - TestSprite is pointed at `http://127.0.0.1:3000`.
@@ -52,7 +52,7 @@ Keep committed TestSprite tests in `testsprite_tests/`.
 
 Best practice:
 
-- keep the default PR suite small and stable
-- cover critical upload, gallery, search, and clustering flows
-- avoid broad exploratory tests on every PR
+- keep the default PR suite stable and useful for every PR type
+- cover API health plus critical upload, gallery, search, and clustering surfaces
+- avoid brittle visual assertions in the default PR suite
 - add focused tests when fixing regressions
