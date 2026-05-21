@@ -98,7 +98,17 @@ memory for the duration of an unlock session.
 
 - The raw image bytes (the blob stored in MinIO or the local filesystem).
 - Each blob is encrypted independently with a fresh random 96-bit nonce.
-- The ciphertext format per file is: `nonce (12 bytes) || ciphertext || tag (16 bytes)`.
+- The stored format per file is: `nonce (12 bytes) || ciphertext || tag (16 bytes)`.
+- AEAD **must** also authenticate Associated Data (AAD) that is not stored inside the
+  ciphertext, so that a valid encrypted blob cannot be swapped onto a different media record.
+- The AAD for each blob must be the exact UTF-8 string:
+  `vault:v1|media_id:<id>|file_hash:<file_hash>`
+  — `vault:v1` is a format/version marker; `media_id` binds the blob to its database record;
+  `file_hash` binds it to the expected plaintext fingerprint already stored for duplicate
+  detection.
+- Decryption **must** reconstruct the same AAD from the current record and pass it to the
+  AEAD decrypt call. If any component differs (wrong record, tampered metadata), authentication
+  fails and the blob must be rejected.
 
 ### What stays plaintext in the database
 
@@ -133,15 +143,19 @@ This is a high-level design only. Implementation details belong in a follow-up i
 
 1. The user provides their passphrase via a dedicated vault unlock endpoint.
 2. The API derives the vault key from the passphrase + stored salt using Argon2id.
-3. The derived key is held in API process memory (e.g., a module-level variable or a
-   request-scoped context, depending on implementation).
-4. While the vault is unlocked, requests that include a vault session token can decrypt and serve
-   vault image blobs.
-5. Lock means zeroing and discarding the in-memory key. No key material is persisted.
-6. The session does not survive a process restart; users must unlock again after a restart.
+3. The derived key is stored only in server memory in an entry keyed by a vault session token
+   and bound to the authenticated user. Do **not** store the key in a process-global variable
+   (cross-user key exposure risk) and do not rely on request-scoped context for key persistence
+   across requests.
+4. While the vault is unlocked, requests that present the vault session token look up that
+   session-specific in-memory key and use it to decrypt and serve vault image blobs.
+5. Each vault session entry must have explicit expiry semantics (idle timeout and/or absolute TTL).
+   Lock, logout, expiry, and process restart must all zero and discard the in-memory key. No key
+   material is ever persisted to disk or database.
+6. Vault sessions do not survive a process restart; users must unlock again after a restart.
 
-Session implementation (token strategy, timeout, multi-user considerations) is out of scope for
-this research note.
+Exact token format, TTL policy, distributed-cache design, and other implementation details are
+out of scope for this research note.
 
 ## Risks
 
