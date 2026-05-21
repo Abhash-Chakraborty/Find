@@ -33,6 +33,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && install -m 0755 /root/.local/bin/uvx /usr/local/bin/uvx
 ENV UV_PROJECT_ENVIRONMENT="/opt/find/.venv"
 ENV UV_PYTHON="${PYTHON_VERSION}"
+ENV UV_LINK_MODE="copy"
 ENV PATH="/opt/find/.venv/bin:/usr/local/bin:/root/.local/bin:/root/.cargo/bin:$PATH"
 ENV PYTHONPATH="/app/src"
 

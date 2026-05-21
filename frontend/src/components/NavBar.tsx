@@ -4,6 +4,7 @@ import { Moon, Sun } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { getAppConfig } from "@/lib/api";
 
 const navLinks = [
   { href: "/upload", label: "Upload" },
@@ -23,6 +24,8 @@ export default function NavBar() {
 
   // Theme state
   const [theme, setTheme] = useState<Theme>("light");
+  const [isMockMode, setIsMockMode] = useState(false);
+
   useEffect(() => {
     setMounted(true);
 
@@ -51,6 +54,24 @@ export default function NavBar() {
     document.documentElement.style.colorScheme = initialTheme;
 
     setTheme(initialTheme);
+
+    let cancelled = false;
+
+    void getAppConfig()
+      .then((config) => {
+        if (!cancelled) {
+          setIsMockMode(config.ml_mode === "mock");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsMockMode(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const toggleTheme = () => {
@@ -66,7 +87,7 @@ export default function NavBar() {
   };
 
   return (
-    <div className="flex min-w-0 items-center gap-2 overflow-x-auto rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] p-1">
+    <div className="flex min-w-0 items-center gap-2 overflow-visible rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] p-1">
       {navLinks.map(({ href, label }) => {
         const isActive = mounted && pathname === href;
 
@@ -85,6 +106,27 @@ export default function NavBar() {
           </Link>
         );
       })}
+
+      {isMockMode && (
+        <div className="group relative flex shrink-0">
+          <button
+            type="button"
+            className="rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] px-3 py-1.5 text-xs font-medium text-[color:var(--silver)] outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
+            aria-label="Mock ML mode active"
+            aria-describedby="mock-ml-mode-description"
+          >
+            Mock ML Mode
+          </button>
+          <div
+            id="mock-ml-mode-description"
+            role="tooltip"
+            className="pointer-events-none absolute right-0 top-full z-50 mt-2 hidden w-64 rounded-lg border border-[var(--frost)] bg-[color:var(--void)] p-3 text-left text-xs leading-relaxed text-[color:var(--near-white)] shadow-xl group-focus-within:block group-hover:block"
+          >
+            Captions, OCR, embeddings, search, and clustering use mock-backed
+            data in this environment.
+          </div>
+        </div>
+      )}
 
       <button
         type="button"

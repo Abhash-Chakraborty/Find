@@ -1,0 +1,92 @@
+name: TestSprite PR Tests
+
+on:
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Optional already-running app URL for TestSprite to test"
+        required: false
+        default: ""
+      blocking:
+        description: "Fail the workflow when TestSprite reports failures"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: testsprite-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testsprite:
+    name: TestSprite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check TestSprite secret
+        id: testsprite-secret
+        shell: bash
+        env:
+          TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+        run: |
+          if [ -n "$TESTSPRITE_API_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### TestSprite skipped"
+              echo ""
+              echo "Repository secret \`TESTSPRITE_API_KEY\` is not available to this workflow run."
+              echo "This is expected for untrusted fork PRs and for repos that have not added the secret yet."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Start local Find preview stack
+        if: >
+          steps.testsprite-secret.outputs.available == 'true' &&
+          (github.event_name == 'pull_request' || github.event.inputs.base_url == '')
+        run: |
+          docker compose -f docker-compose.light.yml up -d --build --wait --wait-timeout 240
+
+      - name: Wait for local preview
+        if: >
+          steps.testsprite-secret.outputs.available == 'true' &&
+          (github.event_name == 'pull_request' || github.event.inputs.base_url == '')
+        shell: bash
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null && curl -fsS http://127.0.0.1:3000 >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.light.yml ps
+          docker compose -f docker-compose.light.yml logs --tail=120
+          exit 1
+
+      - name: Run TestSprite
+        if: steps.testsprite-secret.outputs.available == 'true'
+        uses: TestSprite/run-action@v1
+        with:
+          testsprite-api-key: ${{ secrets.TESTSPRITE_API_KEY }}
+          base_url: ${{ github.event.inputs.base_url || 'http://127.0.0.1:3000' }}
+          blocking: ${{ github.event.inputs.blocking || 'true' }}
+
+      - name: Stop local preview stack
+        if: always()
+        run: docker compose -f docker-compose.light.yml down -v --remove-orphans
