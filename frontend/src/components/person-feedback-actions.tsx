@@ -1,4 +1,3 @@
-import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -8,15 +7,15 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   getPeople,
-  submitPersonFeedbackSplit,
-  submitPersonFeedbackMerge,
-  submitPersonFeedbackWrongPerson,
-  submitPersonFeedbackCorrect,
-  type PersonItem,
   type PersonImagesResponse,
+  submitPersonFeedbackCorrect,
+  submitPersonFeedbackMerge,
+  submitPersonFeedbackSplit,
+  submitPersonFeedbackWrongPerson,
 } from "@/lib/api";
 
 interface FeedbackActionsProps {
@@ -35,7 +34,6 @@ interface FaceSelectorModalProps {
   onCancel: () => void;
   isLoading: boolean;
   reason?: string;
-  onReasonChange?: (reason: string) => void;
 }
 
 function FaceSelectorModal({
@@ -46,7 +44,6 @@ function FaceSelectorModal({
   onCancel,
   isLoading,
   reason,
-  onReasonChange,
 }: FaceSelectorModalProps) {
   const [selectedFaceIds, setSelectedFaceIds] = useState<
     Record<number, number[]>
@@ -101,7 +98,9 @@ function FaceSelectorModal({
           <h3 className="text-lg font-medium text-[color:var(--near-white)]">
             {title}
           </h3>
-          <p className="mt-1 text-sm text-[color:var(--silver)]">{description}</p>
+          <p className="mt-1 text-sm text-[color:var(--silver)]">
+            {description}
+          </p>
         </div>
 
         {/* Content */}
@@ -117,9 +116,9 @@ function FaceSelectorModal({
                   {img.filename}
                 </p>
                 <div className="flex flex-col gap-2">
-                  {img.faces.map((_, faceIndex) => (
+                  {img.faces.map((face, faceIndex) => (
                     <button
-                      key={`${img.media_id}-${faceIndex}`}
+                      key={`${img.media_id}-${face.bounding_box.x1}-${face.bounding_box.y1}-${face.bounding_box.x2}-${face.bounding_box.y2}`}
                       type="button"
                       onClick={() => toggleFace(img.media_id, faceIndex)}
                       className={`rounded-lg border-2 px-2 py-1.5 text-xs font-medium transition ${
@@ -150,10 +149,14 @@ function FaceSelectorModal({
 
           {/* Reason Input */}
           <div className="mb-6">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[color:var(--muted)] mb-2">
+            <label
+              htmlFor="feedback-reason"
+              className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[color:var(--muted)]"
+            >
               Optional reason
             </label>
             <textarea
+              id="feedback-reason"
               value={localReason}
               onChange={(e) => setLocalReason(e.target.value)}
               placeholder="Why are you making this change?"
@@ -272,7 +275,6 @@ function MergeSelector({
 
 export function FeedbackActions({
   personId,
-  personName,
   images,
   onFeedbackApplied,
 }: FeedbackActionsProps) {
@@ -281,9 +283,6 @@ export function FeedbackActions({
   const [showWrongPersonModal, setShowWrongPersonModal] = useState(false);
   const [showMergeSelector, setShowMergeSelector] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
-  const [selectedMergeTarget, setSelectedMergeTarget] = useState<number | null>(
-    null,
-  );
 
   const splitMutation = useMutation({
     mutationFn: (faceIds: number[]) =>
@@ -321,7 +320,6 @@ export function FeedbackActions({
     onSuccess: () => {
       toast.success("Person groups merged successfully");
       setShowMergeSelector(false);
-      setSelectedMergeTarget(null);
       queryClient.invalidateQueries({ queryKey: ["people"] });
       onFeedbackApplied();
     },
@@ -344,7 +342,6 @@ export function FeedbackActions({
   });
 
   const handleMergeSelect = (targetPersonId: number) => {
-    setSelectedMergeTarget(targetPersonId);
     setShowMergeSelector(false);
     mergeMutation.mutate(targetPersonId);
   };
@@ -429,7 +426,9 @@ export function FeedbackActions({
           title="Split person group"
           description="Select the faces that should be a separate person"
           images={images}
-          onSubmit={(faceIds) => splitMutation.mutateAsync(faceIds)}
+          onSubmit={async (faceIds) => {
+            await splitMutation.mutateAsync(faceIds);
+          }}
           onCancel={() => setShowSplitModal(false)}
           isLoading={splitMutation.isPending}
         />
@@ -441,7 +440,9 @@ export function FeedbackActions({
           title="Mark as wrong person"
           description="Select the faces that don't belong to this person"
           images={images}
-          onSubmit={(faceIds) => wrongPersonMutation.mutateAsync(faceIds)}
+          onSubmit={async (faceIds) => {
+            await wrongPersonMutation.mutateAsync(faceIds);
+          }}
           onCancel={() => setShowWrongPersonModal(false)}
           isLoading={wrongPersonMutation.isPending}
         />

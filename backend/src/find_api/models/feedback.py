@@ -3,19 +3,20 @@ Feedback models for user corrections and ratings
 """
 
 from enum import Enum
-from sqlalchemy import Column, Integer, String, DateTime, JSON, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey
 from sqlalchemy.sql import func
 from find_api.core.database import Base
 
 
 class FeedbackType(str, Enum):
     """Types of feedback users can provide"""
+
     # Person cluster feedback
     SPLIT = "split"  # Split one person into multiple
     MERGE = "merge"  # Merge two persons
     WRONG_PERSON = "wrong_person"  # Face belongs to different person
     CORRECT = "correct"  # Cluster is correct
-    
+
     # General feedback
     SEARCH_RATING = "search_rating"  # Rate search result relevance
     CAPTION_RATING = "caption_rating"  # Rate caption accuracy
@@ -27,15 +28,15 @@ class PersonFeedback(Base):
     Stores user feedback about person clusters: splits, merges, corrections.
     Used to improve clustering accuracy over time.
     """
-    
+
     __tablename__ = "person_feedback"
-    
+
     # Unique ID for this feedback entry
     id = Column(Integer, primary_key=True, index=True)
-    
+
     # Type of correction: SPLIT, MERGE, WRONG_PERSON, CORRECT
     feedback_type = Column(String(50), nullable=False, index=True)
-    
+
     # Person being corrected
     source_person_id = Column(
         Integer,
@@ -43,30 +44,30 @@ class PersonFeedback(Base):
         nullable=False,
         index=True,
     )
-    
+
     # If merging two persons, target person ID
     target_person_id = Column(
         Integer,
         ForeignKey("persons.id", ondelete="SET NULL"),
         nullable=True,
     )
-    
+
     # JSON array of face IDs affected by this feedback
     # Example: [1, 2, 3] for "these 3 faces should be separate"
     face_ids = Column(JSON, nullable=False)
-    
+
     # Optional free text reason from user
     user_reason = Column(String(500), nullable=True)
-    
+
     # Status: pending (not yet applied), applied, rejected
     status = Column(String(20), default="pending", index=True)
-    
+
     # When feedback was submitted
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # When feedback was applied/processed
     resolved_at = Column(DateTime(timezone=True), nullable=True)
-    
+
     def __repr__(self):
         return (
             f"<PersonFeedback(id={self.id}, "
@@ -80,15 +81,15 @@ class GeneralFeedback(Base):
     Generic feedback for search results, captions, objects, and other entities.
     Supports ratings (1-5 stars) and free-text reasons.
     """
-    
+
     __tablename__ = "general_feedback"
-    
+
     # Unique ID
     id = Column(Integer, primary_key=True, index=True)
-    
+
     # Type: SEARCH_RATING, CAPTION_RATING, OBJECT_RATING
     feedback_type = Column(String(50), nullable=False, index=True)
-    
+
     # Media being rated (optional, for search/caption/object feedback)
     media_id = Column(
         Integer,
@@ -96,7 +97,7 @@ class GeneralFeedback(Base):
         nullable=True,
         index=True,
     )
-    
+
     # Person being rated (optional, for people grouping feedback)
     person_id = Column(
         Integer,
@@ -104,19 +105,19 @@ class GeneralFeedback(Base):
         nullable=True,
         index=True,
     )
-    
+
     # Rating: 1-5 stars (or 0 for unrated)
     rating = Column(Integer, nullable=True)  # 0-5 scale
-    
+
     # Free text reason for the rating
     rating_reason = Column(String(500), nullable=True)
-    
+
     # JSON metadata (flexible for different feedback types)
     metadata = Column(JSON, nullable=True)
-    
+
     # When feedback was submitted
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     def __repr__(self):
         return (
             f"<GeneralFeedback(id={self.id}, "

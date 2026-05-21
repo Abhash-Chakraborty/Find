@@ -453,12 +453,15 @@ export const submitSearchRating = async (
   rating: number,
   reason?: string,
 ): Promise<GeneralFeedback> => {
-  const response = await api.post<GeneralFeedback>("/api/feedback/search-rating", {
-    feedback_type: "search_rating",
-    media_id: mediaId,
-    rating,
-    rating_reason: reason,
-  });
+  const response = await api.post<GeneralFeedback>(
+    "/api/feedback/search-rating",
+    {
+      feedback_type: "search_rating",
+      media_id: mediaId,
+      rating,
+      rating_reason: reason,
+    },
+  );
   return response.data;
 };
 

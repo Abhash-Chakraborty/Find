@@ -11,7 +11,16 @@ import logging
 from find_api.core.database import init_db
 from find_api.core.recovery import run_analysis_recovery_loop
 from find_api.core.storage import init_storage
-from find_api.routers import upload, gallery, search, clusters, status, cluster, people, feedback
+from find_api.routers import (
+    upload,
+    gallery,
+    search,
+    clusters,
+    status,
+    cluster,
+    people,
+    feedback,
+)
 
 # Configure logging
 logging.basicConfig(

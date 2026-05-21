@@ -362,7 +362,7 @@ export default function PeoplePage() {
               {selectedPersonQuery.data && (
                 <div className="mt-4 flex gap-3">
                   <FeedbackActions
-                    personId={selectedPersonId!}
+                    personId={selectedPersonId}
                     personName={selectedPersonQuery.data?.person_name}
                     images={selectedPersonQuery.data?.images || []}
                     onFeedbackApplied={() => {
