@@ -109,7 +109,7 @@ export default function NavBar() {
             <div
               id="mock-ml-mode-description"
               role="tooltip"
-              className="pointer-events-none absolute right-0 top-full z-50 mt-2 hidden w-64 rounded-lg border border-[var(--frost)] bg-[color:var(--frost-soft)] p-3 text-left text-xs leading-relaxed text-[color:var(--near-white)] shadow-xl group-focus:block group-hover:block"
+              className="pointer-events-none absolute right-0 top-full z-50 mt-2 hidden w-64 rounded-lg border border-[var(--frost)] bg-[color:var(--void)] p-3 text-left text-xs leading-relaxed text-[color:var(--near-white)] shadow-xl group-focus:block group-hover:block"
             >
               Captions, OCR, embeddings, search, and clustering use mock-backed
               data in this environment.
