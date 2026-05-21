@@ -46,8 +46,10 @@ export function StatusIndicator({
 
   return (
     <span
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full border backdrop-blur-md ${state.classes} ${
-        showLabel ? "px-2.5 py-1 text-xs font-medium" : "h-7 w-7"
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full border transition-all duration-300 ${state.classes} ${
+        showLabel
+          ? "px-2.5 py-1 text-xs font-medium"
+          : "h-7 w-7 hover:scale-105 shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-none"
       } ${className}`}
       title={label}
       role="img"

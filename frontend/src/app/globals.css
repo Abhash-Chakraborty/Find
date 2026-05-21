@@ -73,27 +73,27 @@
     --orange-soft: rgba(255, 128, 31, 0.12);
 
     --green: #10b981;
-    --green-soft: rgba(16, 185, 129, 0.1);
+    --green-soft: #e6fbf2;
 
     --blue: #3b82f6;
-    --blue-soft: rgba(59, 130, 246, 0.1);
+    --blue-soft: #eff6ff;
 
     --yellow: #f59e0b;
-    --yellow-soft: rgba(245, 158, 11, 0.1);
+    --yellow-soft: #fffbeb;
 
     --red: #ef4444;
-    --red-soft: rgba(239, 68, 68, 0.1);
+    --red-soft: #fef2f2;
     --scrollbar-thumb: rgba(71, 85, 105, 0.42);
     --scrollbar-thumb-hover: rgba(51, 65, 85, 0.68);
     --scrollbar-arrow: rgba(71, 85, 105, 0.58);
-    --status-indexed-border: rgba(5, 150, 105, 0.28);
-    --status-indexed-text: #047857;
-    --status-processing-border: rgba(37, 99, 235, 0.26);
-    --status-processing-text: #1d4ed8;
-    --status-pending-border: rgba(217, 119, 6, 0.28);
-    --status-pending-text: #b45309;
-    --status-failed-border: rgba(220, 38, 38, 0.28);
-    --status-failed-text: #b91c1c;
+    --status-indexed-border: rgba(16, 185, 129, 0.35);
+    --status-indexed-text: #065f46;
+    --status-processing-border: rgba(59, 130, 246, 0.35);
+    --status-processing-text: #1e40af;
+    --status-pending-border: rgba(245, 158, 11, 0.35);
+    --status-pending-text: #854d0e;
+    --status-failed-border: rgba(239, 68, 68, 0.35);
+    --status-failed-text: #991b1b;
 
     --nav-height: 72px;
   }
