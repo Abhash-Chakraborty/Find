@@ -8,6 +8,7 @@ name: CI
 #   backend/**                      |      no        |      yes
 #   .github/workflows/**            |      yes       |      yes   ← shared contract
 #   docker-compose*.yml             |      yes       |      yes   ← shared contract
+#   root/shared non-doc config      |      yes       |      yes   ← conservative fallback
 #   docs/**, *.md, ISSUE_TEMPLATE   |      no        |      no    ← docs-only, safe to skip
 
 on:
@@ -23,10 +24,11 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
       shared: ${{ steps.filter.outputs.shared }}
+      uncategorized: ${{ steps.uncategorized.outputs.uncategorized }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -38,9 +40,28 @@ jobs:
               - '.github/workflows/**'
               - 'docker-compose*.yml'
 
+      - uses: dorny/paths-filter@v4
+        id: uncategorized
+        with:
+          predicate-quantifier: every
+          filters: |
+            uncategorized:
+              - '**'
+              - '!frontend/**'
+              - '!backend/**'
+              - '!.github/workflows/**'
+              - '!docker-compose*.yml'
+              - '!docs/**'
+              - '!**/*.md'
+              - '!LICENSE'
+              - '!CODE_OF_CONDUCT.md'
+              - '!CONTRIBUTING.md'
+              - '!GSSOC_CONTRIBUTOR_GUIDE.md'
+              - '!.github/ISSUE_TEMPLATE/**'
+
   frontend-check:
     needs: detect-changes
-    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.shared == 'true'
+    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.uncategorized == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -68,7 +89,7 @@ jobs:
 
   backend-check:
     needs: detect-changes
-    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.shared == 'true'
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.uncategorized == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
