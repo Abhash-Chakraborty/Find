@@ -101,6 +101,10 @@ export function VaultGallery() {
         if (axios.isAxiosError(error) && error.response?.status === 401) {
           vaultStore.getState().lock();
           setSessionMessage("Session expired. Please unlock again.");
+        } else {
+          setSessionMessage(
+            "Some images could not be decrypted. Please try again.",
+          );
         }
       }
     };
