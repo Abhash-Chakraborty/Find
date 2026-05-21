@@ -28,6 +28,7 @@ class ModelManager:
             return
 
         self.models: Dict[str, Any] = {}
+        self.failed_models: Dict[str, Exception] = {}
         self.gpu_lock = asyncio.Lock()
         self._initialized = True
         logger.info("ModelManager initialized with GPU Lock")
@@ -56,13 +57,21 @@ class ModelManager:
         Returns:
             The model instance
         """
+        if name in self.failed_models:
+            logger.warning(
+                "Model %s previously failed to load. Raising cached exception to avoid retries.",
+                name,
+            )
+            raise self.failed_models[name]
+
         if name not in self.models:
             logger.info(f"Loading model: {name}")
             try:
                 self.models[name] = loader()
                 logger.info(f"Model loaded successfully: {name}")
-            except Exception:
+            except Exception as e:
                 logger.exception("Failed to load model %s", name)
+                self.failed_models[name] = e
                 raise
 
         return self.models[name]
