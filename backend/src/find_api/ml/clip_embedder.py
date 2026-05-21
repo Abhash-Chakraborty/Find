@@ -52,7 +52,13 @@ class CLIPEmbedder:
             if isinstance(image, np.ndarray):
                 image = Image.fromarray(image)
 
-            bundle = self.manager.get_model("siglip", self._load_model)
+            config_key = (
+                f"model={settings.CLIP_MODEL}|pretrained={settings.CLIP_PRETRAINED}|"
+                f"gpu={settings.USE_GPU}"
+            )
+            bundle = self.manager.get_model(
+                "siglip", self._load_model, config_key=config_key
+            )
             model = bundle["model"]
             preprocess = bundle["preprocess"]
             device = bundle["device"]
@@ -84,7 +90,13 @@ class CLIPEmbedder:
         Generate embedding for text query
         """
         try:
-            bundle = self.manager.get_model("siglip", self._load_model)
+            config_key = (
+                f"model={settings.CLIP_MODEL}|pretrained={settings.CLIP_PRETRAINED}|"
+                f"gpu={settings.USE_GPU}"
+            )
+            bundle = self.manager.get_model(
+                "siglip", self._load_model, config_key=config_key
+            )
             model = bundle["model"]
             tokenizer = bundle["tokenizer"]
             device = bundle["device"]

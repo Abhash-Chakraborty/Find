@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 
 from find_api.core.config import settings
+from find_api.core.model_manager import ModelUnavailableError
 from find_api.ml.mock_embedder import get_mock_embedder
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,16 @@ PERSON_OBJECT_LABELS = {
     "girl",
     "face",
 }
+
+
+def _record_stage_error(metadata: Dict[str, Any], stage: str, error: Exception) -> None:
+    """Store a safe, user-facing stage failure without stack traces."""
+    if isinstance(error, ModelUnavailableError):
+        message = str(error)
+    else:
+        message = f"{stage} failed during processing."
+
+    metadata.setdefault("stage_errors", {})[stage] = message
 
 
 def extract_image_metadata(
@@ -59,8 +70,9 @@ def extract_image_metadata(
         metadata["objects"] = objects
         logger.info(f"Detected {len(objects)} objects")
     except Exception as e:
-        logger.error(f"Object detection failed: {e}")
+        logger.exception("Object detection failed")
         metadata["objects"] = []
+        _record_stage_error(metadata, "objects", e)
 
     # 2. Image Captioning
     try:
@@ -74,8 +86,9 @@ def extract_image_metadata(
         metadata["caption"] = caption
         logger.info(f"Caption: {caption}")
     except Exception as e:
-        logger.error(f"Captioning failed: {e}")
+        logger.exception("Captioning failed")
         metadata["caption"] = ""
+        _record_stage_error(metadata, "caption", e)
 
     # 3. OCR Text Extraction
     try:
@@ -91,9 +104,10 @@ def extract_image_metadata(
         metadata["text_blocks"] = text_blocks
         logger.info(f"Extracted {len(ocr_text)} characters")
     except Exception as e:
-        logger.error(f"OCR failed: {e}")
+        logger.exception("OCR failed")
         metadata["ocr_text"] = ""
         metadata["text_blocks"] = []
+        _record_stage_error(metadata, "ocr", e)
 
     return metadata
 

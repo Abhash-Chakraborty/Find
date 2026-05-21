@@ -39,7 +39,13 @@ class ObjectDetector:
         """
         try:
             # Get model from manager
-            model = self.manager.get_model("yolo", self._load_model)
+            config_key = (
+                f"model={settings.YOLO_MODEL}|gpu={settings.USE_GPU}|"
+                f"half={settings.YOLO_HALF}"
+            )
+            model = self.manager.get_model(
+                "yolo", self._load_model, config_key=config_key
+            )
 
             # Run inference
             # Note: In a single-worker setup, we don't strictly need the lock for safety,

@@ -11,6 +11,7 @@ import logging
 from find_api.core.model_manager import get_model_manager
 
 logger = logging.getLogger(__name__)
+OCR_CONFIG_KEY = "paddleocr|lang=en|use_angle_cls=True|use_gpu=False"
 
 
 class OCRExtractor:
@@ -39,7 +40,9 @@ class OCRExtractor:
             # Standard cv2 is BGR, PIL is RGB. PaddleOCR handles both but prefers RGB usually?
             # Let's assume RGB from PIL -> numpy is fine.
 
-            ocr = self.manager.get_model("paddleocr", self._load_model)
+            ocr = self.manager.get_model(
+                "paddleocr", self._load_model, config_key=OCR_CONFIG_KEY
+            )
 
             result = ocr.ocr(image, cls=True)
 
@@ -66,7 +69,9 @@ class OCRExtractor:
             if isinstance(image, Image.Image):
                 image = np.array(image)
 
-            ocr = self.manager.get_model("paddleocr", self._load_model)
+            ocr = self.manager.get_model(
+                "paddleocr", self._load_model, config_key=OCR_CONFIG_KEY
+            )
 
             result = ocr.ocr(image, cls=True)
 
