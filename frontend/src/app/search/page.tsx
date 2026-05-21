@@ -24,35 +24,86 @@ const examples = [
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
+  const [allResults, setAllResults] = useState<SearchResult[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [currentSkip, setCurrentSkip] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const clearedRef = useRef(false);
 
+  const LIMIT = 24;
+
   const searchMutation = useMutation({
-    mutationFn: (searchQuery: string) =>
-      searchImages({ query: searchQuery, limit: 24 }),
+    mutationFn: async (searchQuery: string) => {
+      const data = await searchImages({ query: searchQuery, limit: LIMIT, skip: 0 });
+      return { data, isInitial: true };
+    },
   });
-  const activeQuery = searchMutation.data?.query;
+
+  const activeQuery = searchMutation.data?.data.query;
   const { mutate } = searchMutation;
 
+  useEffect(() => {
+    // Only update results if it's an initial search (not a refresh)
+    if (searchMutation.data?.isInitial && searchMutation.data?.data) {
+      setAllResults(searchMutation.data.data.results);
+      setHasMore(searchMutation.data.data.has_more);
+      setCurrentSkip(searchMutation.data.data.results.length);
+    }
+  }, [searchMutation.data]);
+
+  // Periodic refresh - update first page results without losing loaded pages
   useEffect(() => {
     if (!activeQuery) return;
 
     const intervalId = setInterval(() => {
-      mutate(activeQuery);
+      // On refresh, only update if we have results and only refresh first page
+      if (allResults.length > 0) {
+        // For refresh, we could refresh in place, but for simplicity
+        // we'll skip the refresh if user has loaded more pages
+        if (currentSkip <= LIMIT) {
+          mutate(activeQuery);
+        }
+      } else {
+        mutate(activeQuery);
+      }
     }, MINIO_URL_REFRESH_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [activeQuery, mutate]);
+  }, [activeQuery, mutate, allResults.length, currentSkip]);
 
   const handleSearch = (event: React.FormEvent) => {
     event.preventDefault();
     if (query.trim()) {
       clearedRef.current = false;
       setSelectedMediaId(null);
+      setAllResults([]);
+      setHasMore(false);
+      setCurrentSkip(0);
       searchMutation.mutate(query.trim());
     }
   };
 
-  const results = searchMutation.data?.results ?? [];
+  const loadMoreResults = async () => {
+    if (!activeQuery || isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+    try {
+      const data = await searchImages({ 
+        query: activeQuery, 
+        limit: LIMIT, 
+        skip: currentSkip 
+      });
+      setAllResults(prev => [...prev, ...data.results]);
+      setHasMore(data.has_more);
+      setCurrentSkip(prev => prev + data.results.length);
+    } catch (error) {
+      console.error("Failed to load more results:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const results = allResults;
   const selectedIndex = useMemo(() => {
     if (selectedMediaId === null) {
       return -1;
@@ -172,7 +223,7 @@ export default function SearchPage() {
           </div>
         )}
 
-        {searchMutation.data && searchMutation.data.results.length === 0 && (
+        {allResults.length === 0 && searchMutation.data && (
           <div className="frost-panel mx-auto max-w-md rounded-3xl px-8 py-14 text-center">
             <ImageOff className="mx-auto mb-4 h-10 w-10 text-[color:var(--muted)]" />
             <p className="mb-2 text-[color:var(--near-white)]">
@@ -184,20 +235,20 @@ export default function SearchPage() {
           </div>
         )}
 
-        {searchMutation.data && searchMutation.data.results.length > 0 && (
+        {allResults.length > 0 && (
           <div className="page-enter">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-[color:var(--silver)]">
-                {searchMutation.data.results.length} result
-                {searchMutation.data.results.length !== 1 ? "s" : ""} for{" "}
+                {allResults.length} result
+                {allResults.length !== 1 ? "s" : ""} for{" "}
                 <span className="text-[color:var(--near-white)]">
-                  {searchMutation.data.query}
+                  {activeQuery}
                 </span>
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-              {searchMutation.data.results.map((result) => {
+              {allResults.map((result) => {
                 const imageSrc = resolveMediaUrl(
                   result.metadata.url,
                   result.metadata.minio_key,
@@ -258,6 +309,26 @@ export default function SearchPage() {
                 );
               })}
             </div>
+
+            {hasMore && (
+              <div className="mt-8 flex justify-center">
+                <button
+                  type="button"
+                  onClick={loadMoreResults}
+                  disabled={isLoadingMore}
+                  className="frost-button flex items-center gap-2 px-6 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Load More Results"
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
