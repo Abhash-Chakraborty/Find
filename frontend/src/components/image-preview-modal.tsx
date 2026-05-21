@@ -24,7 +24,11 @@ import {
   reprocessImage,
   toggleLike,
 } from "@/lib/api";
-import { resolveMediaUrl } from "@/lib/media";
+import {
+  MINIO_URL_REFRESH_INTERVAL_MS,
+  MINIO_URL_STALE_TIME_MS,
+  resolveMediaUrl,
+} from "@/lib/media";
 import { formatBytes, formatDate } from "@/lib/utils";
 import { StatusIndicator } from "./status-indicator";
 
@@ -95,6 +99,8 @@ export function ImagePreviewModal({
     queryKey: ["image-detail", media.id],
     queryFn: () => getImageDetail(media.id),
     enabled: media.id !== null,
+    staleTime: MINIO_URL_STALE_TIME_MS,
+    refetchInterval: MINIO_URL_REFRESH_INTERVAL_MS,
   });
 
   useEffect(() => {

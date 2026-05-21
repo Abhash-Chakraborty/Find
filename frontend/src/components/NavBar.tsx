@@ -10,6 +10,7 @@ const navLinks = [
   { href: "/gallery", label: "Gallery" },
   { href: "/search", label: "Search" },
   { href: "/clusters", label: "Clusters" },
+  { href: "/people", label: "People" },
 ];
 
 type Theme = "light" | "dark";

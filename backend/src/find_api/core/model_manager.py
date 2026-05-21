@@ -61,8 +61,8 @@ class ModelManager:
             try:
                 self.models[name] = loader()
                 logger.info(f"Model loaded successfully: {name}")
-            except Exception as e:
-                logger.error(f"Failed to load model {name}: {e}")
+            except Exception:
+                logger.exception("Failed to load model %s", name)
                 raise
 
         return self.models[name]

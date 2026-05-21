@@ -1,0 +1,22 @@
+[
+  {
+    "id": "TS-FE-001",
+    "title": "upload page loads",
+    "description": "Open the app, verify the Upload page loads, and verify the Files and ZIP mode controls are visible."
+  },
+  {
+    "id": "TS-FE-002",
+    "title": "gallery page loads",
+    "description": "Navigate to Gallery and verify the All, Indexed, Processing, Failed, and liked-only controls render."
+  },
+  {
+    "id": "TS-FE-003",
+    "title": "search page loads",
+    "description": "Navigate to Search and verify the query input and Search action are visible."
+  },
+  {
+    "id": "TS-FE-004",
+    "title": "clusters page loads",
+    "description": "Navigate to Clusters and verify the page renders without a client-side crash."
+  }
+]
