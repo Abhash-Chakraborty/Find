@@ -81,3 +81,92 @@ def test_multiple_models_isolated(fresh_model_manager):
     good_model_cached = fresh_model_manager.get_model("model-good", success_loader)
     assert good_model_cached == "good-model"
     success_loader.assert_not_called()
+
+
+def test_get_model_concurrent_loading(fresh_model_manager):
+    """Verify that concurrent threads loading the same model only trigger the loader once and receive the same instance."""
+    import threading
+    import time
+
+    call_count = 0
+    call_count_lock = threading.Lock()
+
+    def slow_loader():
+        nonlocal call_count
+        time.sleep(0.05)  # stretch race condition window
+        with call_count_lock:
+            call_count += 1
+        return "concurrent-success-model"
+
+    results = []
+    threads = []
+    barrier = threading.Barrier(10)
+
+    def worker():
+        barrier.wait()  # lock-step trigger
+        try:
+            model = fresh_model_manager.get_model("concurrent-model", slow_loader)
+            results.append((model, None))
+        except Exception as e:
+            results.append((None, e))
+
+    for _ in range(10):
+        t = threading.Thread(target=worker)
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    assert len(results) == 10
+    for model, err in results:
+        assert err is None
+        assert model == "concurrent-success-model"
+
+    # Loader must be called exactly once
+    assert call_count == 1
+
+
+def test_get_model_concurrent_failure(fresh_model_manager):
+    """Verify that concurrent threads loading a failing model only trigger the loader once and all raise the same cached exception."""
+    import threading
+    import time
+
+    call_count = 0
+    call_count_lock = threading.Lock()
+
+    def slow_failing_loader():
+        nonlocal call_count
+        time.sleep(0.05)  # stretch race condition window
+        with call_count_lock:
+            call_count += 1
+        raise RuntimeError("Fatal loading failure")
+
+    results = []
+    threads = []
+    barrier = threading.Barrier(10)
+
+    def worker():
+        barrier.wait()  # lock-step trigger
+        try:
+            fresh_model_manager.get_model("concurrent-fail-model", slow_failing_loader)
+            results.append((True, None))
+        except Exception as e:
+            results.append((False, e))
+
+    for _ in range(10):
+        t = threading.Thread(target=worker)
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    assert len(results) == 10
+    for success, err in results:
+        assert not success
+        assert isinstance(err, RuntimeError)
+        assert str(err) == "Fatal loading failure"
+
+    # Failing loader must be executed exactly once
+    assert call_count == 1

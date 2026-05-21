@@ -4,6 +4,7 @@ Model Manager for efficient GPU resource management
 
 import asyncio
 import logging
+import threading
 from typing import Any, Callable, Dict
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,8 @@ class ModelManager:
         self.models: Dict[str, Any] = {}
         self.failed_models: Dict[str, Exception] = {}
         self.gpu_lock = asyncio.Lock()
+        self.lock = threading.Lock()
+        self.model_locks: Dict[str, threading.Lock] = {}
         self._initialized = True
         logger.info("ModelManager initialized with GPU Lock")
 
@@ -65,14 +68,27 @@ class ModelManager:
             raise self.failed_models[name]
 
         if name not in self.models:
-            logger.info(f"Loading model: {name}")
-            try:
-                self.models[name] = loader()
-                logger.info(f"Model loaded successfully: {name}")
-            except Exception as e:
-                logger.exception("Failed to load model %s", name)
-                self.failed_models[name] = e
-                raise
+            # Get or create the fine-grained lock for this model name
+            with self.lock:
+                if name not in self.model_locks:
+                    self.model_locks[name] = threading.Lock()
+                model_lock = self.model_locks[name]
+
+            # Acquire the model-specific lock to prevent concurrent load attempts
+            with model_lock:
+                # Double-check inside the lock
+                if name in self.failed_models:
+                    raise self.failed_models[name]
+
+                if name not in self.models:
+                    logger.info(f"Loading model: {name}")
+                    try:
+                        self.models[name] = loader()
+                        logger.info(f"Model loaded successfully: {name}")
+                    except Exception as e:
+                        logger.exception("Failed to load model %s", name)
+                        self.failed_models[name] = e
+                        raise
 
         return self.models[name]
 
