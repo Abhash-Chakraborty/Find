@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     # Processing
     MAX_UPLOAD_SIZE_MB: int = 50
     MAX_BULK_FILES: int = 200
+    MAX_BULK_TOTAL_SIZE_MB: int = 500
+    MAX_BULK_COMPRESSION_RATIO: int = 100
     WORKER_TIMEOUT: int = 600
     BATCH_SIZE: int = 1
     EMBEDDING_DIM: int = 768  # SigLIP ViT-B-16 dimension

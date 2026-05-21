@@ -5,6 +5,9 @@ const bucket = process.env.NEXT_PUBLIC_MINIO_BUCKET ?? "images";
 const minioBaseUrl =
   process.env.NEXT_PUBLIC_MINIO_URL ?? "http://localhost:9000";
 
+export const MINIO_URL_STALE_TIME_MS = 1000 * 60 * 45; // 45 minutes
+export const MINIO_URL_REFRESH_INTERVAL_MS = 1000 * 60 * 50; // 50 minutes
+
 function buildEncodedUrl(objectKey?: string | null) {
   if (!objectKey) {
     return null;

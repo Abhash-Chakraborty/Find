@@ -11,6 +11,7 @@ const navLinks = [
   { href: "/gallery", label: "Gallery" },
   { href: "/search", label: "Search" },
   { href: "/clusters", label: "Clusters" },
+  { href: "/people", label: "People" },
 ];
 
 type Theme = "light" | "dark";
@@ -98,17 +99,22 @@ export default function NavBar() {
 
       {isMockMode && (
         <div className="relative flex shrink-0">
-          <div
-            className="group rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] px-3 py-1.5 text-xs font-medium text-[color:var(--silver)]"
+          <button
+            type="button"
+            className="group rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] px-3 py-1.5 text-xs font-medium text-[color:var(--silver)] outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
             aria-label="Mock ML mode active"
+            aria-describedby="mock-ml-mode-description"
           >
             Mock ML Mode
-
-            <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-[var(--frost)] bg-[color:var(--frost-soft)] p-3 text-xs leading-relaxed text-[color:var(--near-white)] shadow-xl group-hover:block">
+            <div
+              id="mock-ml-mode-description"
+              role="tooltip"
+              className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-[var(--frost)] bg-[color:var(--frost-soft)] p-3 text-xs leading-relaxed text-[color:var(--near-white)] shadow-xl group-focus:block group-hover:block"
+            >
               Captions, OCR, embeddings, search, and clustering use mock-backed
               data in this environment.
             </div>
-          </div>
+          </button>
         </div>
       )}
 

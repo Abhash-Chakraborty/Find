@@ -86,6 +86,50 @@ function getDisplayStage(item: UploadListItem) {
   return item.processingStage ?? item.processingState ?? "queued";
 }
 
+const STAGE_PROGRESS: Record<string, number> = {
+  queued: 8,
+  started: 16,
+  processing: 20,
+  "loading image": 22,
+  "extracting exif": 34,
+  "generating mock metadata": 48,
+  "detecting objects": 48,
+  "generating caption": 62,
+  "running ocr": 74,
+  "generating embedding": 88,
+  "indexing complete": 96,
+  "detecting faces": 96,
+  "clustering queued": 98,
+  indexed: 100,
+  failed: 100,
+};
+
+function normalizeStage(stage?: string) {
+  return stage?.trim().toLowerCase();
+}
+
+function getItemProgress(item: UploadListItem): number {
+  if (item.status === "failed" || item.processingState === "failed") {
+    return 100;
+  }
+  if (item.processingState === "indexed") {
+    return 100;
+  }
+
+  const stage = normalizeStage(item.processingStage);
+  const stageProgress = stage ? STAGE_PROGRESS[stage] : undefined;
+  if (stageProgress !== undefined) {
+    return stageProgress;
+  }
+  if (item.processingState === "processing" || item.jobStatus === "started") {
+    return STAGE_PROGRESS.processing ?? 20;
+  }
+  if (item.processingState === "queued" || item.jobStatus === "queued") {
+    return STAGE_PROGRESS.queued ?? 8;
+  }
+  return 0;
+}
+
 function getStatusClasses(item: UploadListItem) {
   if (item.status === "duplicate") {
     return "accent-badge status-pending";
@@ -356,6 +400,29 @@ export default function UploadPage() {
     [uploadedFiles],
   );
 
+  const trackedUploads = useMemo(
+    () => uploadedFiles.filter((item) => item.status === "uploaded"),
+    [uploadedFiles],
+  );
+
+  const progressPercent =
+    trackedUploads.length > 0
+      ? Math.round(
+          trackedUploads.reduce((total, item) => {
+            return total + getItemProgress(item);
+          }, 0) / trackedUploads.length,
+        )
+      : isUploading
+        ? (STAGE_PROGRESS.queued ?? 8)
+        : 0;
+
+  const progressLabel = isUploading
+    ? "Uploading"
+    : `Analyzing ${activeJobs.length} image${activeJobs.length === 1 ? "" : "s"}`;
+  const progressDetail =
+    activeJobs.find((item) => item.processingStage)?.processingStage ??
+    "Indexing updates live";
+
   const showActions = stats.indexed > 0 || stats.duplicates > 0;
 
   return (
@@ -443,19 +510,36 @@ export default function UploadPage() {
         )}
 
         {(isUploading || activeJobs.length > 0) && (
-          <div className="frost-panel mt-8 flex items-center gap-4 rounded-3xl p-4">
-            <Loader2 className="h-5 w-5 animate-spin text-[color:var(--blue)]" />
-            <div>
-              <p className="text-sm font-medium text-[color:var(--near-white)]">
-                {isUploading
-                  ? "Uploading"
-                  : `Analyzing ${activeJobs.length} image${
-                      activeJobs.length === 1 ? "" : "s"
-                    }`}
-              </p>
-              <p className="text-xs text-[color:var(--silver)]">
-                Indexing updates live.
-              </p>
+          <div className="frost-panel mt-8 rounded-2xl px-4 py-3">
+            <div className="mb-2 flex items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[color:var(--silver)]" />
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--near-white)]">
+                    {progressLabel}
+                  </p>
+                  <p className="truncate text-xs text-[color:var(--silver)]">
+                    {progressDetail}
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 text-xs tabular-nums text-[color:var(--silver)]">
+                {progressPercent}%
+              </span>
+            </div>
+
+            <div
+              aria-label={`${progressLabel} progress`}
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={progressPercent}
+              className="h-1 w-full overflow-hidden rounded-full bg-[color:var(--surface-hover)]"
+              role="progressbar"
+            >
+              <div
+                className="h-full rounded-full bg-[color:var(--near-white)] transition-[width] duration-500 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              />
             </div>
           </div>
         )}
