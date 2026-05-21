@@ -55,13 +55,23 @@ export default function NavBar() {
 
     setTheme(initialTheme);
 
+    let cancelled = false;
+
     void getAppConfig()
       .then((config) => {
-        setIsMockMode(config.ml_mode === "mock");
+        if (!cancelled) {
+          setIsMockMode(config.ml_mode === "mock");
+        }
       })
       .catch(() => {
-        setIsMockMode(false);
+        if (!cancelled) {
+          setIsMockMode(false);
+        }
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const toggleTheme = () => {
@@ -98,23 +108,23 @@ export default function NavBar() {
       })}
 
       {isMockMode && (
-        <div className="relative flex shrink-0">
+        <div className="group relative flex shrink-0">
           <button
             type="button"
-            className="group rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] px-3 py-1.5 text-xs font-medium text-[color:var(--silver)] outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
+            className="rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] px-3 py-1.5 text-xs font-medium text-[color:var(--silver)] outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
             aria-label="Mock ML mode active"
             aria-describedby="mock-ml-mode-description"
           >
             Mock ML Mode
-            <div
-              id="mock-ml-mode-description"
-              role="tooltip"
-              className="pointer-events-none absolute right-0 top-full z-50 mt-2 hidden w-64 rounded-lg border border-[var(--frost)] bg-[color:var(--void)] p-3 text-left text-xs leading-relaxed text-[color:var(--near-white)] shadow-xl group-focus:block group-hover:block"
-            >
-              Captions, OCR, embeddings, search, and clustering use mock-backed
-              data in this environment.
-            </div>
           </button>
+          <div
+            id="mock-ml-mode-description"
+            role="tooltip"
+            className="pointer-events-none absolute right-0 top-full z-50 mt-2 hidden w-64 rounded-lg border border-[var(--frost)] bg-[color:var(--void)] p-3 text-left text-xs leading-relaxed text-[color:var(--near-white)] shadow-xl group-focus-within:block group-hover:block"
+          >
+            Captions, OCR, embeddings, search, and clustering use mock-backed
+            data in this environment.
+          </div>
         </div>
       )}
 
