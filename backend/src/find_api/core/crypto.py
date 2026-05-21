@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+import threading
 from pathlib import Path
 from typing import Dict, Iterator
 
@@ -11,6 +12,7 @@ import argon2
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 active_vault_sessions: Dict[str, tuple[bytes, float]] = {}
+_sessions_lock = threading.Lock()
 SESSION_TTL_SECONDS = 3600
 
 VAULT_STORAGE_DIR = Path(__file__).resolve().parents[3] / "vault_storage"
@@ -36,11 +38,35 @@ def derive_master_key(passphrase: str, salt: bytes) -> bytes:
 
 def get_session_key(token: str) -> bytes:
     """Return a cached vault session key if it is still valid."""
-    master_key, created_at = active_vault_sessions[token]
-    if time.time() - created_at > SESSION_TTL_SECONDS:
-        del active_vault_sessions[token]
-        raise KeyError(token)
-    return master_key
+    with _sessions_lock:
+        entry = active_vault_sessions.get(token)
+        if entry is None:
+            raise KeyError(token)
+        master_key, created_at = entry
+        if time.time() - created_at > SESSION_TTL_SECONDS:
+            del active_vault_sessions[token]
+            raise KeyError(token)
+        return master_key
+
+
+def set_session_key(token: str, master_key: bytes) -> None:
+    """Store a vault session key and evict all expired entries."""
+    now = time.time()
+    with _sessions_lock:
+        expired = [
+            t
+            for t, (_, created_at) in active_vault_sessions.items()
+            if now - created_at > SESSION_TTL_SECONDS
+        ]
+        for t in expired:
+            del active_vault_sessions[t]
+        active_vault_sessions[token] = (master_key, now)
+
+
+def delete_session_key(token: str) -> bool:
+    """Remove a vault session. Returns True if it existed."""
+    with _sessions_lock:
+        return active_vault_sessions.pop(token, None) is not None
 
 
 def encrypt_file(master_key: bytes, source_path: str, dest_path: str) -> bytes:

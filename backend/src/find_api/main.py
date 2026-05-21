@@ -8,6 +8,10 @@ from contextlib import asynccontextmanager
 import asyncio
 import logging
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
 from find_api.core.database import init_db
 from find_api.core.recovery import run_analysis_recovery_loop
 from find_api.core.storage import init_storage
@@ -37,6 +41,7 @@ class HealthCheckFilter(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 
 logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -72,6 +77,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware
 app.add_middleware(

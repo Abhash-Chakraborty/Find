@@ -5,30 +5,33 @@ from __future__ import annotations
 import os
 import secrets
 import tempfile
-import time
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from find_api.core.crypto import (
     VAULT_STORAGE_DIR,
-    active_vault_sessions,
+    delete_session_key,
     decrypt_file_stream,
     derive_master_key,
     get_session_key,
     encrypt_file,
+    set_session_key,
 )
 from find_api.core.database import get_db
 from find_api.core.storage import get_file, delete_file
 from find_api.models.media import Media
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 class VaultUnlockRequest(BaseModel):
@@ -85,7 +88,10 @@ def _load_or_create_vault_salt(db: Session) -> bytes:
         return _normalize_binary(row[0])
 
     salt = os.urandom(16)
-    dialect_name = db.bind.dialect.name if db.bind else "postgresql"
+    try:
+        dialect_name = db.get_bind().dialect.name
+    except Exception:
+        dialect_name = "postgresql"
     if dialect_name == "sqlite":
         db.execute(
             text("INSERT OR IGNORE INTO vault_config (id, salt) VALUES (1, :salt)"),
@@ -129,11 +135,20 @@ def _load_vault_metadata(db: Session, media_id: int) -> Optional[tuple[str, byte
 
 
 @router.post("/vault/unlock")
-def unlock_vault(payload: VaultUnlockRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def unlock_vault(
+    request: Request,
+    payload: VaultUnlockRequest,
+    db: Session = Depends(get_db),
+):
+    if not payload.passphrase or not payload.passphrase.strip():
+        raise HTTPException(
+            status_code=400, detail="Passphrase must not be empty"
+        )
     salt = _load_or_create_vault_salt(db)
     master_key = derive_master_key(payload.passphrase, salt)
     session_token = secrets.token_urlsafe(32)
-    active_vault_sessions[session_token] = (master_key, time.time())
+    set_session_key(session_token, master_key)
     return {"session_token": session_token}
 
 
@@ -171,7 +186,7 @@ def lock_vault(
     session_token = _resolve_session_token(
         authorization, payload.session_token if payload else None
     )
-    if active_vault_sessions.pop(session_token, None) is None:
+    if not delete_session_key(session_token):
         raise HTTPException(status_code=401, detail="Invalid or expired vault session")
     return {"status": "locked"}
 

@@ -51,6 +51,7 @@ def upgrade() -> None:
             nullable=False,
             server_default=_created_at_default(),
         ),
+        sa.CheckConstraint("id = 1", name="ck_vault_config_singleton"),
     )
 
     op.create_table(
@@ -71,8 +72,31 @@ def upgrade() -> None:
         ),
     )
 
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.create_index(
+            "ix_media_is_hidden_false",
+            "media",
+            ["is_hidden"],
+            postgresql_where=sa.text("is_hidden = false"),
+        )
+    else:
+        op.create_index(
+            "ix_media_is_hidden",
+            "media",
+            ["is_hidden"],
+        )
+
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    index_name = (
+        "ix_media_is_hidden_false"
+        if bind.dialect.name == "postgresql"
+        else "ix_media_is_hidden"
+    )
+    op.drop_index(index_name, table_name="media")
+
     op.drop_table("vault_metadata")
     op.drop_table("vault_config")
 
