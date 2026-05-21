@@ -87,7 +87,9 @@ class ModelManager:
                         logger.info(f"Model loaded successfully: {name}")
                     except Exception as e:
                         logger.exception("Failed to load model %s", name)
-                        self.failed_models[name] = e
+                        # Clear traceback to avoid retaining frame locals
+                        # in this long-lived singleton cache.
+                        self.failed_models[name] = e.with_traceback(None)
                         raise
 
         return self.models[name]
