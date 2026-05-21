@@ -60,7 +60,7 @@ def get_gallery(
         Paginated list of media records
     """
     # Build query
-    query = db.query(Media)
+    query = db.query(Media).filter(Media.is_hidden.is_(False))
 
     if status:
         query = query.filter(Media.status == status)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,6 +10,7 @@ import {
   Heart,
   ImageOff,
   Loader2,
+  Lock,
   RotateCcw,
   Trash2,
   X,
@@ -24,6 +26,7 @@ import {
 } from "@/components/image-preview-modal";
 import { StatusIndicator } from "@/components/status-indicator";
 import {
+  api,
   deleteImage,
   type GalleryResponse,
   getGallery,
@@ -36,6 +39,7 @@ import {
   MINIO_URL_STALE_TIME_MS,
   resolveMediaUrl,
 } from "@/lib/media";
+import { vaultStore } from "@/store/vaultStore";
 
 type GalleryFilter = "all" | "indexed" | "processing" | "failed";
 
@@ -151,6 +155,8 @@ function GalleryPageContent() {
   const limit = 24;
 
   const queryClient = useQueryClient();
+  const isVaultUnlocked = vaultStore((state) => state.isUnlocked);
+  const vaultSessionToken = vaultStore((state) => state.sessionToken);
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -340,6 +346,68 @@ function GalleryPageContent() {
       toast.error(
         "Retry failed. The queue may be unavailable — please try again.",
       );
+    },
+  });
+
+  const moveToVaultMutation = useMutation({
+    mutationFn: async (mediaId: number) => {
+      if (!vaultSessionToken) {
+        throw new Error("Vault session missing");
+      }
+
+      await api.post(
+        "/api/vault/hide",
+        { media_id: mediaId },
+        {
+          headers: {
+            Authorization: `Bearer ${vaultSessionToken}`,
+          },
+        },
+      );
+
+      return mediaId;
+    },
+    onMutate: async (mediaId: number) => {
+      await queryClient.cancelQueries({ queryKey: galleryQueryKey });
+
+      const previousData =
+        queryClient.getQueryData<GalleryResponse>(galleryQueryKey);
+
+      queryClient.setQueryData<GalleryResponse>(galleryQueryKey, (old) => {
+        if (!old) {
+          return old;
+        }
+
+        return {
+          ...old,
+          items: old.items.filter((item) => item.id !== mediaId),
+          total: Math.max(0, old.total - 1),
+        };
+      });
+
+      if (selectedMediaId === mediaId) {
+        setSelectedMediaId(null);
+        setQuerySelectedItem(null);
+      }
+
+      return { previousData };
+    },
+    onError: (error, _mediaId, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(galleryQueryKey, context.previousData);
+      }
+
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        vaultStore.getState().lock();
+        toast.error("Vault session expired");
+        return;
+      }
+
+      toast.error("Failed to move to vault");
+    },
+    onSuccess: (mediaId) => {
+      queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["image-detail", mediaId] });
     },
   });
 
@@ -668,6 +736,26 @@ function GalleryPageContent() {
                             <RotateCcw
                               className={`h-3.5 w-3.5 ${reprocessMutation.isPending ? "animate-spin" : ""}`}
                             />
+                          </button>
+                        )}
+                        {isVaultUnlocked && vaultSessionToken && (
+                          <button
+                            type="button"
+                            onClick={() => moveToVaultMutation.mutate(item.id)}
+                            disabled={
+                              moveToVaultMutation.isPending &&
+                              moveToVaultMutation.variables === item.id
+                            }
+                            className={`icon-button h-8 w-8 text-[color:var(--silver)] ${
+                              moveToVaultMutation.isPending &&
+                              moveToVaultMutation.variables === item.id
+                                ? "cursor-not-allowed opacity-70"
+                                : ""
+                            }`}
+                            aria-label="Move to Vault"
+                            title="Move to Vault"
+                          >
+                            <Lock className="h-3.5 w-3.5" />
                           </button>
                         )}
                         <button

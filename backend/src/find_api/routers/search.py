@@ -59,6 +59,7 @@ def search_images(
                 minio_key,
                 status,
                 liked,
+                is_hidden,
                 metadata_json,
                 cluster_id,
                 width,
@@ -69,7 +70,7 @@ def search_images(
             WHERE status = 'indexed' AND vector IS NOT NULL
         )
         SELECT * FROM ranked_results
-        WHERE similarity > :threshold
+        WHERE similarity > :threshold AND is_hidden = false
         ORDER BY similarity DESC
         LIMIT :limit
     """
