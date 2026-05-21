@@ -77,7 +77,7 @@ export default function NavBar() {
   };
 
   return (
-    <div className="flex min-w-0 items-center gap-2 overflow-x-auto rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] p-1">
+    <div className="flex min-w-0 items-center gap-2 overflow-visible rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] p-1">
       {navLinks.map(({ href, label }) => {
         const isActive = mounted && pathname === href;
 
@@ -109,7 +109,7 @@ export default function NavBar() {
             <div
               id="mock-ml-mode-description"
               role="tooltip"
-              className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-[var(--frost)] bg-[color:var(--frost-soft)] p-3 text-xs leading-relaxed text-[color:var(--near-white)] shadow-xl group-focus:block group-hover:block"
+              className="pointer-events-none absolute right-0 top-full z-50 mt-2 hidden w-64 rounded-lg border border-[var(--frost)] bg-[color:var(--frost-soft)] p-3 text-left text-xs leading-relaxed text-[color:var(--near-white)] shadow-xl group-focus:block group-hover:block"
             >
               Captions, OCR, embeddings, search, and clustering use mock-backed
               data in this environment.
