@@ -143,8 +143,6 @@ def analyze_image(media_id: int):
 
         # Post-job memory cleanup
         try:
-            from find_api.core.model_manager import get_model_manager
-
             get_model_manager().unload_idle_models(settings.ML_MODEL_IDLE_TTL_SECONDS)
         except Exception as e:
             logger.warning(f"Cleanup failed after processing media {media_id}: {e}")
@@ -271,8 +269,6 @@ def cluster_images():
 
         # Post-job memory cleanup
         try:
-            from find_api.core.model_manager import get_model_manager
-
             get_model_manager().unload_idle_models(settings.ML_MODEL_IDLE_TTL_SECONDS)
         except Exception as e:
             logger.warning(f"Cleanup failed after clustering images: {e}")
@@ -441,8 +437,6 @@ def cluster_faces():
 
         # Post-job memory cleanup
         try:
-            from find_api.core.model_manager import get_model_manager
-
             get_model_manager().unload_idle_models(settings.ML_MODEL_IDLE_TTL_SECONDS)
         except Exception as e:
             logger.warning(f"Cleanup failed after clustering faces: {e}")

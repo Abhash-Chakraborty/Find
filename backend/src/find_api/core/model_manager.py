@@ -7,7 +7,8 @@ import gc
 import logging
 import threading
 import time
-from typing import Any, Callable, Dict, List
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, List
 
 from find_api.core.config import settings
 
@@ -39,8 +40,10 @@ class ModelManager:
             return
 
         self.models: Dict[str, Any] = {}
+        self.in_flight: Dict[str, int] = {}
         self.last_used: Dict[str, float] = {}
-        self._lock = threading.Lock()
+        self._loading: Dict[str, threading.Event] = {}
+        self._lock = threading.RLock()
         self.gpu_lock = asyncio.Lock()
         self._cleanup_thread = None
         self._initialized = True
@@ -52,6 +55,8 @@ class ModelManager:
     def set_max_models(self, count: int):
         """Set maximum number of concurrent models to keep in memory"""
         with self._lock:
+            if not isinstance(count, int) or count <= 0:
+                raise ValueError("max loaded models must be a positive integer")
             self.max_loaded_models = count
 
     def start_autocleanup(self, interval_seconds: int = 60, ttl_seconds: int = 300):
@@ -98,33 +103,66 @@ class ModelManager:
         Returns:
             The model instance
         """
+        while True:
+            with self._lock:
+                if name in self.models:
+                    self.last_used[name] = time.time()
+                    return self.models[name]
+
+                loading_event = self._loading.get(name)
+                if loading_event is None:
+                    loading_event = threading.Event()
+                    self._loading[name] = loading_event
+                    break
+
+            loading_event.wait()
+
+        logger.info("Lazy-loading model: %s", name)
+        try:
+            model = loader()
+        except Exception:
+            with self._lock:
+                self._loading.pop(name, None)
+                loading_event.set()
+            logger.exception("Failed to load model %s", name)
+            raise
+
         with self._lock:
-            if name not in self.models:
-                # Check if we need to unload something to make room
-                if len(self.models) >= self.max_loaded_models:
-                    # Unload oldest (least recently used)
-                    # We sort by last_used time
-                    sorted_models = sorted(self.last_used.items(), key=lambda x: x[1])
-                    for oldest_name, _ in sorted_models:
-                        if oldest_name in self.models and oldest_name != name:
-                            logger.info(
-                                f"Max models reached ({self.max_loaded_models}). Unloading oldest: {oldest_name}"
-                            )
-                            del self.models[oldest_name]
-                            del self.last_used[oldest_name]
-                            # Only need to unload one to make room
-                            break
+            try:
+                if name in self.models:
+                    return self.models[name]
 
-                logger.info(f"Lazy-loading model: {name}")
-                try:
-                    self.models[name] = loader()
-                    logger.info(f"Model loaded successfully: {name}")
-                except Exception:
-                    logger.exception("Failed to load model %s", name)
-                    raise
+                self._evict_for_capacity_locked(skip={name})
+                self.models[name] = model
+                self.in_flight.setdefault(name, 0)
+                self.last_used[name] = time.time()
+                logger.info("Model loaded successfully: %s", name)
+                return model
+            finally:
+                self._loading.pop(name, None)
+                loading_event.set()
 
-            self.last_used[name] = time.time()
-            return self.models[name]
+    @contextmanager
+    def use_model(self, name: str, loader: Callable[[], Any]) -> Iterator[Any]:
+        """Lease a model for inference so idle cleanup cannot unload it mid-use."""
+        model = self.get_model(name, loader)
+        with self._lock:
+            self.in_flight[name] = self.in_flight.get(name, 0) + 1
+        try:
+            yield model
+        finally:
+            self.release_model(name)
+
+    def release_model(self, name: str):
+        """Release a model lease and update its idle timestamp."""
+        with self._lock:
+            count = self.in_flight.get(name, 0)
+            if count <= 1:
+                self.in_flight[name] = 0
+            else:
+                self.in_flight[name] = count - 1
+            if name in self.models:
+                self.last_used[name] = time.time()
 
     def unload_idle_models(self, ttl_seconds: int):
         """
@@ -135,7 +173,11 @@ class ModelManager:
 
         with self._lock:
             for name, last_ts in self.last_used.items():
-                if name in self.models and (now - last_ts) > ttl_seconds:
+                if (
+                    name in self.models
+                    and self.in_flight.get(name, 0) == 0
+                    and (now - last_ts) > ttl_seconds
+                ):
                     to_unload.append(name)
 
             if not to_unload:
@@ -145,8 +187,7 @@ class ModelManager:
                 logger.info(
                     f"Unloading idle model: {name} (idle for {now - self.last_used[name]:.1f}s)"
                 )
-                del self.models[name]
-                del self.last_used[name]
+                self._drop_model_locked(name)
 
         # Force garbage collection outside the lock to avoid blocking other threads
         gc.collect()
@@ -163,6 +204,45 @@ class ModelManager:
         """Get list of currently loaded model names"""
         with self._lock:
             return list(self.models.keys())
+
+    def reset_for_tests(self):
+        """Reset mutable singleton state for focused tests."""
+        with self._lock:
+            self.models.clear()
+            self.in_flight.clear()
+            self.last_used.clear()
+            self._loading.clear()
+            self.max_loaded_models = settings.ML_MAX_LOADED_MODELS
+
+    def _drop_model_locked(self, name: str):
+        self.models.pop(name, None)
+        self.last_used.pop(name, None)
+        self.in_flight.pop(name, None)
+
+    def _evict_for_capacity_locked(self, skip: set[str] | None = None):
+        skip = skip or set()
+        while len(self.models) >= self.max_loaded_models:
+            candidates = [
+                (model_name, last_ts)
+                for model_name, last_ts in self.last_used.items()
+                if model_name not in skip
+                and model_name in self.models
+                and self.in_flight.get(model_name, 0) == 0
+            ]
+            if not candidates:
+                logger.warning(
+                    "Model capacity reached but all loaded models are in use; temporarily allowing %s loaded models",
+                    len(self.models) + 1,
+                )
+                return
+
+            oldest_name, _ = min(candidates, key=lambda item: item[1])
+            logger.info(
+                "Max models reached (%s). Unloading least recently used model: %s",
+                self.max_loaded_models,
+                oldest_name,
+            )
+            self._drop_model_locked(oldest_name)
 
 
 # Global instance

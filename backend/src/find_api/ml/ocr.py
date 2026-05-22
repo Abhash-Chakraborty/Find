@@ -39,9 +39,8 @@ class OCRExtractor:
             # Standard cv2 is BGR, PIL is RGB. PaddleOCR handles both but prefers RGB usually?
             # Let's assume RGB from PIL -> numpy is fine.
 
-            ocr = self.manager.get_model("paddleocr", self._load_model)
-
-            result = ocr.ocr(image, cls=True)
+            with self.manager.use_model("paddleocr", self._load_model) as ocr:
+                result = ocr.ocr(image, cls=True)
 
             text_parts = []
             if result and result[0]:
@@ -66,9 +65,8 @@ class OCRExtractor:
             if isinstance(image, Image.Image):
                 image = np.array(image)
 
-            ocr = self.manager.get_model("paddleocr", self._load_model)
-
-            result = ocr.ocr(image, cls=True)
+            with self.manager.use_model("paddleocr", self._load_model) as ocr:
+                result = ocr.ocr(image, cls=True)
 
             blocks = []
             if result and result[0]:

@@ -50,9 +50,8 @@ class FaceDetector:
                 # Convert PIL to BGR numpy array (cv2 format)
                 image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
-            app = self.manager.get_model("insightface", self._load_model)
-
-            faces = app.get(image)
+            with self.manager.use_model("insightface", self._load_model) as app:
+                faces = app.get(image)
 
             results = []
             for face in faces:

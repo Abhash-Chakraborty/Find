@@ -8,7 +8,6 @@ from typing import Tuple, Dict
 import logging
 
 from find_api.core.config import settings
-from find_api.core.model_manager import get_model_manager
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,6 @@ class ImageClusterer:
         min_cluster_size: int = None,
         min_samples: int = None,
     ):
-        self.manager = get_model_manager()
         # Allow override from settings, but default to small if not set
         self.min_cluster_size = min_cluster_size or getattr(
             settings, "MIN_CLUSTER_SIZE", 2
@@ -33,21 +31,12 @@ class ImageClusterer:
             f"min_samples={self.min_samples}"
         )
 
-    def _load_model(self):
-        """Loader function for ModelManager"""
-        # We don't really 'load' an HDBSCAN model in the same way as a Safetensors file,
-        # but we can cache the instance if it holds state or for consistent lifecycle management.
-        return self
-
     def cluster(
         self, embeddings: np.ndarray, metric: str = "euclidean"
     ) -> Tuple[np.ndarray, Dict]:
         """
         Cluster embeddings using HDBSCAN
         """
-        # Ensure model is 'registered' as used in manager
-        self.manager.get_model("clusterer", self._load_model)
-
         try:
             embeddings = np.asarray(embeddings, dtype=np.float32, order="C")
 

@@ -75,18 +75,13 @@ class TestJobStatus:
 
 def test_loaded_models_endpoint(client):
     """Test the /api/status/models endpoint"""
-    from find_api.core.model_manager import get_model_manager
+    with patch("find_api.routers.status.get_model_manager") as mock_get_manager:
+        mock_manager = mock_get_manager.return_value
+        mock_manager.get_loaded_models.return_value = ["mock_test_model"]
 
-    manager = get_model_manager()
+        response = client.get("/api/status/models")
 
-    # Force a mock model for testing
-    manager.models["mock_test_model"] = "loaded"
-
-    response = client.get("/api/status/models")
     assert response.status_code == 200
     body = response.json()
     assert "mock_test_model" in body["loaded_models"]
     assert "ttl_seconds" in body
-
-    # Cleanup
-    del manager.models["mock_test_model"]
