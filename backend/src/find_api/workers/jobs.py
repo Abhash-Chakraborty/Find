@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 # Start ML model cleanup for the worker process
 try:
     get_model_manager().start_autocleanup(
-        ttl_seconds=settings.ML_MODEL_IDLE_TTL_SECONDS
+        ttl_seconds=settings.ML_MODEL_IDLE_TTL_SECONDS,
+        process_name="worker",
     )
 except Exception as e:
     logger.error(f"Failed to start model cleanup thread in worker: {e}")

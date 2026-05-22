@@ -4,7 +4,9 @@ Model Manager for efficient GPU resource management
 
 import asyncio
 import gc
+import json
 import logging
+import os
 import threading
 import time
 from contextlib import contextmanager
@@ -43,9 +45,11 @@ class ModelManager:
         self.in_flight: Dict[str, int] = {}
         self.last_used: Dict[str, float] = {}
         self._loading: Dict[str, threading.Event] = {}
+        self.failed_loads: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
         self.gpu_lock = asyncio.Lock()
         self._cleanup_thread = None
+        self.process_name = os.getenv("MODEL_MANAGER_PROCESS_NAME", "api")
         self._initialized = True
         self.max_loaded_models = settings.ML_MAX_LOADED_MODELS
         logger.info(
@@ -59,9 +63,18 @@ class ModelManager:
                 raise ValueError("max loaded models must be a positive integer")
             self.max_loaded_models = count
 
-    def start_autocleanup(self, interval_seconds: int = 60, ttl_seconds: int = 300):
+    def start_autocleanup(
+        self,
+        interval_seconds: int = 60,
+        ttl_seconds: int = 300,
+        process_name: str | None = None,
+    ):
         """Start background thread for automatic idle unloading"""
         with self._lock:
+            if process_name:
+                self.process_name = process_name
+            self.publish_status()
+
             if self._cleanup_thread and self._cleanup_thread.is_alive():
                 return
 
@@ -120,10 +133,15 @@ class ModelManager:
         logger.info("Lazy-loading model: %s", name)
         try:
             model = loader()
-        except Exception:
+        except Exception as exc:
             with self._lock:
+                self.failed_loads[name] = {
+                    "error": str(exc),
+                    "failed_at": time.time(),
+                }
                 self._loading.pop(name, None)
                 loading_event.set()
+                self.publish_status()
             logger.exception("Failed to load model %s", name)
             raise
 
@@ -136,6 +154,8 @@ class ModelManager:
                 self.models[name] = model
                 self.in_flight.setdefault(name, 0)
                 self.last_used[name] = time.time()
+                self.failed_loads.pop(name, None)
+                self.publish_status()
                 logger.info("Model loaded successfully: %s", name)
                 return model
             finally:
@@ -163,6 +183,7 @@ class ModelManager:
                 self.in_flight[name] = count - 1
             if name in self.models:
                 self.last_used[name] = time.time()
+            self.publish_status()
 
     def unload_idle_models(self, ttl_seconds: int):
         """
@@ -188,6 +209,7 @@ class ModelManager:
                     f"Unloading idle model: {name} (idle for {now - self.last_used[name]:.1f}s)"
                 )
                 self._drop_model_locked(name)
+            self.publish_status()
 
         # Force garbage collection outside the lock to avoid blocking other threads
         gc.collect()
@@ -212,7 +234,34 @@ class ModelManager:
             self.in_flight.clear()
             self.last_used.clear()
             self._loading.clear()
+            self.failed_loads.clear()
             self.max_loaded_models = settings.ML_MAX_LOADED_MODELS
+            self.publish_status()
+
+    def get_status(self) -> Dict[str, Any]:
+        """Return current process model-manager status."""
+        with self._lock:
+            return {
+                "process": self.process_name,
+                "loaded_models": list(self.models.keys()),
+                "in_flight": {
+                    name: count for name, count in self.in_flight.items() if count > 0
+                },
+                "failed_models": self.failed_loads.copy(),
+                "max_loaded_models": self.max_loaded_models,
+                "updated_at": time.time(),
+            }
+
+    def publish_status(self):
+        """Best-effort publish of this process model state for API observability."""
+        try:
+            from redis import Redis
+
+            redis_conn = Redis.from_url(settings.REDIS_URL)
+            key = f"find:model_status:{self.process_name}"
+            redis_conn.setex(key, 600, json.dumps(self.get_status()))
+        except Exception as exc:
+            logger.debug("Failed to publish model manager status: %s", exc)
 
     def _drop_model_locked(self, name: str):
         self.models.pop(name, None)

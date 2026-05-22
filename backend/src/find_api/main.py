@@ -57,7 +57,8 @@ async def lifespan(app: FastAPI):
     # Start ML model cleanup
     logger.info("Starting ML model cleanup thread...")
     get_model_manager().start_autocleanup(
-        ttl_seconds=settings.ML_MODEL_IDLE_TTL_SECONDS
+        ttl_seconds=settings.ML_MODEL_IDLE_TTL_SECONDS,
+        process_name="api",
     )
 
     recovery_task = asyncio.create_task(run_analysis_recovery_loop())
