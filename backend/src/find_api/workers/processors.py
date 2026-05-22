@@ -61,6 +61,7 @@ def extract_image_metadata(
     except Exception as e:
         logger.error(f"Object detection failed: {e}")
         metadata["objects"] = []
+        metadata["object_detection_error"] = str(e)
 
     # 2. Image Captioning
     try:
@@ -76,6 +77,7 @@ def extract_image_metadata(
     except Exception as e:
         logger.error(f"Captioning failed: {e}")
         metadata["caption"] = ""
+        metadata["caption_error"] = str(e)
 
     # 3. OCR Text Extraction
     try:
@@ -94,6 +96,7 @@ def extract_image_metadata(
         logger.error(f"OCR failed: {e}")
         metadata["ocr_text"] = ""
         metadata["text_blocks"] = []
+        metadata["ocr_error"] = str(e)
 
     return metadata
 
