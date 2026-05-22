@@ -80,6 +80,34 @@ class TestGalleryResponseShape:
         assert item["objects"] == ["sun"]
         assert item["has_text"] is True
 
+    def test_image_detail_includes_stage_status(self, client, db):
+        media = _seed(
+            db,
+            filename="stage_test.png",
+            status="indexed",
+            metadata_json={
+                "caption": "sunset",
+                "objects": [],
+                "ocr_text": "",
+                "stage_status": {
+                    "object_detection": {"status": "success", "error": None},
+                    "captioning": {"status": "failed", "error": "Model loading failed"},
+                    "ocr": {"status": "success", "error": None},
+                    "embedding": {"status": "success", "error": None},
+                },
+            },
+        )
+
+        response = client.get(f"/api/image/{media.id}")
+        assert response.status_code == 200
+        body = response.json()
+        assert "stage_status" in body["metadata"]
+        assert body["metadata"]["stage_status"]["captioning"]["status"] == "failed"
+        assert (
+            body["metadata"]["stage_status"]["captioning"]["error"]
+            == "Model loading failed"
+        )
+
 
 class TestGalleryFiltering:
     """Status and liked filtering."""

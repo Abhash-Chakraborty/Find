@@ -2,15 +2,54 @@
 Status endpoint for checking job progress
 """
 
+import json
+
 from fastapi import APIRouter, HTTPException
 from redis import Redis
 from rq.job import Job
 
 from find_api.core.config import settings
+from find_api.core.model_manager import get_model_manager
 
 router = APIRouter()
 
 redis_conn = Redis.from_url(settings.REDIS_URL)
+
+
+@router.get("/status/models")
+def get_loaded_models():
+    """
+    Get currently loaded ML models across API/worker processes.
+    """
+    manager = get_model_manager()
+    local_status = manager.get_status()
+    process_status = {local_status["process"]: local_status}
+
+    for key in redis_conn.scan_iter("find:model_status:*"):
+        try:
+            raw_status = redis_conn.get(key)
+            if not raw_status:
+                continue
+            status = json.loads(raw_status)
+            process_name = status.get("process")
+            if process_name:
+                process_status[process_name] = status
+        except Exception:
+            continue
+
+    loaded_models = sorted(
+        {
+            model_name
+            for status in process_status.values()
+            for model_name in status.get("loaded_models", [])
+        }
+    )
+
+    return {
+        "loaded_models": loaded_models,
+        "processes": process_status,
+        "ttl_seconds": settings.ML_MODEL_IDLE_TTL_SECONDS,
+    }
 
 
 @router.get("/status/{job_id}")

@@ -17,6 +17,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  type AnalysisStageName,
+  type AnalysisStageStatus,
   deleteImage,
   getImageDetail,
   type MediaDetail,
@@ -62,6 +64,21 @@ type ImagePreviewModalProps = {
   hasNext?: boolean;
 };
 
+const ANALYSIS_STAGE_ORDER: AnalysisStageName[] = [
+  "object_detection",
+  "captioning",
+  "ocr",
+  "embedding",
+];
+const PROCESSING_DETAIL_REFRESH_INTERVAL_MS = 2000;
+
+function formatAnalysisStageName(stage: AnalysisStageName) {
+  if (stage === "ocr") {
+    return "OCR";
+  }
+  return stage.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function DetailRow({
   label,
   children,
@@ -100,7 +117,13 @@ export function ImagePreviewModal({
     queryFn: () => getImageDetail(media.id),
     enabled: media.id !== null,
     staleTime: MINIO_URL_STALE_TIME_MS,
-    refetchInterval: MINIO_URL_REFRESH_INTERVAL_MS,
+    refetchInterval: (query) => {
+      const currentStatus = query.state.data?.status ?? media.status;
+      if (currentStatus === "pending" || currentStatus === "processing") {
+        return PROCESSING_DETAIL_REFRESH_INTERVAL_MS;
+      }
+      return MINIO_URL_REFRESH_INTERVAL_MS;
+    },
   });
 
   useEffect(() => {
@@ -137,6 +160,27 @@ export function ImagePreviewModal({
     detailData?.metadata?.caption ?? detailData?.caption ?? media.caption;
   const objects = detailData?.metadata?.objects ?? detailData?.objects ?? [];
   const ocrText = detailData?.metadata?.ocr_text;
+
+  const stageStatus = detailData?.metadata?.stage_status;
+  const displayStageStatus = useMemo<Partial<
+    Record<AnalysisStageName, AnalysisStageStatus>
+  > | null>(() => {
+    if (stageStatus) {
+      return stageStatus;
+    }
+    if (status === "pending" || status === "processing") {
+      return {
+        object_detection: { status: "pending", error: null },
+        captioning: { status: "pending", error: null },
+        ocr: { status: "pending", error: null },
+        embedding: { status: "pending", error: null },
+      };
+    }
+    return null;
+  }, [stageStatus, status]);
+  const captionStage = displayStageStatus?.captioning;
+  const objectDetectionStage = displayStageStatus?.object_detection;
+  const ocrStage = displayStageStatus?.ocr;
 
   const likeMutation = useMutation({
     mutationFn: (mediaId: number) => toggleLike(mediaId),
@@ -350,9 +394,24 @@ export function ImagePreviewModal({
                 Caption
               </h3>
               <div className="rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
-                <p className="text-sm leading-6 text-[color:var(--near-white)]">
-                  {caption || "No caption generated yet."}
-                </p>
+                {status === "pending" || status === "processing" ? (
+                  <p className="text-sm text-[color:var(--silver)] flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+                    Generating caption...
+                  </p>
+                ) : captionStage?.status === "failed" ? (
+                  <p className="text-sm text-[#ff9bab] font-medium leading-6">
+                    Captioning failed: {captionStage.error || "Unknown error"}
+                  </p>
+                ) : caption ? (
+                  <p className="text-sm leading-6 text-[color:var(--near-white)]">
+                    {caption}
+                  </p>
+                ) : (
+                  <p className="text-sm text-[color:var(--silver)]">
+                    No caption generated (empty result).
+                  </p>
+                )}
               </div>
             </section>
 
@@ -361,7 +420,27 @@ export function ImagePreviewModal({
                 Metadata
               </h3>
               <div className="space-y-3 rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
-                {objects.length > 0 ? (
+                {status === "pending" || status === "processing" ? (
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
+                      Detected objects
+                    </p>
+                    <p className="text-sm text-[color:var(--silver)] flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+                      Detecting objects...
+                    </p>
+                  </div>
+                ) : objectDetectionStage?.status === "failed" ? (
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
+                      Detected objects
+                    </p>
+                    <p className="text-sm text-[#ff9bab] font-medium">
+                      Object detection failed:{" "}
+                      {objectDetectionStage.error || "Unknown error"}
+                    </p>
+                  </div>
+                ) : objects.length > 0 ? (
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
                       Detected objects
@@ -383,12 +462,36 @@ export function ImagePreviewModal({
                     </ul>
                   </div>
                 ) : (
-                  <p className="text-sm text-[color:var(--silver)]">
-                    No detected objects yet.
-                  </p>
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
+                      Detected objects
+                    </p>
+                    <p className="text-sm text-[color:var(--silver)]">
+                      No objects detected (empty result).
+                    </p>
+                  </div>
                 )}
 
-                {ocrText && (
+                {status === "pending" || status === "processing" ? (
+                  <div className="border-t border-[var(--frost-soft)] pt-3">
+                    <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
+                      OCR text
+                    </p>
+                    <p className="text-sm text-[color:var(--silver)] flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+                      Running OCR...
+                    </p>
+                  </div>
+                ) : ocrStage?.status === "failed" ? (
+                  <div className="border-t border-[var(--frost-soft)] pt-3">
+                    <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
+                      OCR text
+                    </p>
+                    <p className="text-sm text-[#ff9bab] font-medium">
+                      OCR failed: {ocrStage.error || "Unknown error"}
+                    </p>
+                  </div>
+                ) : ocrText ? (
                   <div className="border-t border-[var(--frost-soft)] pt-3">
                     <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
                       OCR text
@@ -397,9 +500,70 @@ export function ImagePreviewModal({
                       {ocrText}
                     </p>
                   </div>
+                ) : (
+                  <div className="border-t border-[var(--frost-soft)] pt-3">
+                    <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
+                      OCR text
+                    </p>
+                    <p className="text-sm text-[color:var(--silver)]">
+                      No text detected (empty result).
+                    </p>
+                  </div>
                 )}
               </div>
             </section>
+
+            {displayStageStatus && (
+              <section className="mb-6">
+                <h3 className="mb-2 text-xs font-semibold uppercase text-[color:var(--muted)]">
+                  Analysis Stages
+                </h3>
+                <div className="rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4 space-y-3">
+                  {ANALYSIS_STAGE_ORDER.filter(
+                    (stage) => displayStageStatus[stage],
+                  ).map((stage) => {
+                    const info = displayStageStatus[stage];
+                    if (!info) {
+                      return null;
+                    }
+                    const prettyName = formatAnalysisStageName(stage);
+
+                    const statusClass = (() => {
+                      if (info.status === "success") {
+                        return "border-[color:var(--status-indexed-border)] bg-[color:var(--green-soft)] text-[color:var(--status-indexed-text)]";
+                      }
+                      if (info.status === "failed") {
+                        return "border-[color:var(--status-failed-border)] bg-[color:var(--red-soft)] text-[color:var(--status-failed-text)]";
+                      }
+                      return "border-[color:var(--status-pending-border)] bg-[color:var(--yellow-soft)] text-[color:var(--status-pending-text)]";
+                    })();
+
+                    return (
+                      <div
+                        key={stage}
+                        className="flex flex-col gap-1 text-sm border-b border-[var(--frost-soft)] pb-3 last:border-b-0 last:pb-0"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-[color:var(--near-white)]">
+                            {prettyName}
+                          </span>
+                          <span
+                            className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full border ${statusClass}`}
+                          >
+                            {info.status}
+                          </span>
+                        </div>
+                        {info.status === "failed" && info.error && (
+                          <p className="text-xs text-[#ff9bab] mt-1 pl-1 leading-normal">
+                            Error: {info.error}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             {detailData?.error && (
               <p className="rounded-2xl border border-[var(--red-soft)] bg-[var(--red-soft)] p-3 text-sm text-[#ff9bab]">

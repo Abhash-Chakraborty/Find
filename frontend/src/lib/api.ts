@@ -13,6 +13,16 @@ export const api: AxiosInstance = axios.create({
 
 // Types
 export type MediaStatus = "pending" | "processing" | "indexed" | "failed";
+export type AnalysisStageName =
+  | "object_detection"
+  | "captioning"
+  | "ocr"
+  | "embedding";
+
+export type AnalysisStageStatus = {
+  status: "pending" | "success" | "failed";
+  error: string | null;
+};
 
 export interface MediaItem {
   id: number;
@@ -58,6 +68,7 @@ export interface MediaDetail extends MediaItem {
       confidence: number;
       bbox: { x: number; y: number; width: number; height: number };
     }>;
+    stage_status?: Partial<Record<AnalysisStageName, AnalysisStageStatus>>;
   };
   exif?: Record<string, string>;
   error?: string | null;
@@ -151,6 +162,10 @@ export interface JobStatus {
   error?: string;
 }
 
+export interface AppConfig {
+  ml_mode: "full" | "mock";
+}
+
 // API Functions
 export const uploadImages = async (
   files: FileList | File[],
@@ -192,6 +207,11 @@ export const uploadImagesBulk = async (
 
 export const getJobStatus = async (jobId: string): Promise<JobStatus> => {
   const response = await api.get<JobStatus>(`/api/status/${jobId}`);
+  return response.data;
+};
+
+export const getAppConfig = async (): Promise<AppConfig> => {
+  const response = await api.get<AppConfig>("/api/config");
   return response.data;
 };
 
