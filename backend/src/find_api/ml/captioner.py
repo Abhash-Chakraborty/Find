@@ -31,7 +31,10 @@ class ImageCaptioner:
         torch_dtype = torch.float16 if device == "cuda" else torch.float32
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, trust_remote_code=True, torch_dtype=torch_dtype
+            model_id,
+            trust_remote_code=True,
+            dtype=torch_dtype,
+            attn_implementation="eager",
         ).to(device)
 
         processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
@@ -84,6 +87,7 @@ class ImageCaptioner:
                         max_new_tokens=max_length,
                         num_beams=num_beams,
                         do_sample=False,
+                        use_cache=False,
                     )
 
                 generated_text = processor.batch_decode(
@@ -151,6 +155,7 @@ class ImageCaptioner:
                         pixel_values=inputs["pixel_values"],
                         max_new_tokens=max_length,
                         do_sample=False,
+                        use_cache=False,
                     )
 
                 generated_text = processor.batch_decode(
