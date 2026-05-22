@@ -1,12 +1,10 @@
-"""
-Feedback router - API endpoints for user corrections and ratings
-"""
+from typing import Any, List, Optional
+from datetime import datetime
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List, Optional
-import logging
+from sqlalchemy.orm import Session
 
 from find_api.core.database import get_db
 from find_api.models.feedback import PersonFeedback, GeneralFeedback
@@ -16,6 +14,16 @@ from find_api.models.media import Media
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["feedback"])
+
+
+# ─── Helpers ───────────────────────────────────────────────────────────────
+
+
+def _validate_rating(rating: Optional[int]) -> None:
+    if rating is None:
+        raise HTTPException(status_code=400, detail="rating is required")
+    if rating < 1 or rating > 5:
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
 
 
 # ─── Pydantic Schemas ─────────────────────────────────────────────────────
@@ -39,20 +47,22 @@ class PersonFeedbackResponse(BaseModel):
     target_person_id: Optional[int]
     face_ids: List[int]
     status: str
-    created_at: str
+    created_at: datetime
 
     class Config:
         from_attributes = True
 
 
 class GeneralFeedbackRequest(BaseModel):
-    """Request body for general feedback (ratings)"""
+    """Request body for general feedback and correction data."""
 
-    feedback_type: str  # "search_rating", "caption_rating", "object_rating"
+    feedback_type: str
     media_id: Optional[int] = None
     person_id: Optional[int] = None
     rating: Optional[int] = None  # 1-5
     rating_reason: Optional[str] = None
+    corrected_caption: Optional[str] = None
+    corrected_objects: Optional[List[str]] = None
 
 
 class GeneralFeedbackResponse(BaseModel):
@@ -64,7 +74,8 @@ class GeneralFeedbackResponse(BaseModel):
     person_id: Optional[int]
     rating: Optional[int]
     rating_reason: Optional[str]
-    created_at: str
+    extra_metadata: Optional[dict[str, Any]]
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -108,6 +119,13 @@ def submit_split_feedback(
             status_code=400, detail="One or more face_ids do not belong to this person"
         )
 
+    total_faces = db.query(Face).filter(Face.person_id == person_id).count()
+    if len(faces) >= total_faces:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot split every face from a person group",
+        )
+
     try:
         # Create new person (unnamed)
         new_person = Person(name=None)
@@ -138,10 +156,10 @@ def submit_split_feedback(
         )
 
         return feedback
-    except Exception as exc:
+    except Exception:
         db.rollback()
         logger.exception("Failed to split person cluster")
-        raise HTTPException(status_code=500, detail=f"Split failed: {str(exc)}")
+        raise HTTPException(status_code=500, detail="Split failed")
 
 
 @router.post(
@@ -235,6 +253,13 @@ def submit_wrong_person_feedback(
             status_code=400, detail="One or more faces don't belong to this person"
         )
 
+    total_faces = db.query(Face).filter(Face.person_id == person_id).count()
+    if len(faces) >= total_faces:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot move every face out of a person group",
+        )
+
     try:
         # Create new unnamed person
         new_person = Person(name=None)
@@ -323,7 +348,7 @@ def rate_search_result(
     """
     Rate the relevance of a search result (1-5 stars).
     """
-    if not body.media_id:
+    if body.media_id is None:
         raise HTTPException(
             status_code=400, detail="media_id is required for search rating"
         )
@@ -332,8 +357,7 @@ def rate_search_result(
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
 
-    if body.rating and (body.rating < 1 or body.rating > 5):
-        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    _validate_rating(body.rating)
 
     try:
         feedback = GeneralFeedback(
@@ -365,7 +389,7 @@ def rate_caption(
     """
     Rate the accuracy of an image caption (1-5 stars).
     """
-    if not body.media_id:
+    if body.media_id is None:
         raise HTTPException(
             status_code=400, detail="media_id is required for caption rating"
         )
@@ -374,8 +398,7 @@ def rate_caption(
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
 
-    if body.rating and (body.rating < 1 or body.rating > 5):
-        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    _validate_rating(body.rating)
 
     try:
         feedback = GeneralFeedback(
@@ -407,7 +430,7 @@ def rate_object_detection(
     """
     Rate the accuracy of object detection (1-5 stars).
     """
-    if not body.media_id:
+    if body.media_id is None:
         raise HTTPException(
             status_code=400, detail="media_id is required for object rating"
         )
@@ -416,8 +439,7 @@ def rate_object_detection(
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
 
-    if body.rating and (body.rating < 1 or body.rating > 5):
-        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    _validate_rating(body.rating)
 
     try:
         feedback = GeneralFeedback(
@@ -439,6 +461,107 @@ def rate_object_detection(
         db.rollback()
         logger.exception("Failed to record object rating")
         raise HTTPException(status_code=500, detail="Failed to save rating")
+
+
+@router.post("/feedback/caption-correction", response_model=GeneralFeedbackResponse)
+def submit_caption_correction(
+    body: GeneralFeedbackRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Store user-edited caption text for future local personalization/training.
+    """
+    if body.media_id is None:
+        raise HTTPException(
+            status_code=400, detail="media_id is required for caption correction"
+        )
+
+    corrected_caption = (body.corrected_caption or "").strip()
+    if not corrected_caption:
+        raise HTTPException(status_code=400, detail="corrected_caption is required")
+
+    media = db.query(Media).filter(Media.id == body.media_id).first()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    metadata = media.metadata_json or {}
+
+    try:
+        feedback = GeneralFeedback(
+            feedback_type="caption_correction",
+            media_id=body.media_id,
+            rating_reason=body.rating_reason,
+            extra_metadata={
+                "original_caption": metadata.get("caption") or "",
+                "corrected_caption": corrected_caption,
+            },
+        )
+        db.add(feedback)
+        db.commit()
+        db.refresh(feedback)
+
+        logger.info("Caption correction recorded for media %s", body.media_id)
+
+        return feedback
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to record caption correction")
+        raise HTTPException(status_code=500, detail="Failed to save correction")
+
+
+@router.post("/feedback/object-correction", response_model=GeneralFeedbackResponse)
+def submit_object_correction(
+    body: GeneralFeedbackRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Store user-corrected object labels for future local personalization/training.
+    """
+    if body.media_id is None:
+        raise HTTPException(
+            status_code=400, detail="media_id is required for object correction"
+        )
+
+    corrected_objects = [
+        label.strip()
+        for label in (body.corrected_objects or [])
+        if label and label.strip()
+    ]
+    if not corrected_objects:
+        raise HTTPException(status_code=400, detail="corrected_objects is required")
+
+    media = db.query(Media).filter(Media.id == body.media_id).first()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    metadata = media.metadata_json or {}
+    original_objects = [
+        obj.get("class")
+        for obj in metadata.get("objects", [])
+        if isinstance(obj, dict) and obj.get("class")
+    ]
+
+    try:
+        feedback = GeneralFeedback(
+            feedback_type="object_correction",
+            media_id=body.media_id,
+            rating_reason=body.rating_reason,
+            extra_metadata={
+                "original_objects": original_objects,
+                "corrected_objects": corrected_objects,
+            },
+        )
+        db.add(feedback)
+        db.commit()
+        db.refresh(feedback)
+
+        logger.info("Object correction recorded for media %s", body.media_id)
+
+        return feedback
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to record object correction")
+        raise HTTPException(status_code=500, detail="Failed to save correction")
 
 
 # ─── Analytics Endpoints ──────────────────────────────────────────────────

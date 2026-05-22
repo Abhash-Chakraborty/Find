@@ -13,6 +13,16 @@ export const api: AxiosInstance = axios.create({
 
 // Types
 export type MediaStatus = "pending" | "processing" | "indexed" | "failed";
+export type AnalysisStageName =
+  | "object_detection"
+  | "captioning"
+  | "ocr"
+  | "embedding";
+
+export type AnalysisStageStatus = {
+  status: "pending" | "success" | "failed";
+  error: string | null;
+};
 
 export interface MediaItem {
   id: number;
@@ -58,6 +68,7 @@ export interface MediaDetail extends MediaItem {
       confidence: number;
       bbox: { x: number; y: number; width: number; height: number };
     }>;
+    stage_status?: Partial<Record<AnalysisStageName, AnalysisStageStatus>>;
   };
   exif?: Record<string, string>;
   error?: string | null;
@@ -151,6 +162,10 @@ export interface JobStatus {
   error?: string;
 }
 
+export interface AppConfig {
+  ml_mode: "full" | "mock";
+}
+
 // API Functions
 export const uploadImages = async (
   files: FileList | File[],
@@ -192,6 +207,11 @@ export const uploadImagesBulk = async (
 
 export const getJobStatus = async (jobId: string): Promise<JobStatus> => {
   const response = await api.get<JobStatus>(`/api/status/${jobId}`);
+  return response.data;
+};
+
+export const getAppConfig = async (): Promise<AppConfig> => {
+  const response = await api.get<AppConfig>("/api/config");
   return response.data;
 };
 
@@ -324,6 +344,7 @@ export interface PersonImage {
   media_id: number;
   filename: string;
   faces: {
+    id: number;
     bounding_box: { x1: number; y1: number; x2: number; y2: number };
     confidence: number;
   }[];
@@ -381,6 +402,7 @@ export interface GeneralFeedback {
   person_id?: number | null;
   rating?: number | null;
   rating_reason?: string | null;
+  extra_metadata?: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -493,6 +515,40 @@ export const submitObjectRating = async (
       feedback_type: "object_rating",
       media_id: mediaId,
       rating,
+      rating_reason: reason,
+    },
+  );
+  return response.data;
+};
+
+export const submitCaptionCorrection = async (
+  mediaId: number,
+  correctedCaption: string,
+  reason?: string,
+): Promise<GeneralFeedback> => {
+  const response = await api.post<GeneralFeedback>(
+    "/api/feedback/caption-correction",
+    {
+      feedback_type: "caption_correction",
+      media_id: mediaId,
+      corrected_caption: correctedCaption,
+      rating_reason: reason,
+    },
+  );
+  return response.data;
+};
+
+export const submitObjectCorrection = async (
+  mediaId: number,
+  correctedObjects: string[],
+  reason?: string,
+): Promise<GeneralFeedback> => {
+  const response = await api.post<GeneralFeedback>(
+    "/api/feedback/object-correction",
+    {
+      feedback_type: "object_correction",
+      media_id: mediaId,
+      corrected_objects: correctedObjects,
       rating_reason: reason,
     },
   );

@@ -45,6 +45,7 @@ class PersonUpdate(BaseModel):
 class PersonImageFace(BaseModel):
     """Face data for one image in a person group."""
 
+    id: int
     bounding_box: dict
     confidence: float
 
@@ -110,7 +111,13 @@ def get_person_images(person_id: int, db: Session = Depends(get_db)):
 
     # Get all unique media IDs where this person appears
     face_rows = (
-        db.query(Face.media_id, Media.filename, Face.bounding_box, Face.confidence)
+        db.query(
+            Face.id,
+            Face.media_id,
+            Media.filename,
+            Face.bounding_box,
+            Face.confidence,
+        )
         .join(Media, Media.id == Face.media_id)
         .filter(Face.person_id == person_id)
         .order_by(Media.created_at.desc())
@@ -128,6 +135,7 @@ def get_person_images(person_id: int, db: Session = Depends(get_db)):
             }
         images[row.media_id]["faces"].append(
             {
+                "id": row.id,
                 "bounding_box": row.bounding_box,
                 "confidence": row.confidence,
             }

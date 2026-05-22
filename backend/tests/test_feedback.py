@@ -3,15 +3,11 @@ Tests for feedback system (person corrections and general ratings)
 """
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from find_api.main import app
+
 from find_api.models.person import Person
 from find_api.models.face import Face
 from find_api.models.media import Media
-
-
-client = TestClient(app)
 
 
 @pytest.fixture
@@ -20,8 +16,9 @@ def test_media(db: Session):
     media = Media(
         filename="test.jpg",
         file_hash="testhash123",
-        size_bytes=1024,
-        mime_type="image/jpeg",
+        minio_key="images/test.jpg",
+        file_size=1024,
+        content_type="image/jpeg",
         width=800,
         height=600,
     )
@@ -60,7 +57,7 @@ def test_person_with_faces(db: Session, test_media: Media):
 class TestPersonClusterFeedback:
     """Test person cluster split/merge/correction feedback"""
 
-    def test_split_person_cluster(self, db: Session, test_person_with_faces):
+    def test_split_person_cluster(self, client, db: Session, test_person_with_faces):
         """Test splitting a person cluster by moving selected faces to new person"""
         person, faces = test_person_with_faces
         face_ids_to_split = [faces[0].id, faces[1].id]
@@ -81,10 +78,13 @@ class TestPersonClusterFeedback:
         assert len(feedback["face_ids"]) == 2
 
         # Verify faces were moved to new person
+        db.expire_all()
         db_faces = db.query(Face).filter(Face.id.in_(face_ids_to_split)).all()
         assert all(f.person_id != person.id for f in db_faces)
 
-    def test_split_with_empty_face_ids(self, db: Session, test_person_with_faces):
+    def test_split_with_empty_face_ids(
+        self, client, db: Session, test_person_with_faces
+    ):
         """Test that split fails with empty face_ids"""
         person, _ = test_person_with_faces
 
@@ -98,7 +98,7 @@ class TestPersonClusterFeedback:
 
         assert response.status_code == 400
 
-    def test_merge_two_persons(self, db: Session, test_media: Media):
+    def test_merge_two_persons(self, client, db: Session, test_media: Media):
         """Test merging two person groups"""
         person1 = Person(name="Person 1")
         person2 = Person(name="Person 2")
@@ -136,7 +136,9 @@ class TestPersonClusterFeedback:
         db.refresh(face1)
         assert face1.person_id == person2.id
 
-    def test_merge_person_with_itself_fails(self, db: Session, test_person_with_faces):
+    def test_merge_person_with_itself_fails(
+        self, client, db: Session, test_person_with_faces
+    ):
         """Test that merging a person with itself fails"""
         person, _ = test_person_with_faces
 
@@ -150,7 +152,7 @@ class TestPersonClusterFeedback:
 
         assert response.status_code == 400
 
-    def test_wrong_person_feedback(self, db: Session, test_person_with_faces):
+    def test_wrong_person_feedback(self, client, db: Session, test_person_with_faces):
         """Test marking face as wrong person"""
         person, faces = test_person_with_faces
         face_id = faces[0].id
@@ -169,10 +171,11 @@ class TestPersonClusterFeedback:
         assert feedback["feedback_type"] == "wrong_person"
 
         # Verify face moved to new person
+        db.expire_all()
         db_face = db.query(Face).filter(Face.id == face_id).first()
         assert db_face.person_id != person.id
 
-    def test_correct_feedback(self, db: Session, test_person_with_faces):
+    def test_correct_feedback(self, client, db: Session, test_person_with_faces):
         """Test marking person cluster as correctly grouped"""
         person, faces = test_person_with_faces
 
@@ -194,7 +197,7 @@ class TestPersonClusterFeedback:
 class TestGeneralFeedback:
     """Test general feedback (ratings) for search, captions, objects"""
 
-    def test_search_rating(self, db: Session, test_media: Media):
+    def test_search_rating(self, client, db: Session, test_media: Media):
         """Test rating a search result"""
         response = client.post(
             "/api/feedback/search-rating",
@@ -211,7 +214,7 @@ class TestGeneralFeedback:
         assert feedback["feedback_type"] == "search_rating"
         assert feedback["rating"] == 5
 
-    def test_caption_rating(self, db: Session, test_media: Media):
+    def test_caption_rating(self, client, db: Session, test_media: Media):
         """Test rating a caption"""
         response = client.post(
             "/api/feedback/caption-rating",
@@ -228,7 +231,31 @@ class TestGeneralFeedback:
         assert feedback["feedback_type"] == "caption_rating"
         assert feedback["rating"] == 3
 
-    def test_object_rating(self, db: Session, test_media: Media):
+    def test_caption_correction(self, client, db: Session, test_media: Media):
+        """Test storing a corrected caption for future training data."""
+        test_media.metadata_json = {"caption": "a wrong caption"}
+        db.commit()
+
+        response = client.post(
+            "/api/feedback/caption-correction",
+            json={
+                "feedback_type": "caption_correction",
+                "media_id": test_media.id,
+                "corrected_caption": "a person standing near a building",
+            },
+        )
+
+        assert response.status_code == 200
+        feedback = response.json()
+        assert feedback["feedback_type"] == "caption_correction"
+        assert feedback["rating"] is None
+        assert feedback["extra_metadata"]["original_caption"] == "a wrong caption"
+        assert (
+            feedback["extra_metadata"]["corrected_caption"]
+            == "a person standing near a building"
+        )
+
+    def test_object_rating(self, client, db: Session, test_media: Media):
         """Test rating object detection"""
         response = client.post(
             "/api/feedback/object-rating",
@@ -245,7 +272,36 @@ class TestGeneralFeedback:
         assert feedback["feedback_type"] == "object_rating"
         assert feedback["rating"] == 4
 
-    def test_rating_validation(self, db: Session, test_media: Media):
+    def test_object_correction(self, client, db: Session, test_media: Media):
+        """Test storing corrected object labels for future training data."""
+        test_media.metadata_json = {
+            "objects": [
+                {"class": "person", "confidence": 0.95},
+                {"class": "chair", "confidence": 0.55},
+            ]
+        }
+        db.commit()
+
+        response = client.post(
+            "/api/feedback/object-correction",
+            json={
+                "feedback_type": "object_correction",
+                "media_id": test_media.id,
+                "corrected_objects": ["person", "backpack"],
+            },
+        )
+
+        assert response.status_code == 200
+        feedback = response.json()
+        assert feedback["feedback_type"] == "object_correction"
+        assert feedback["rating"] is None
+        assert feedback["extra_metadata"]["original_objects"] == ["person", "chair"]
+        assert feedback["extra_metadata"]["corrected_objects"] == [
+            "person",
+            "backpack",
+        ]
+
+    def test_rating_validation(self, client, db: Session, test_media: Media):
         """Test that ratings are validated (1-5 range)"""
         response = client.post(
             "/api/feedback/search-rating",
@@ -258,12 +314,37 @@ class TestGeneralFeedback:
 
         assert response.status_code == 400
 
+    def test_zero_rating_is_invalid(self, client, db: Session, test_media: Media):
+        """Test that zero is rejected instead of treated as missing/truthy."""
+        response = client.post(
+            "/api/feedback/search-rating",
+            json={
+                "feedback_type": "search_rating",
+                "media_id": test_media.id,
+                "rating": 0,
+            },
+        )
+
+        assert response.status_code == 400
+
+    def test_missing_rating_is_invalid(self, client, db: Session, test_media: Media):
+        """Test that rating endpoints require an explicit 1-5 score."""
+        response = client.post(
+            "/api/feedback/search-rating",
+            json={
+                "feedback_type": "search_rating",
+                "media_id": test_media.id,
+            },
+        )
+
+        assert response.status_code == 400
+
 
 class TestFeedbackStats:
     """Test feedback analytics endpoints"""
 
     def test_get_feedback_stats(
-        self, db: Session, test_media: Media, test_person_with_faces
+        self, client, db: Session, test_media: Media, test_person_with_faces
     ):
         """Test retrieving feedback statistics"""
         person, faces = test_person_with_faces
@@ -272,6 +353,7 @@ class TestFeedbackStats:
         client.post(
             "/api/feedback/search-rating",
             json={
+                "feedback_type": "search_rating",
                 "media_id": test_media.id,
                 "rating": 4,
             },
@@ -279,6 +361,7 @@ class TestFeedbackStats:
         client.post(
             "/api/feedback/caption-rating",
             json={
+                "feedback_type": "caption_rating",
                 "media_id": test_media.id,
                 "rating": 3,
             },
@@ -298,7 +381,7 @@ class TestFeedbackStats:
         assert stats["person_feedback"]["total"] >= 1
         assert stats["general_feedback"]["total"] >= 2
 
-    def test_list_person_feedback(self, db: Session, test_person_with_faces):
+    def test_list_person_feedback(self, client, db: Session, test_person_with_faces):
         """Test listing person feedback by person"""
         person, faces = test_person_with_faces
 

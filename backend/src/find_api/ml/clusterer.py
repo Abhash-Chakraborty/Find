@@ -17,8 +17,8 @@ class ImageClusterer:
 
     def __init__(
         self,
-        min_cluster_size: int = 2,  # Reduced default for small datasets
-        min_samples: int = 1,  # Reduced default
+        min_cluster_size: int = None,
+        min_samples: int = None,
     ):
         # Allow override from settings, but default to small if not set
         self.min_cluster_size = min_cluster_size or getattr(

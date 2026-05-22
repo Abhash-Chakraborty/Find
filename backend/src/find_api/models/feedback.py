@@ -21,6 +21,8 @@ class FeedbackType(str, Enum):
     SEARCH_RATING = "search_rating"  # Rate search result relevance
     CAPTION_RATING = "caption_rating"  # Rate caption accuracy
     OBJECT_RATING = "object_rating"  # Rate object detection accuracy
+    CAPTION_CORRECTION = "caption_correction"  # User-edited caption text
+    OBJECT_CORRECTION = "object_correction"  # User-edited object labels
 
 
 class PersonFeedback(Base):
@@ -79,7 +81,8 @@ class PersonFeedback(Base):
 class GeneralFeedback(Base):
     """
     Generic feedback for search results, captions, objects, and other entities.
-    Supports ratings (1-5 stars) and free-text reasons.
+    Supports ratings plus correction metadata that can be used for future
+    local personalization or training datasets.
     """
 
     __tablename__ = "general_feedback"
@@ -87,7 +90,7 @@ class GeneralFeedback(Base):
     # Unique ID
     id = Column(Integer, primary_key=True, index=True)
 
-    # Type: SEARCH_RATING, CAPTION_RATING, OBJECT_RATING
+    # Type: SEARCH_RATING, CAPTION_RATING, OBJECT_RATING, corrections, etc.
     feedback_type = Column(String(50), nullable=False, index=True)
 
     # Media being rated (optional, for search/caption/object feedback)
@@ -106,14 +109,15 @@ class GeneralFeedback(Base):
         index=True,
     )
 
-    # Rating: 1-5 stars (or 0 for unrated)
-    rating = Column(Integer, nullable=True)  # 0-5 scale
+    # Rating: 1-5 stars
+    rating = Column(Integer, nullable=True)
 
     # Free text reason for the rating
     rating_reason = Column(String(500), nullable=True)
 
-    # JSON metadata (flexible for different feedback types)
-    metadata = Column(JSON, nullable=True)
+    # JSON metadata (flexible for different feedback types). SQLAlchemy reserves
+    # the attribute name `metadata`, so expose it through a safe Python name.
+    extra_metadata = Column("metadata", JSON, nullable=True)
 
     # When feedback was submitted
     created_at = Column(DateTime(timezone=True), server_default=func.now())

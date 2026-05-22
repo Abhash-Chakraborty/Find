@@ -11,7 +11,8 @@ After deploying the feedback collection system (#189, #190), Find will have rich
 - Which person clusters are correct/incorrect
 - Which faces were misclassified
 - Which search results were irrelevant
-- Which captions were inaccurate
+- User-edited captions that describe what the model should have generated
+- User-corrected object labels that describe what should have been detected
 
 **Challenge**: How do we learn from this feedback to improve local models without:
 
@@ -66,6 +67,12 @@ class AdaptiveEpsilonTuner:
         recent = self.feedback_history[-20:]  # Last 20 feedbacks
         split_count = sum(1 for f in recent if f["type"] == "split")
         merge_count = sum(1 for f in recent if f["type"] == "merge")
+        distance_hints = [
+            f["distance_hint"] for f in recent if f.get("distance_hint") is not None
+        ]
+        avg_distance_hint = (
+            sum(distance_hints) / len(distance_hints) if distance_hints else None
+        )
         
         # Too many splits → faces too close together → lower eps
         if split_count > merge_count + 2:
@@ -73,6 +80,9 @@ class AdaptiveEpsilonTuner:
         # Too many merges → faces too far apart → raise eps
         elif merge_count > split_count + 2:
             self.eps = min(0.7, self.eps + 0.02)
+        # If feedback includes measured distances, use it as a small nudge only.
+        elif avg_distance_hint is not None and avg_distance_hint > self.eps + 0.1:
+            self.eps = min(0.7, self.eps + 0.01)
         
         return self.eps
 ```
@@ -104,6 +114,7 @@ class AdaptiveEpsilonTuner:
 
 ```python
 # backend/ml/personalization.py
+import numpy as np
 
 class EmbeddingReweighter:
     def __init__(self):
@@ -130,7 +141,10 @@ class EmbeddingReweighter:
         
         boost = self.face_quality_scores[face_id]
         # Amplify good embeddings, dampen bad ones
-        return embedding * max(0.5, min(2.0, boost))
+        adjusted = embedding * max(0.5, min(2.0, boost))
+        # Re-normalize before cosine similarity so weighting does not create
+        # invalid vector magnitude assumptions.
+        return adjusted / np.linalg.norm(adjusted)
 ```
 
 **Pros**:
@@ -242,7 +256,7 @@ model.fine_tune(hard_negatives, lr=1e-6, epochs=1)
 
 - ✅ Implement feedback models + API (#189, #190)
 - ✅ Frontend split/merge/correct UI
-- ✅ Feedback storage (local SQLite)
+- ✅ Feedback storage in the local application database
 
 ### Phase 2 (1-2 weeks after): Approach A + C
 
@@ -286,7 +300,9 @@ class PersonalizationMetrics:
         self.accuracy_after = accuracy
     
     def improvement_percentage(self):
-        if not self.accuracy_before:
+        if self.accuracy_before is None or self.accuracy_after is None:
+            return 0
+        if self.accuracy_before == 0:
             return 0
         delta = self.accuracy_after - self.accuracy_before
         return (delta / self.accuracy_before) * 100
@@ -307,16 +323,18 @@ class PersonalizationMetrics:
 CREATE TABLE person_feedback (
     id SERIAL PRIMARY KEY,
     source_person_id INT REFERENCES persons(id),
-    feedback_type VARCHAR(50),  -- "split", "merge", "correct"
+    feedback_type VARCHAR(50),  -- "split", "merge", "wrong_person", "correct"
     face_ids JSON,
+    user_reason VARCHAR(500),
     created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE general_feedback (
     id SERIAL PRIMARY KEY,
-    feedback_type VARCHAR(50),  -- "search_rating", "caption_rating"
+    feedback_type VARCHAR(50),  -- "search_rating", "caption_correction", "object_correction"
     media_id INT REFERENCES media(id),
-    rating INT,  -- 1-5
+    rating INT,  -- 1-5 for relevance feedback, nullable for correction feedback
+    metadata JSON,  -- stores corrected_caption or corrected_objects for future training data
     created_at TIMESTAMP DEFAULT NOW()
 );
 ```
@@ -336,7 +354,11 @@ class PersonalizationState:
         feedback = self.db.query(PersonFeedback).all()
         for f in feedback:
             if f.feedback_type == "split":
-                self.epsilon_tuner.record_feedback("split", len(f.face_ids))
+                self.epsilon_tuner.record_feedback(
+                    "split",
+                    len(f.face_ids),
+                    distance_hint=getattr(f, "distance_hint", None),
+                )
     
     def save_to_db(self, feedback):
         """Persist new feedback"""

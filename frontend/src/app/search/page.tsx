@@ -9,9 +9,10 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FeedbackRating } from "@/components/feedback-rating";
 import { ImagePreviewModal } from "@/components/image-preview-modal";
 import { StatusIndicator } from "@/components/status-indicator";
-import { searchImages } from "@/lib/api";
+import { searchImages, submitSearchRating } from "@/lib/api";
 import { MINIO_URL_REFRESH_INTERVAL_MS, resolveMediaUrl } from "@/lib/media";
 
 const examples = [
@@ -204,57 +205,70 @@ export default function SearchPage() {
                 );
 
                 return (
-                  <button
-                    type="button"
+                  <article
                     key={result.media_id}
-                    onClick={() => setSelectedMediaId(result.media_id)}
                     className="frost-panel card-hover group relative overflow-hidden rounded-2xl text-left"
-                    aria-label={`Preview ${result.metadata.filename}`}
                   >
-                    <div className="relative aspect-square overflow-hidden bg-[color:var(--surface-soft)]">
-                      {imageSrc ? (
-                        <Image
-                          src={imageSrc}
-                          alt={result.metadata.filename}
-                          fill
-                          className="object-cover transition duration-500 group-hover:scale-[1.035]"
-                          sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 16vw"
-                          unoptimized
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMediaId(result.media_id)}
+                      className="block w-full text-left"
+                      aria-label={`Preview ${result.metadata.filename}`}
+                    >
+                      <div className="relative aspect-square overflow-hidden bg-[color:var(--surface-soft)]">
+                        {imageSrc ? (
+                          <Image
+                            src={imageSrc}
+                            alt={result.metadata.filename}
+                            fill
+                            className="object-cover transition duration-500 group-hover:scale-[1.035]"
+                            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 16vw"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-[color:var(--muted)]">
+                            <ImageOff className="h-7 w-7" />
+                            <span className="text-xs">No preview</span>
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent opacity-70 transition-opacity group-hover:opacity-95" />
+                        <span className="absolute right-3 top-3 rounded-full border border-[var(--frost)] bg-[color:var(--overlay)] px-2.5 py-1 text-xs font-medium text-white backdrop-blur-md">
+                          {Math.round(result.similarity * 100)}%
+                        </span>
+                        <StatusIndicator
+                          status={result.metadata.status}
+                          className="absolute bottom-3 right-3"
                         />
-                      ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-[color:var(--muted)]">
-                          <ImageOff className="h-7 w-7" />
-                          <span className="text-xs">No preview</span>
+                      </div>
+
+                      <div className="space-y-3 p-3">
+                        <p className="truncate text-xs font-medium text-[color:var(--near-white)]">
+                          {result.metadata.filename}
+                        </p>
+                        {result.metadata.caption && (
+                          <p className="line-clamp-2 text-xs leading-5 text-[color:var(--silver)]">
+                            {result.metadata.caption}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {typeof result.metadata.cluster_id === "number" && (
+                            <span className="accent-badge status-default">
+                              Cluster {result.metadata.cluster_id}
+                            </span>
+                          )}
                         </div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent opacity-70 transition-opacity group-hover:opacity-95" />
-                      <span className="absolute right-3 top-3 rounded-full border border-[var(--frost)] bg-[color:var(--overlay)] px-2.5 py-1 text-xs font-medium text-white backdrop-blur-md">
-                        {Math.round(result.similarity * 100)}%
-                      </span>
-                      <StatusIndicator
-                        status={result.metadata.status}
-                        className="absolute bottom-3 right-3"
+                      </div>
+                    </button>
+
+                    <div className="px-3 pb-3">
+                      <FeedbackRating
+                        label="Search match"
+                        onRate={(rating) =>
+                          submitSearchRating(result.media_id, rating)
+                        }
                       />
                     </div>
-
-                    <div className="space-y-3 p-3">
-                      <p className="truncate text-xs font-medium text-[color:var(--near-white)]">
-                        {result.metadata.filename}
-                      </p>
-                      {result.metadata.caption && (
-                        <p className="line-clamp-2 text-xs leading-5 text-[color:var(--silver)]">
-                          {result.metadata.caption}
-                        </p>
-                      )}
-                      <div className="flex flex-wrap items-center gap-2">
-                        {typeof result.metadata.cluster_id === "number" && (
-                          <span className="accent-badge status-default">
-                            Cluster {result.metadata.cluster_id}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
+                  </article>
                 );
               })}
             </div>

@@ -1,5 +1,6 @@
 """Tests for GET /api/status/{job_id} — job status response shape."""
 
+import json
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
@@ -71,3 +72,68 @@ class TestJobStatus:
             response = client.get("/api/status/nonexistent")
 
         assert response.status_code == 404
+
+
+def test_loaded_models_endpoint(client):
+    """Test the /api/status/models endpoint"""
+    with patch("find_api.routers.status.get_model_manager") as mock_get_manager:
+        mock_manager = mock_get_manager.return_value
+        mock_manager.get_status.return_value = {
+            "process": "api",
+            "loaded_models": ["mock_test_model"],
+            "in_flight": {},
+            "failed_models": {},
+            "max_loaded_models": 5,
+            "updated_at": 0,
+        }
+
+        with patch("find_api.routers.status.redis_conn.scan_iter", return_value=[]):
+            response = client.get("/api/status/models")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "mock_test_model" in body["loaded_models"]
+    assert body["processes"]["api"]["loaded_models"] == ["mock_test_model"]
+    assert "ttl_seconds" in body
+
+
+def test_loaded_models_endpoint_includes_worker_snapshot(client):
+    """Test that worker-published model status is included."""
+    worker_status = {
+        "process": "worker",
+        "loaded_models": ["siglip"],
+        "in_flight": {},
+        "failed_models": {"florence-2": {"error": "load failed", "failed_at": 0}},
+        "max_loaded_models": 5,
+        "updated_at": 0,
+    }
+
+    with patch("find_api.routers.status.get_model_manager") as mock_get_manager:
+        mock_get_manager.return_value.get_status.return_value = {
+            "process": "api",
+            "loaded_models": [],
+            "in_flight": {},
+            "failed_models": {},
+            "max_loaded_models": 5,
+            "updated_at": 0,
+        }
+
+        with (
+            patch(
+                "find_api.routers.status.redis_conn.scan_iter",
+                return_value=[b"find:model_status:worker"],
+            ),
+            patch(
+                "find_api.routers.status.redis_conn.get",
+                return_value=json.dumps(worker_status),
+            ),
+        ):
+            response = client.get("/api/status/models")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "siglip" in body["loaded_models"]
+    assert (
+        body["processes"]["worker"]["failed_models"]["florence-2"]["error"]
+        == "load failed"
+    )

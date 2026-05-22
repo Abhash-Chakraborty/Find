@@ -1,12 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertCircle,
-  ChevronDown,
-  Loader2,
-  MessageSquare,
-  Trash2,
-  Zap,
-} from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -30,7 +23,7 @@ interface FaceSelectorModalProps {
   title: string;
   description: string;
   images: PersonImagesResponse["images"];
-  onSubmit: (faceIds: number[]) => Promise<void>;
+  onSubmit: (faceIds: number[], reason?: string) => Promise<void>;
   onCancel: () => void;
   isLoading: boolean;
   reason?: string;
@@ -45,38 +38,29 @@ function FaceSelectorModal({
   isLoading,
   reason,
 }: FaceSelectorModalProps) {
-  const [selectedFaceIds, setSelectedFaceIds] = useState<
-    Record<number, number[]>
-  >({});
+  const [selectedFaceIds, setSelectedFaceIds] = useState<number[]>([]);
   const [localReason, setLocalReason] = useState(reason || "");
 
-  const toggleFace = (mediaId: number, faceIndex: number) => {
+  const toggleFace = (faceId: number) => {
     setSelectedFaceIds((prev) => {
-      const faces = [...(prev[mediaId] || [])];
-      const idx = faces.indexOf(faceIndex);
-      if (idx >= 0) {
-        faces.splice(idx, 1);
-      } else {
-        faces.push(faceIndex);
+      if (prev.includes(faceId)) {
+        return prev.filter((id) => id !== faceId);
       }
-      return { ...prev, [mediaId]: faces };
+      return [...prev, faceId];
     });
   };
 
-  const toggleAllInImage = (mediaId: number, faceCount: number) => {
+  const toggleAllInImage = (faceIds: number[]) => {
     setSelectedFaceIds((prev) => {
-      const faces = prev[mediaId] || [];
-      if (faces.length === faceCount) {
-        return { ...prev, [mediaId]: [] };
+      const selectedInImage = faceIds.filter((id) => prev.includes(id));
+      if (selectedInImage.length === faceIds.length) {
+        return prev.filter((id) => !faceIds.includes(id));
       }
-      return {
-        ...prev,
-        [mediaId]: Array.from({ length: faceCount }, (_, i) => i),
-      };
+      return Array.from(new Set([...prev, ...faceIds]));
     });
   };
 
-  const allFaceIds = Object.values(selectedFaceIds).flat();
+  const allFaceIds = selectedFaceIds;
 
   const handleSubmit = async () => {
     if (allFaceIds.length === 0) {
@@ -84,7 +68,7 @@ function FaceSelectorModal({
       return;
     }
     try {
-      await onSubmit(allFaceIds);
+      await onSubmit(allFaceIds, localReason.trim() || undefined);
     } catch {
       // Error handled by caller
     }
@@ -92,7 +76,7 @@ function FaceSelectorModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4 backdrop-blur-md">
-      <div className="frost-panel max-h-[80dvh] w-full max-w-4xl overflow-hidden rounded-3xl border border-[var(--frost)] bg-[hsl(var(--background))]">
+      <div className="frost-panel max-h-[86dvh] w-full max-w-5xl overflow-hidden rounded-3xl border border-[var(--frost)] bg-[hsl(var(--background))]">
         {/* Header */}
         <div className="border-b border-[var(--frost)] bg-[color:var(--surface-soft)] px-6 py-5">
           <h3 className="text-lg font-medium text-[color:var(--near-white)]">
@@ -104,9 +88,9 @@ function FaceSelectorModal({
         </div>
 
         {/* Content */}
-        <div className="max-h-[calc(80dvh-200px)] overflow-y-auto bg-[hsl(var(--background))] p-6">
+        <div className="max-h-[calc(86dvh-190px)] overflow-y-auto bg-[hsl(var(--background))] p-6">
           {/* Face Grid */}
-          <div className="mb-6 grid grid-cols-3 gap-3">
+          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {images.map((img) => (
               <div
                 key={img.media_id}
@@ -118,12 +102,12 @@ function FaceSelectorModal({
                 <div className="flex flex-col gap-2">
                   {img.faces.map((face, faceIndex) => (
                     <button
-                      key={`${img.media_id}-${face.bounding_box.x1}-${face.bounding_box.y1}-${face.bounding_box.x2}-${face.bounding_box.y2}`}
+                      key={face.id}
                       type="button"
-                      onClick={() => toggleFace(img.media_id, faceIndex)}
-                      className={`rounded-lg border-2 px-2 py-1.5 text-xs font-medium transition ${
-                        selectedFaceIds[img.media_id]?.includes(faceIndex)
-                          ? "border-blue-500 bg-blue-500/20 text-blue-300"
+                      onClick={() => toggleFace(face.id)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                        selectedFaceIds.includes(face.id)
+                          ? "border-[color:var(--blue)] bg-[color:var(--blue-soft)] text-[color:var(--blue)]"
                           : "border-[var(--frost)] text-[color:var(--silver)] hover:border-[var(--frost-strong)]"
                       }`}
                     >
@@ -133,12 +117,13 @@ function FaceSelectorModal({
                   <button
                     type="button"
                     onClick={() =>
-                      toggleAllInImage(img.media_id, img.faces.length)
+                      toggleAllInImage(img.faces.map((face) => face.id))
                     }
                     className="rounded-lg border border-[var(--frost-soft)] bg-[color:var(--surface-soft)] px-2 py-1 text-xs text-[color:var(--muted)] hover:bg-[color:var(--surface-hover)]"
                   >
-                    {(selectedFaceIds[img.media_id]?.length || 0) ===
-                    img.faces.length
+                    {img.faces.every((face) =>
+                      selectedFaceIds.includes(face.id),
+                    )
                       ? "Deselect all"
                       : "Select all"}
                   </button>
@@ -173,7 +158,7 @@ function FaceSelectorModal({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-[var(--frost)] bg-[color:var(--surface-soft)] px-6 py-4 flex gap-3 justify-end">
+        <div className="flex justify-end gap-3 border-t border-[var(--frost)] bg-[color:var(--surface-soft)] px-6 py-4">
           <button
             type="button"
             onClick={onCancel}
@@ -186,7 +171,7 @@ function FaceSelectorModal({
             type="button"
             onClick={handleSubmit}
             disabled={isLoading || allFaceIds.length === 0}
-            className="white-pill px-4 py-2 text-sm font-semibold disabled:opacity-50"
+            className="white-pill min-w-24 justify-center px-4 py-2 text-sm font-semibold disabled:opacity-50"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -212,9 +197,9 @@ function MergeSelector({
   onSelect,
   onCancel,
 }: MergeSelectorProps) {
-  const { data: people } = useQuery({
+  const { data: people, isError } = useQuery({
     queryKey: ["people"],
-    queryFn: () => getPeople().catch(() => []),
+    queryFn: getPeople,
   });
 
   const otherPeople = people?.filter((p) => p.id !== currentPersonId) || [];
@@ -232,7 +217,13 @@ function MergeSelector({
         </div>
 
         <div className="max-h-[calc(80dvh-140px)] overflow-y-auto bg-[hsl(var(--background))] p-6">
-          {otherPeople.length === 0 ? (
+          {isError ? (
+            <div className="text-center py-12">
+              <p className="text-[color:var(--red)]">
+                Failed to load people. Please try again.
+              </p>
+            </div>
+          ) : otherPeople.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-[color:var(--silver)]">
                 No other people found to merge with
@@ -285,8 +276,8 @@ export function FeedbackActions({
   const [showActionsMenu, setShowActionsMenu] = useState(false);
 
   const splitMutation = useMutation({
-    mutationFn: (faceIds: number[]) =>
-      submitPersonFeedbackSplit(personId, faceIds),
+    mutationFn: ({ faceIds, reason }: { faceIds: number[]; reason?: string }) =>
+      submitPersonFeedbackSplit(personId, faceIds, reason),
     onSuccess: () => {
       toast.success("Person group split successfully");
       setShowSplitModal(false);
@@ -300,8 +291,8 @@ export function FeedbackActions({
   });
 
   const wrongPersonMutation = useMutation({
-    mutationFn: (faceIds: number[]) =>
-      submitPersonFeedbackWrongPerson(personId, faceIds),
+    mutationFn: ({ faceIds, reason }: { faceIds: number[]; reason?: string }) =>
+      submitPersonFeedbackWrongPerson(personId, faceIds, reason),
     onSuccess: () => {
       toast.success("Face marked as wrong person");
       setShowWrongPersonModal(false);
@@ -355,7 +346,6 @@ export function FeedbackActions({
           onClick={() => setShowActionsMenu(!showActionsMenu)}
           className="frost-button inline-flex items-center gap-2 px-4 py-2 text-sm"
         >
-          <Zap className="h-4 w-4" />
           Actions
           <ChevronDown
             className={`h-3 w-3 transition ${
@@ -366,16 +356,15 @@ export function FeedbackActions({
 
         {/* Dropdown Menu */}
         {showActionsMenu && (
-          <div className="absolute right-0 top-full mt-2 z-50 w-48 rounded-2xl border border-[var(--frost)] bg-[hsl(var(--background))] shadow-lg overflow-hidden">
+          <div className="absolute left-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-[var(--frost)] bg-[hsl(var(--background))] shadow-2xl">
             <button
               type="button"
               onClick={() => {
                 setShowSplitModal(true);
                 setShowActionsMenu(false);
               }}
-              className="w-full px-4 py-3 text-left text-sm font-medium text-[color:var(--near-white)] hover:bg-[color:var(--surface-hover)] flex items-center gap-2 border-b border-[var(--frost-soft)]"
+              className="flex w-full items-center border-b border-[var(--frost-soft)] px-4 py-3 text-left text-sm font-medium text-[color:var(--near-white)] hover:bg-[color:var(--surface-hover)]"
             >
-              <AlertCircle className="h-4 w-4" />
               Split group
             </button>
             <button
@@ -384,9 +373,8 @@ export function FeedbackActions({
                 setShowMergeSelector(true);
                 setShowActionsMenu(false);
               }}
-              className="w-full px-4 py-3 text-left text-sm font-medium text-[color:var(--near-white)] hover:bg-[color:var(--surface-hover)] flex items-center gap-2 border-b border-[var(--frost-soft)]"
+              className="flex w-full items-center border-b border-[var(--frost-soft)] px-4 py-3 text-left text-sm font-medium text-[color:var(--near-white)] hover:bg-[color:var(--surface-hover)]"
             >
-              <Zap className="h-4 w-4" />
               Merge with another
             </button>
             <button
@@ -395,9 +383,8 @@ export function FeedbackActions({
                 setShowWrongPersonModal(true);
                 setShowActionsMenu(false);
               }}
-              className="w-full px-4 py-3 text-left text-sm font-medium text-[color:var(--near-white)] hover:bg-[color:var(--surface-hover)] flex items-center gap-2 border-b border-[var(--frost-soft)]"
+              className="flex w-full items-center border-b border-[var(--frost-soft)] px-4 py-3 text-left text-sm font-medium text-[color:var(--near-white)] hover:bg-[color:var(--surface-hover)]"
             >
-              <Trash2 className="h-4 w-4" />
               Mark as wrong person
             </button>
             <button
@@ -407,14 +394,9 @@ export function FeedbackActions({
                 setShowActionsMenu(false);
               }}
               disabled={correctMutation.isPending}
-              className="w-full px-4 py-3 text-left text-sm font-medium text-green-400 hover:bg-[color:var(--surface-hover)] flex items-center gap-2 disabled:opacity-50"
+              className="flex w-full items-center px-4 py-3 text-left text-sm font-medium text-[color:var(--green)] hover:bg-[color:var(--surface-hover)] disabled:opacity-50"
             >
-              {correctMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <MessageSquare className="h-4 w-4" />
-              )}
-              Mark as correct
+              {correctMutation.isPending ? "Saving..." : "Mark as correct"}
             </button>
           </div>
         )}
@@ -426,8 +408,8 @@ export function FeedbackActions({
           title="Split person group"
           description="Select the faces that should be a separate person"
           images={images}
-          onSubmit={async (faceIds) => {
-            await splitMutation.mutateAsync(faceIds);
+          onSubmit={async (faceIds, reason) => {
+            await splitMutation.mutateAsync({ faceIds, reason });
           }}
           onCancel={() => setShowSplitModal(false)}
           isLoading={splitMutation.isPending}
@@ -440,8 +422,8 @@ export function FeedbackActions({
           title="Mark as wrong person"
           description="Select the faces that don't belong to this person"
           images={images}
-          onSubmit={async (faceIds) => {
-            await wrongPersonMutation.mutateAsync(faceIds);
+          onSubmit={async (faceIds, reason) => {
+            await wrongPersonMutation.mutateAsync({ faceIds, reason });
           }}
           onCancel={() => setShowWrongPersonModal(false)}
           isLoading={wrongPersonMutation.isPending}
