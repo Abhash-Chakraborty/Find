@@ -108,6 +108,71 @@ Light mode is deterministic but not AI-accurate:
 - Search and clustering exercise the same API/database paths using mock embeddings.
 - Use the full stack before validating real ML quality or performance.
 
+## Mock mode vs full ML mode
+
+Find ships two runtime modes that serve different purposes. Choosing the wrong one is the most common source of contributor confusion.
+
+### Mock mode (light stack)
+
+```
+docker compose -f docker-compose.light.yml up --build
+```
+
+`ML_MODE=mock` is set automatically. The worker skips all model loading and instead records:
+
+| Field | What you get |
+|---|---|
+| Caption | A fixed placeholder string (e.g. `"mock caption"`) |
+| Detected objects | An empty list or a static stub |
+| OCR text | An empty string |
+| Embedding vector | A zero-filled or seeded deterministic vector of the correct dimension |
+| EXIF / dimensions | **Real values** extracted from the actual image file |
+
+Because mock vectors have no semantic content, search results are meaningless — results may appear but their ranking is arbitrary and does not reflect real image similarity.
+
+**Mock mode is the right choice when you are working on:**
+
+- Frontend UI, layout, or styling
+- API routing, request/response shapes, or error handling
+- Upload, job-status polling, gallery, or delete/like flows
+- Clustering pipeline logic (not cluster quality)
+- Documentation, CI, or contributor-tooling changes
+
+### Full ML mode (full stack)
+
+```
+docker compose up --build
+```
+
+The worker loads Florence-2 (captioning), YOLOv10 (object detection), PaddleOCR (text extraction), and SigLIP via `open-clip` (semantic embeddings). All metadata and vectors reflect real model output.
+
+**Full ML mode is required when you are working on or reporting:**
+
+- Caption quality or wording
+- Search relevance — whether the right images appear for a query
+- Object detection accuracy
+- OCR output correctness
+- Clustering quality (which images group together)
+- Any ML model parameter or pipeline change
+
+> ⚠️ **Do not report caption or search quality issues observed in mock mode.** Mock output is intentionally fake and will not reproduce in production. Always reproduce ML-quality claims in full mode before filing a bug.
+
+### Quick reference
+
+| Task | Use light stack? | Use full stack? |
+|---|---|---|
+| UI fix or new component | ✅ Yes | Not needed |
+| API endpoint change | ✅ Yes | Not needed |
+| Upload / gallery / clusters flow | ✅ Yes | Not needed |
+| Docs / CI / tooling | ✅ Yes | Not needed |
+| Caption looks wrong | ❌ No | ✅ Required |
+| Search returns bad results | ❌ No | ✅ Required |
+| OCR missed text | ❌ No | ✅ Required |
+| ML pipeline performance | ❌ No | ✅ Required |
+
+First run of the full stack downloads Florence-2, SigLIP, PaddleOCR, and YOLO weights (several GB). Models are cached in the `model_cache` Docker volume and reused on subsequent runs.
+
+
 ### Option C: local development without Docker
 
 #### Prerequisites
