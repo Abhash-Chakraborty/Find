@@ -8,6 +8,7 @@ from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.queue import enqueue_clustering_job
 from find_api.core.storage import get_file_url
+from find_api.routers.gallery import build_thumbnail_url
 from find_api.models.cluster import Cluster
 from find_api.models.media import Media
 
@@ -37,7 +38,14 @@ def get_clusters(db: Session = Depends(get_db)):
             except Exception:
                 url = None
 
-            samples.append({"id": media.id, "filename": media.filename, "url": url})
+            samples.append(
+                {
+                    "id": media.id,
+                    "filename": media.filename,
+                    "url": url,
+                    "thumbnail_url": build_thumbnail_url(media.id),
+                }
+            )
 
         cluster_info = {
             "id": cluster.id,
@@ -92,6 +100,7 @@ def get_cluster_detail(cluster_id: int, db: Session = Depends(get_db)):
                 "id": media.id,
                 "filename": media.filename,
                 "url": url,
+                "thumbnail_url": build_thumbnail_url(media.id),
                 "caption": media.metadata_json.get("caption", "")
                 if media.metadata_json
                 else "",

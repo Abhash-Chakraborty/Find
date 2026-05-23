@@ -200,8 +200,10 @@ export default function SearchPage() {
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
               {searchMutation.data.results.map((result) => {
                 const imageSrc = resolveMediaUrl(
-                  result.metadata.url,
+                  result.metadata.thumbnail_url ?? result.metadata.url,
                   result.metadata.minio_key,
+                  result.media_id,
+                  !result.metadata.thumbnail_url,
                 );
 
                 return (

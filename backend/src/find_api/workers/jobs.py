@@ -11,7 +11,7 @@ from rq import get_current_job
 
 from find_api.core.database import SessionLocal
 from find_api.core.queue import clear_clustering_job_state, enqueue_clustering_job
-from find_api.core.storage import get_file
+from find_api.core.storage import get_file, upload_thumbnail
 from find_api.core.model_manager import get_model_manager
 from find_api.core.config import settings
 from find_api.models.media import Media
@@ -55,6 +55,39 @@ def set_error(job, error: str):
         job.save_meta()
 
 
+def generate_thumbnail_for_media(media_id: int):
+    """Generate a missing thumbnail without rerunning the full ML analysis."""
+    db = SessionLocal()
+    try:
+        media = db.query(Media).filter(Media.id == media_id).first()
+        if not media:
+            logger.warning("Thumbnail backfill skipped: media %s not found", media_id)
+            return {"status": "not_found", "media_id": media_id}
+
+        if media.thumbnail_key:
+            return {"status": "skipped", "media_id": media_id, "reason": "exists"}
+
+        image_data = get_file(media.minio_key)
+        thumbnail_metadata = upload_thumbnail(image_data, media.file_hash)
+        if not thumbnail_metadata:
+            return {
+                "status": "failed",
+                "media_id": media_id,
+                "reason": "thumbnail_generation_failed",
+            }
+
+        for key, value in thumbnail_metadata.items():
+            setattr(media, key, value)
+        db.commit()
+        return {"status": "success", "media_id": media_id}
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        logger.exception("Thumbnail backfill failed for media %s: %s", media_id, exc)
+        return {"status": "failed", "media_id": media_id, "reason": sanitize_error(exc)}
+    finally:
+        db.close()
+
+
 def analyze_image(media_id: int):
     """
     Main worker job to analyze an uploaded image
@@ -89,6 +122,13 @@ def analyze_image(media_id: int):
             image = image.convert("RGB")
 
         media.width, media.height = image.size
+
+        if not media.thumbnail_key:
+            set_stage(job, "generating thumbnail")
+            thumbnail_metadata = upload_thumbnail(image_data, media.file_hash)
+            if thumbnail_metadata:
+                for key, value in thumbnail_metadata.items():
+                    setattr(media, key, value)
 
         set_stage(job, "extracting EXIF")
 

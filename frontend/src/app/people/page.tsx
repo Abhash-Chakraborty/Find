@@ -26,8 +26,7 @@ import {
   triggerFaceClustering,
   updatePersonName,
 } from "@/lib/api";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { resolveMediaUrl } from "@/lib/media";
 
 // ─── Person Card Component ────────────────────────────────────────────────────
 
@@ -83,14 +82,18 @@ function PersonCard({
       <div className="pointer-events-none relative z-10 grid aspect-square w-full grid-cols-2 gap-2 overflow-hidden rounded-2xl">
         {[0, 1, 2, 3].map((index) => {
           const mediaId = person.sample_media_ids[index];
+          const src =
+            index === 0 && person.thumbnail_url
+              ? resolveMediaUrl(person.thumbnail_url, null, mediaId, true)
+              : resolveMediaUrl(null, null, mediaId, true);
           return (
             <div
               key={mediaId ? mediaId : `empty-${person.id}-${index}`}
               className="relative h-full w-full overflow-hidden rounded-xl"
             >
-              {mediaId ? (
+              {mediaId && src ? (
                 <Image
-                  src={`${API_BASE_URL}/api/image/${mediaId}/thumbnail`}
+                  src={src}
                   alt="Person photo"
                   fill
                   className="border border-[var(--frost)] object-cover"
@@ -420,6 +423,12 @@ export default function PeoplePage() {
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
                   {selectedPersonQuery.data.images.map((img) => {
                     const faceIds = img.faces.map((face) => face.id);
+                    const imageSrc = resolveMediaUrl(
+                      img.thumbnail_url,
+                      null,
+                      img.media_id,
+                      true,
+                    );
 
                     return (
                       <article
@@ -438,14 +447,16 @@ export default function PeoplePage() {
                           aria-label={`Preview ${img.filename}`}
                         >
                           <div className="relative aspect-square overflow-hidden bg-[color:var(--surface-soft)]">
-                            <Image
-                              src={`${API_BASE_URL}/api/image/${img.media_id}/thumbnail`}
-                              alt={img.filename}
-                              fill
-                              className="object-cover transition-transform duration-300 group-hover:scale-105"
-                              sizes="(max-width: 768px) 50vw, 25vw"
-                              unoptimized
-                            />
+                            {imageSrc ? (
+                              <Image
+                                src={imageSrc}
+                                alt={img.filename}
+                                fill
+                                className="object-cover transition-transform duration-300 group-hover:scale-105"
+                                sizes="(max-width: 768px) 50vw, 25vw"
+                                unoptimized
+                              />
+                            ) : null}
                           </div>
                         </button>
                         <div className="space-y-3 border-t border-[var(--frost-soft)] bg-[color:var(--surface-soft)] p-3">

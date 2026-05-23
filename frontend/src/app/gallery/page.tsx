@@ -565,8 +565,14 @@ function GalleryPageContent() {
           <>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
               {data.items.map((item) => {
-                const imageSrc = resolveMediaUrl(item.url, item.minio_key);
-                const downloadUrl = imageSrc ?? item.url ?? "";
+                const imageSrc = resolveMediaUrl(
+                  item.thumbnail_url ?? item.url,
+                  item.minio_key,
+                  item.id,
+                  !item.thumbnail_url,
+                );
+                const originalUrl = resolveMediaUrl(item.url, item.minio_key);
+                const downloadUrl = originalUrl ?? item.url ?? "";
 
                 return (
                   <article

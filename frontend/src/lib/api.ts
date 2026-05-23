@@ -36,6 +36,7 @@ export interface MediaItem {
   file_size?: number | null;
   cluster_id?: number | null;
   url?: string | null;
+  thumbnail_url?: string | null;
   caption?: string;
   objects?: Array<{
     class: string;
@@ -99,6 +100,7 @@ export interface ClusterSample {
   id: number;
   filename: string;
   url?: string | null;
+  thumbnail_url?: string | null;
 }
 
 export interface ClusterInfo {
@@ -128,6 +130,7 @@ export interface ClusterDetail {
     id: number;
     filename: string;
     url?: string | null;
+    thumbnail_url?: string | null;
     caption?: string;
   }>;
 }
@@ -338,11 +341,13 @@ export interface PersonItem {
   name: string | null;
   face_count: number;
   sample_media_ids: number[];
+  thumbnail_url?: string | null;
 }
 
 export interface PersonImage {
   media_id: number;
   filename: string;
+  thumbnail_url?: string | null;
   faces: {
     id: number;
     bounding_box: { x1: number; y1: number; x2: number; y2: number };
