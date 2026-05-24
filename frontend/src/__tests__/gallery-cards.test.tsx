@@ -9,7 +9,7 @@ import GalleryPage from "../app/gallery/page";
 
 // Mock next/navigation utilities with original exports preserved
 vi.mock("next/navigation", async (importOriginal) => {
-  const original = await importOriginal();
+  const original = await importOriginal<typeof import("next/navigation")>();
   return {
     ...original,
     useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -20,7 +20,7 @@ vi.mock("next/navigation", async (importOriginal) => {
 
 vi.mock("@/lib/api");
 vi.mock("@/lib/media", async (importOriginal) => {
-  const original = await importOriginal();
+  const original = await importOriginal<typeof import("@/lib/media")>();
   return {
     ...original,
     resolveMediaUrl: vi.fn((url) => url),
@@ -65,7 +65,7 @@ describe("Gallery card states (light mode)", () => {
   });
 
   it("displays empty state when no items are returned", async () => {
-    vi.mocked(api.getGallery).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(api.getGallery).mockResolvedValue({ items: [], total: 0, page: 1, limit: 24 });
     renderWithClient(<GalleryPage />);
     await waitFor(() => {
       expect(screen.getByText(/No images found/i)).toBeInTheDocument();
@@ -84,6 +84,7 @@ describe("Gallery card states (light mode)", () => {
       status: "indexed",
       liked: false,
       caption: "A caption",
+      created_at: "2026-05-24T00:00:00Z"
     },
     {
       id: 2,
@@ -93,6 +94,7 @@ describe("Gallery card states (light mode)", () => {
       status: "failed",
       liked: false,
       caption: null,
+      created_at: "2026-05-24T00:00:00Z"
     },
     {
       id: 3,
@@ -102,11 +104,12 @@ describe("Gallery card states (light mode)", () => {
       status: "indexed",
       liked: true,
       caption: "Liked image",
+      created_at: "2026-05-24T00:00:00Z"
     },
   ];
 
   it("renders cards with correct UI for normal, liked and failed states", async () => {
-    vi.mocked(api.getGallery).mockResolvedValue({ items: mockItems, total: 3 });
+    vi.mocked(api.getGallery).mockResolvedValue({ items: mockItems as any, total: 3, page: 1, limit: 24 });
     renderWithClient(<GalleryPage />);
     // Wait for cards to appear
     await waitFor(() => {
@@ -116,15 +119,15 @@ describe("Gallery card states (light mode)", () => {
     const card1Img = screen.getByAltText("image1.jpg");
     expect(card1Img).toBeInTheDocument();
     expect(card1Img.closest("article")).toContainElement(
-      screen.getAllByLabelText("Status: Indexed")[0],
+      screen.getAllByLabelText("Status: Indexed")[0]!,
     );
     const heartBtn1 = screen.getAllByLabelText("Like image")[0];
     expect(heartBtn1).toBeInTheDocument();
     // Liked card (id 3) should have filled heart
-    const heartBtn3 = screen.getAllByLabelText("Unlike image")[0];
+    const heartBtn3 = screen.getAllByLabelText("Unlike image")[0]!;
     expect(heartBtn3).toBeInTheDocument();
     expect(heartBtn3.closest("article")).toContainElement(
-      screen.getAllByLabelText("Status: Indexed")[1],
+      screen.getAllByLabelText("Status: Indexed")[1]!,
     );
     // Failed card (id 2) should show retry button
     const card2Img = screen.getByAltText("image2.jpg");
