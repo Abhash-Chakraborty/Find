@@ -2,6 +2,7 @@
 
 import hashlib
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 from find_api.models.media import Media
 
@@ -18,6 +19,11 @@ def _seed(db, *, filename, status, liked=False, metadata_json=None):
         liked=liked,
         width=800,
         height=600,
+        thumbnail_key=f"thumbnails/test/{filename}.webp",
+        thumbnail_content_type="image/webp",
+        thumbnail_size=512,
+        thumbnail_width=256,
+        thumbnail_height=192,
         metadata_json=metadata_json,
         created_at=datetime.now(timezone.utc),
     )
@@ -58,10 +64,117 @@ class TestGalleryResponseShape:
             "file_size",
             "cluster_id",
             "minio_key",
+            "thumbnail_key",
+            "thumbnail_content_type",
+            "thumbnail_size",
+            "thumbnail_width",
+            "thumbnail_height",
+            "thumbnail_url",
             "liked",
             "url",
+            "thumbnail_url",
         }
         assert expected_keys.issubset(item.keys())
+        assert item["thumbnail_url"] == f"/api/image/{item['id']}/thumbnail"
+
+    def test_thumbnail_redirect_prefers_thumbnail_key(self, client, db):
+        media = _seed(db, filename="sunset.jpg", status="indexed")
+
+        with patch(
+            "find_api.routers.gallery.get_file_url",
+            side_effect=lambda key: f"http://fake/{key}",
+        ):
+            response = client.get(
+                f"/api/image/{media.id}/thumbnail", follow_redirects=False
+            )
+
+        assert response.status_code == 307
+        assert (
+            response.headers["location"]
+            == "http://fake/thumbnails/test/sunset.jpg.webp"
+        )
+
+    def test_thumbnail_redirect_falls_back_to_original(self, client, db):
+        media = _seed(db, filename="legacy.jpg", status="indexed")
+        media.thumbnail_key = None
+        db.commit()
+
+        with patch(
+            "find_api.routers.gallery.get_file_url",
+            side_effect=lambda key: f"http://fake/{key}",
+        ):
+            response = client.get(
+                f"/api/image/{media.id}/thumbnail", follow_redirects=False
+            )
+
+        assert response.status_code == 307
+        assert response.headers["location"] == "http://fake/images/test/legacy.jpg"
+
+    def test_backfill_missing_thumbnails_enqueues_thumbnail_only_jobs(self, client, db):
+        existing = _seed(db, filename="existing.jpg", status="indexed")
+        missing_a = _seed(db, filename="missing-a.jpg", status="indexed")
+        missing_b = _seed(db, filename="missing-b.jpg", status="indexed")
+        missing_a.thumbnail_key = None
+        missing_b.thumbnail_key = None
+        db.commit()
+
+        class FakeQueue:
+            def __init__(self):
+                self.calls = []
+
+            def enqueue(self, func, media_id, **kwargs):
+                self.calls.append((func, media_id, kwargs))
+
+                class FakeJob:
+                    id = f"job-{media_id}"
+
+                return FakeJob()
+
+        queue = FakeQueue()
+        with patch("find_api.routers.gallery.get_task_queue", return_value=queue):
+            response = client.post("/api/thumbnails/backfill")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["queued"] == 2
+        assert body["remaining"] == 0
+        assert set(body["job_ids"]) == {f"job-{missing_a.id}", f"job-{missing_b.id}"}
+        assert {call[1] for call in queue.calls} == {missing_a.id, missing_b.id}
+        assert existing.id not in {call[1] for call in queue.calls}
+
+    def test_backfill_missing_thumbnails_respects_limit(self, client, db):
+        for index in range(3):
+            media = _seed(db, filename=f"missing-{index}.jpg", status="indexed")
+            media.thumbnail_key = None
+        db.commit()
+
+        class FakeQueue:
+            def enqueue(self, _func, media_id, **_kwargs):
+                class FakeJob:
+                    id = f"job-{media_id}"
+
+                return FakeJob()
+
+        with patch("find_api.routers.gallery.get_task_queue", return_value=FakeQueue()):
+            response = client.post("/api/thumbnails/backfill?limit=2")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["queued"] == 2
+        assert body["remaining"] == 1
+
+    def test_backfill_missing_thumbnails_noops_when_complete(self, client, db):
+        _seed(db, filename="existing.jpg", status="indexed")
+
+        response = client.post("/api/thumbnails/backfill")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "queued": 0,
+            "remaining": 0,
+            "job_ids": [],
+            "message": "No missing thumbnails found.",
+        }
 
     def test_indexed_item_includes_metadata(self, client, db):
         _seed(
@@ -79,6 +192,35 @@ class TestGalleryResponseShape:
         assert item["caption"] == "a sunset"
         assert item["objects"] == ["sun"]
         assert item["has_text"] is True
+
+    def test_image_detail_includes_stage_status(self, client, db):
+        media = _seed(
+            db,
+            filename="stage_test.png",
+            status="indexed",
+            metadata_json={
+                "caption": "sunset",
+                "objects": [],
+                "ocr_text": "",
+                "stage_status": {
+                    "object_detection": {"status": "success", "error": None},
+                    "captioning": {"status": "failed", "error": "Model loading failed"},
+                    "ocr": {"status": "success", "error": None},
+                    "embedding": {"status": "success", "error": None},
+                },
+            },
+        )
+
+        response = client.get(f"/api/image/{media.id}")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["thumbnail_url"] == f"/api/image/{media.id}/thumbnail"
+        assert "stage_status" in body["metadata"]
+        assert body["metadata"]["stage_status"]["captioning"]["status"] == "failed"
+        assert (
+            body["metadata"]["stage_status"]["captioning"]["error"]
+            == "Model loading failed"
+        )
 
 
 class TestGalleryFiltering:

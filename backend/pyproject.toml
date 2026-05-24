@@ -42,8 +42,8 @@ ml = [
   "onnxruntime-gpu==1.17.0",
   "timm>=0.9.16",
   "einops>=0.8.0",
-  "paddlepaddle>=2.6.0",
-  "paddleocr>=2.7.3",
+  "paddlepaddle>=3.2.2,<3.3",
+  "paddleocr>=3.5.0,<4",
   "hdbscan==0.8.40",
   "faiss-cpu>=1.13.2,<1.14",
 ]
@@ -67,6 +67,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu121" }

@@ -76,6 +76,7 @@ services:
       - USE_GPU=false
       - API_HOST=0.0.0.0
       - API_PORT=8000
+      - MODEL_MANAGER_PROCESS_NAME=api
       - PYTHONUNBUFFERED=1
     volumes:
       - ./backend:/app
@@ -97,7 +98,7 @@ services:
         PYTHON_VERSION: "3.12"
         UV_SYNC_EXTRAS: ""
     container_name: find-light-worker
-    command: rq worker --url redis://redis:6379 high default low
+    command: rq worker --worker-class ${RQ_WORKER_CLASS:-rq.worker.worker_classes.SimpleWorker} --url redis://redis:6379 high default low
     environment:
       - DATABASE_URL=postgresql://find:find123@db:5432/find
       - MINIO_ENDPOINT=minio:9000
@@ -110,6 +111,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - ML_MODE=mock
       - USE_GPU=false
+      - MODEL_MANAGER_PROCESS_NAME=worker
       - PYTHONUNBUFFERED=1
     volumes:
       - ./backend:/app

@@ -77,6 +77,7 @@ services:
       - USE_GPU=${USE_GPU:-true}
       - API_HOST=0.0.0.0
       - API_PORT=8000
+      - MODEL_MANAGER_PROCESS_NAME=api
       - PYTHONUNBUFFERED=1
     volumes:
       - ./backend:/app
@@ -107,7 +108,7 @@ services:
         BASE_IMAGE: ${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}
         PYTHON_VERSION: ${BACKEND_PYTHON_VERSION:-3.12}
     container_name: find-worker
-    command: rq worker --url ${REDIS_URL:-redis://redis:6379} high default low
+    command: rq worker --worker-class ${RQ_WORKER_CLASS:-rq.worker.worker_classes.SimpleWorker} --url ${REDIS_URL:-redis://redis:6379} high default low
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql://find:find123@db:5432/find}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
@@ -119,6 +120,7 @@ services:
       - MINIO_SECURE=${MINIO_SECURE:-false}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - USE_GPU=${USE_GPU:-true}
+      - MODEL_MANAGER_PROCESS_NAME=worker
       - PYTHONUNBUFFERED=1
     volumes:
       - ./backend:/app
