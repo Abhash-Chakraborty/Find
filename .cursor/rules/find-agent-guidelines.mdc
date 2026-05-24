@@ -1,0 +1,8 @@
+---
+description: Find repository guidance for Cursor agents
+alwaysApply: true
+---
+
+Follow the shared repository rules in [AGENTS.md](../../AGENTS.md) and the security rules in [docs/AGENT_SECURITY.md](../../docs/AGENT_SECURITY.md).
+
+Keep this file as a thin Cursor entry point. Update `AGENTS.md` or `docs/AGENT_SECURITY.md` instead of duplicating rules here.

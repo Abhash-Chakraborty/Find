@@ -45,6 +45,11 @@ class TestSearchResponseShape:
             id=1,
             filename="beach.jpg",
             minio_key="images/ab/abc.jpg",
+            thumbnail_key="thumbnails/ab/abc.webp",
+            thumbnail_content_type="image/webp",
+            thumbnail_size=512,
+            thumbnail_width=256,
+            thumbnail_height=144,
             status="indexed",
             liked=False,
             width=1920,
@@ -73,6 +78,12 @@ class TestSearchResponseShape:
             "id",
             "filename",
             "minio_key",
+            "thumbnail_key",
+            "thumbnail_content_type",
+            "thumbnail_size",
+            "thumbnail_width",
+            "thumbnail_height",
+            "thumbnail_url",
             "status",
             "liked",
             "width",
@@ -82,8 +93,10 @@ class TestSearchResponseShape:
             "caption",
             "objects",
             "url",
+            "thumbnail_url",
         }
         assert expected.issubset(meta.keys())
+        assert meta["thumbnail_url"] == "/api/image/1/thumbnail"
 
     def test_empty_results(self, client):
         response = _mock_search(client, [])

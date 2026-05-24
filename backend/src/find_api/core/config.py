@@ -4,6 +4,7 @@ Application configuration using Pydantic settings
 
 from typing import Literal, Optional
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +34,8 @@ class Settings(BaseSettings):
 
     # ML Models
     ML_MODE: Literal["full", "mock"] = "full"
+    ML_MODEL_IDLE_TTL_SECONDS: int = 300
+    ML_MAX_LOADED_MODELS: int = 5
     CLIP_MODEL: str = "ViT-B-16-SigLIP"
     CLIP_PRETRAINED: str = "webli"
     BLIP_MODEL: str = "microsoft/Florence-2-base"
@@ -54,6 +57,14 @@ class Settings(BaseSettings):
     MIN_SAMPLES: int = 1
     CLUSTERING_N_JOBS: int = -1
     CLUSTERING_BACKEND: str = "auto"
+
+    @field_validator("ML_MODEL_IDLE_TTL_SECONDS", "ML_MAX_LOADED_MODELS")
+    @classmethod
+    def validate_positive_int(cls, value: int, info):
+        """Keep memory lifecycle settings positive so cleanup cannot be disabled accidentally."""
+        if value <= 0:
+            raise ValueError(f"{info.field_name} must be greater than 0")
+        return value
 
 
 settings = Settings()

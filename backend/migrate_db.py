@@ -19,6 +19,33 @@ def migrate_db():
     try:
         engine = create_engine(settings.DATABASE_URL)
         with engine.connect() as conn:
+            logger.info("Adding thumbnail metadata columns if missing...")
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumbnail_key VARCHAR(255);"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumbnail_content_type VARCHAR(100);"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumbnail_size INTEGER;"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumbnail_width INTEGER;"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumbnail_height INTEGER;"
+                )
+            )
+
             # Check current dimension
             logger.info("Clearing existing vectors to allow dimension change...")
             conn.execute(text("UPDATE media SET vector = NULL;"))

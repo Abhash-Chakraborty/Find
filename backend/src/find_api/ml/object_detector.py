@@ -38,24 +38,22 @@ class ObjectDetector:
         Detect objects in image
         """
         try:
-            # Get model from manager
-            model = self.manager.get_model("yolo", self._load_model)
+            with self.manager.use_model("yolo", self._load_model) as model:
+                # Run inference
+                # Note: In a single-worker setup, we don't strictly need the lock for safety,
+                # but we use it to ensure we don't accidentally run multiple GPU tasks if threaded.
+                # Since this is synchronous code called from a thread/process, we can't easily use
+                # the async lock here without an event loop.
+                # For now, we rely on the single-worker architecture for serialization.
 
-            # Run inference
-            # Note: In a single-worker setup, we don't strictly need the lock for safety,
-            # but we use it to ensure we don't accidentally run multiple GPU tasks if threaded.
-            # Since this is synchronous code called from a thread/process, we can't easily use
-            # the async lock here without an event loop.
-            # For now, we rely on the single-worker architecture for serialization.
-
-            use_cuda = settings.USE_GPU and torch.cuda.is_available()
-            results = model(
-                image,
-                conf=conf_threshold,
-                verbose=False,
-                device=0 if use_cuda else None,
-                half=use_cuda and settings.YOLO_HALF,
-            )
+                use_cuda = settings.USE_GPU and torch.cuda.is_available()
+                results = model(
+                    image,
+                    conf=conf_threshold,
+                    verbose=False,
+                    device=0 if use_cuda else None,
+                    half=use_cuda and settings.YOLO_HALF,
+                )
 
             detections = []
 

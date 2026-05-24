@@ -2,11 +2,11 @@ name: PR Triage
 
 on:
   pull_request_target:
-    types: [opened, edited, reopened, synchronize]
+    types: [opened, reopened, synchronize]
 
 permissions:
-  pull-requests: write
   issues: write
+  pull-requests: write
 
 jobs:
   check-linked-issue:
@@ -15,24 +15,105 @@ jobs:
       - uses: actions/github-script@v7
         with:
           script: |
-            const label = "needs linked issue";
-            const body = context.payload.pull_request.body || "";
-            const hasLink = /\b(?:fix|fixes|fixed|close|closes|closed|resolve|resolves|resolved)\b\s*:?\s*#\d+/i.test(body);
+            const NEEDS_LINKED_ISSUE_LABEL = "needs linked issue";
+            const DO_NOT_MERGE_LABEL = "do-not-merge";
+            const DEPENDENCIES_LABEL = "dependencies";
+            const MAX_LINKED_ISSUES_TO_CHECK = 10;
 
-            if (!hasLink) {
+            const pr = context.payload.pull_request;
+            const body = pr.body || "";
+            const prAuthor = pr.user?.login;
+            const isDependabot = prAuthor === "dependabot[bot]";
+
+            // Always gate new/updated PRs until maintainers explicitly remove it.
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: pr.number,
+              labels: [DO_NOT_MERGE_LABEL],
+            });
+
+            // Dependabot PRs normally do not have project issues attached.
+            // Keep them gated for maintainer review, but do not mark them as missing an issue.
+            if (isDependabot) {
               await github.rest.issues.addLabels({
                 ...context.repo,
-                issue_number: context.issue.number,
-                labels: [label],
+                issue_number: pr.number,
+                labels: [DEPENDENCIES_LABEL],
               });
-            } else {
+
               try {
                 await github.rest.issues.removeLabel({
                   ...context.repo,
-                  issue_number: context.issue.number,
-                  name: label,
+                  issue_number: pr.number,
+                  name: NEEDS_LINKED_ISSUE_LABEL,
                 });
               } catch (e) {
                 if (e.status !== 404) throw e;
               }
+
+              return;
+            }
+
+            // Parse linked issues via closing keywords, e.g. "Fixes #123".
+            const matches = [...body.matchAll(/\b(?:fix|fixes|fixed|close|closes|closed|resolve|resolves|resolved)\b\s*:?\s*#(\d+)\b/gi)];
+            const linkedIssueNumbers = [...new Set(matches.map((m) => Number(m[1])))]
+              .filter((n) => Number.isInteger(n) && n > 0)
+              .slice(0, MAX_LINKED_ISSUES_TO_CHECK);
+
+            const hasLinkedIssue = linkedIssueNumbers.length > 0;
+
+            if (!hasLinkedIssue) {
+              await github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: pr.number,
+                labels: [NEEDS_LINKED_ISSUE_LABEL],
+              });
+              return;
+            }
+
+            // Keep this existing signal in sync with linked-issue detection.
+            try {
+              await github.rest.issues.removeLabel({
+                ...context.repo,
+                issue_number: pr.number,
+                name: NEEDS_LINKED_ISSUE_LABEL,
+              });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+            }
+
+            // Assign the PR only if the PR author is assigned to at least one linked issue.
+            let authorAssignedToLinkedIssue = false;
+            for (const issueNumber of linkedIssueNumbers) {
+              let linkedIssue;
+              try {
+                linkedIssue = await github.rest.issues.get({
+                  ...context.repo,
+                  issue_number: issueNumber,
+                });
+              } catch (e) {
+                if (e.status === 404) {
+                  continue;
+                }
+                throw e;
+              }
+
+              const assignees = (linkedIssue.data.assignees || []).map((a) => a.login);
+              if (prAuthor && assignees.includes(prAuthor)) {
+                authorAssignedToLinkedIssue = true;
+                break;
+              }
+            }
+
+            if (!authorAssignedToLinkedIssue || !prAuthor) {
+              return;
+            }
+
+            const currentPrAssignees = (pr.assignees || []).map((a) => a.login);
+            if (!currentPrAssignees.includes(prAuthor)) {
+              await github.rest.issues.addAssignees({
+                ...context.repo,
+                issue_number: pr.number,
+                assignees: [prAuthor],
+              });
             }

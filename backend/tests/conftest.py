@@ -95,6 +95,16 @@ def client(db):
             patch(
                 "find_api.routers.upload.upload_file", return_value="images/ab/abc.jpg"
             ),
+            patch(
+                "find_api.routers.upload.upload_thumbnail",
+                return_value={
+                    "thumbnail_key": "thumbnails/ab/abc.webp",
+                    "thumbnail_content_type": "image/webp",
+                    "thumbnail_size": 128,
+                    "thumbnail_width": 1,
+                    "thumbnail_height": 1,
+                },
+            ),
             patch("find_api.routers.upload.get_task_queue", return_value=fake_queue),
             patch(
                 "find_api.routers.gallery.get_file_url",
