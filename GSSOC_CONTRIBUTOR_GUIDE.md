@@ -66,6 +66,69 @@ Use light mode for:
 - Upload/gallery/search/clustering workflow changes.
 - Documentation, CI, contributor-experience, and tooling changes.
 
+## Understanding mock mode output
+
+The light stack (`docker-compose.light.yml`) is the recommended starting point for all
+GSSoC contributors because it avoids large model downloads and GPU requirements.
+However, it runs with `ML_MODE=mock`, and understanding what that means prevents a
+common class of false bug reports.
+
+### What mock mode produces
+
+When `ML_MODE=mock` is active the worker skips all ML model loading. Instead it writes:
+
+| Metadata field | Mock output |
+|---|---|
+| Caption | A fixed placeholder string — **not** a real image description |
+| Detected objects | An empty list or a static stub |
+| OCR text | An empty string |
+| Embedding vector | A zero-filled or seeded deterministic value — **no semantic content** |
+| Image dimensions | ✅ Real (read from the actual file) |
+| EXIF data | ✅ Real (read from the actual file) |
+
+Because mock embeddings carry no semantic meaning, search results in the light stack
+are meaningless. Images may appear in search results, but their order and relevance do
+not reflect real similarity to your query.
+
+### What this means for your contribution
+
+**Use the light stack freely for:**
+
+- Frontend changes — UI, layout, styling, modals, forms
+- API and routing changes
+- Upload, gallery, search, and clustering *workflow* changes (not quality)
+- Documentation, CI, and tooling changes
+
+The full data path still runs in mock mode. Files go through MinIO, PostgreSQL,
+Redis, RQ, and the worker — so you can verify that upload, job-status polling, and
+gallery rendering all work correctly.
+
+**Switch to the full stack before:**
+
+- Making any claim about caption quality or content
+- Reporting or fixing search relevance (which images appear for a query)
+- Reporting or fixing OCR accuracy
+- Reporting or fixing clustering quality (which images group together)
+- Testing any change to ML model parameters or the inference pipeline
+
+```bash
+# Full ML stack — requires NVIDIA GPU; downloads models on first run
+docker compose up --build
+```
+
+### The rule: no ML quality claims from mock mode
+
+> ⚠️ **Do not report caption or search quality issues observed in mock mode.**
+>
+> If you ran `docker compose -f docker-compose.light.yml up --build` and noticed that
+> captions look wrong, search returns unrelated images, or objects are not detected —
+> that is expected mock behavior and is not a bug. Open a full-stack environment and
+> reproduce the issue there before filing a report or opening a PR that claims to fix
+> ML output quality.
+
+This protects maintainer review time and prevents changes that "fix" mock artifacts
+from accidentally landing in the production ML path.
+
 ## Full setup: real ML inference
 
 Use the full stack only when your issue needs real model behavior, real captions, real object detection, real OCR, or ML performance validation.

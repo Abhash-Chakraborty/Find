@@ -46,6 +46,35 @@ class TestUploadSuccess:
         media = db.query(Media).filter(Media.id == result["media_id"]).one()
         assert media.analysis_job_id == result["job_id"]
 
+    def test_single_image_persists_thumbnail_metadata(self, client, db):
+        response = client.post(
+            "/api/upload",
+            files=[("files", ("photo.png", get_valid_image_bytes(), "image/png"))],
+        )
+
+        result = response.json()["results"][0]
+        media = db.query(Media).filter(Media.id == result["media_id"]).one()
+        assert media.thumbnail_key == "thumbnails/ab/abc.webp"
+        assert media.thumbnail_content_type == "image/webp"
+        assert media.thumbnail_size == 128
+        assert media.thumbnail_width == 1
+        assert media.thumbnail_height == 1
+
+    def test_thumbnail_failure_does_not_block_upload(self, client, db):
+        with patch("find_api.routers.upload.upload_thumbnail", return_value=None):
+            response = client.post(
+                "/api/upload",
+                files=[("files", ("photo.png", get_valid_image_bytes(), "image/png"))],
+            )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "uploaded"
+
+        media = db.query(Media).filter(Media.id == result["media_id"]).one()
+        assert media.thumbnail_key is None
+        assert media.minio_key is not None
+
     def test_duplicate_returns_duplicate_status(self, client):
         data = get_valid_image_bytes()
         first = client.post(

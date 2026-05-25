@@ -63,5 +63,10 @@ dist/
 build/
 *.egg-info/
 
+# Tauri
+frontend/src-tauri/target/
+frontend/out/
+frontend/src-tauri/gen/
+
 # MinIO data
 minio_data/

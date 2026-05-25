@@ -8,7 +8,11 @@ ENV PATH="$PNPM_HOME:$PATH"
 # Keep the package manager setup in one reusable stage so every later stage
 # uses the same pinned pnpm binary.
 FROM base AS pnpm
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate \
+RUN --mount=type=cache,id=find-npm-cache,target=/root/.npm \
+    npm config set fetch-retries 5 \
+    && npm config set fetch-retry-mintimeout 20000 \
+    && npm config set fetch-retry-maxtimeout 120000 \
+    && npm install --global pnpm@${PNPM_VERSION} \
     && pnpm config set store-dir /pnpm/store
 
 # Install dependencies only when needed

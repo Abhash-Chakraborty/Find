@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   type AnalysisStageName,
@@ -24,6 +24,8 @@ import {
   type MediaDetail,
   type MediaItem,
   reprocessImage,
+  submitCaptionCorrection,
+  submitObjectCorrection,
   toggleLike,
 } from "@/lib/api";
 import {
@@ -94,6 +96,108 @@ function DetailRow({
       <dd className="max-w-[62%] text-right text-sm text-[color:var(--near-white)]">
         {children}
       </dd>
+    </div>
+  );
+}
+
+function CorrectionEditor({
+  label,
+  initialValue,
+  placeholder,
+  saveLabel,
+  onSave,
+  parseValue = (value) => value.trim(),
+}: {
+  label: string;
+  initialValue: string;
+  placeholder: string;
+  saveLabel: string;
+  onSave: (value: string | string[]) => Promise<unknown>;
+  parseValue?: (value: string) => string | string[];
+}) {
+  const textareaId = useId();
+  const [isEditing, setIsEditing] = useState(false);
+  const [value, setValue] = useState(initialValue);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setValue(initialValue);
+    }
+  }, [initialValue, isEditing]);
+
+  const correctionMutation = useMutation({
+    mutationFn: async () => {
+      const parsedValue = parseValue(value);
+      if (
+        (typeof parsedValue === "string" && !parsedValue.trim()) ||
+        (Array.isArray(parsedValue) && parsedValue.length === 0)
+      ) {
+        throw new Error("Correction cannot be empty");
+      }
+      return onSave(parsedValue);
+    },
+    onSuccess: () => {
+      setIsEditing(false);
+      toast.success("Correction saved");
+    },
+    onError: () => {
+      toast.error("Failed to save correction");
+    },
+  });
+
+  if (!isEditing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsEditing(true)}
+        className="frost-button mt-3 w-full justify-center px-3 py-2 text-xs font-medium"
+      >
+        {label}
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-3 space-y-2 rounded-2xl border border-[var(--frost)] bg-[hsl(var(--background))] p-3">
+      <label
+        htmlFor={textareaId}
+        className="block text-xs font-semibold uppercase text-[color:var(--muted)]"
+      >
+        {label}
+      </label>
+      <textarea
+        id={textareaId}
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        placeholder={placeholder}
+        rows={4}
+        className="w-full resize-y rounded-xl border border-[var(--frost)] bg-[color:var(--surface-soft)] px-3 py-2 text-sm leading-6 text-[color:var(--near-white)] placeholder:text-[color:var(--muted)] outline-none transition focus:border-[color:var(--blue)]"
+      />
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setValue(initialValue);
+            setIsEditing(false);
+          }}
+          disabled={correctionMutation.isPending}
+          className="frost-button px-3 py-1.5 text-xs"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => correctionMutation.mutate()}
+          disabled={correctionMutation.isPending}
+          className="white-pill px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+        >
+          {correctionMutation.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            saveLabel
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -393,7 +497,7 @@ export function ImagePreviewModal({
               <h3 className="mb-2 text-xs font-semibold uppercase text-[color:var(--muted)]">
                 Caption
               </h3>
-              <div className="rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
+              <div className="space-y-3 rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
                 {status === "pending" || status === "processing" ? (
                   <p className="text-sm text-[color:var(--silver)] flex items-center gap-2">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
@@ -411,6 +515,20 @@ export function ImagePreviewModal({
                   <p className="text-sm text-[color:var(--silver)]">
                     No caption generated (empty result).
                   </p>
+                )}
+                {status === "indexed" && (
+                  <CorrectionEditor
+                    label="Edit caption for training"
+                    initialValue={caption ?? ""}
+                    placeholder="Write the caption this image should have..."
+                    saveLabel="Save caption"
+                    onSave={(correctedCaption) =>
+                      submitCaptionCorrection(
+                        media.id,
+                        String(correctedCaption),
+                      )
+                    }
+                  />
                 )}
               </div>
             </section>
@@ -469,6 +587,31 @@ export function ImagePreviewModal({
                     <p className="text-sm text-[color:var(--silver)]">
                       No objects detected (empty result).
                     </p>
+                  </div>
+                )}
+
+                {status === "indexed" && (
+                  <div className="border-t border-[var(--frost-soft)] pt-3">
+                    <CorrectionEditor
+                      label="Edit object labels for training"
+                      initialValue={objects.map((obj) => obj.class).join("\n")}
+                      placeholder="Enter the correct object labels, one per line..."
+                      saveLabel="Save objects"
+                      parseValue={(rawValue) =>
+                        rawValue
+                          .split(/[\n,]/)
+                          .map((label) => label.trim())
+                          .filter(Boolean)
+                      }
+                      onSave={(correctedObjects) =>
+                        submitObjectCorrection(
+                          media.id,
+                          Array.isArray(correctedObjects)
+                            ? correctedObjects
+                            : [String(correctedObjects)],
+                        )
+                      }
+                    />
                   </div>
                 )}
 
