@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_QUEUE_NAME = "default"
 CLUSTERING_LOCK_KEY = "find:clustering:queued"
 CLUSTERING_JOB_ID_KEY = "find:clustering:job-id"
+FEEDBACK_LOCK_KEY = "find:feedback-ranking:queued"
+FEEDBACK_JOB_ID_KEY = "find:feedback-ranking:job-id"
 
 
 def get_redis_connection() -> Redis:
@@ -85,20 +87,44 @@ def enqueue_clustering_job(*, reason: str) -> dict[str, Any]:
 
 
 def enqueue_feedback_ranking_job(reason: str) -> dict[str, Any]:
-    """Enqueue feedback ranking update job."""
-    from find_api.workers.jobs import process_feedback_ranking
+    """Enqueue feedback ranking update job only once."""
+    redis_conn = get_redis_connection()
+    existing_job_id = redis_conn.get(FEEDBACK_JOB_ID_KEY)
 
-    job = get_task_queue().enqueue(
-        process_feedback_ranking,
-        job_timeout=settings.WORKER_TIMEOUT,
-        result_ttl=300,
-    )
+    if redis_conn.set(FEEDBACK_LOCK_KEY, reason, nx=True, ex=300):
+        from find_api.workers.jobs import process_feedback_ranking
 
-    logger.info("Queued feedback ranking job %s (%s)", job.id, reason)
+        job = get_task_queue().enqueue(
+            process_feedback_ranking,
+            job_timeout=settings.WORKER_TIMEOUT,
+            result_ttl=300,
+        )
+
+        redis_conn.set(FEEDBACK_JOB_ID_KEY, job.id, ex=300)
+
+        logger.info(
+            "Queued feedback ranking job %s (%s)",
+            job.id,
+            reason,
+        )
+
+        return {
+            "job_id": job.id,
+            "message": "Feedback ranking job queued",
+            "enqueued": True,
+            "status": "queued",
+        }
+
+    if existing_job_id:
+        return {
+            "job_id": existing_job_id.decode("utf-8"),
+            "message": "Feedback ranking job already queued",
+            "enqueued": False,
+            "status": "queued",
+        }
 
     return {
-        "job_id": job.id,
-        "message": "Feedback ranking job queued",
-        "enqueued": True,
-        "status": "queued",
+        "message": "Unable to queue feedback ranking job",
+        "enqueued": False,
+        "status": "failed",
     }
