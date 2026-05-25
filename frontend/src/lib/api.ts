@@ -96,6 +96,16 @@ export interface GalleryResponse {
   limit: number;
 }
 
+export interface BulkDeleteResponse {
+  message: string;
+  deleted_ids: number[];
+  missing_ids: number[];
+  failed_ids: number[];
+  deleted_count: number;
+  missing_count: number;
+  failed_count: number;
+}
+
 export interface ClusterSample {
   id: number;
   filename: string;
@@ -266,6 +276,18 @@ export const deleteImage = async (
 ): Promise<{ id: number; message: string }> => {
   const response = await api.delete<{ id: number; message: string }>(
     `/api/image/${mediaId}`,
+  );
+  return response.data;
+};
+
+export const deleteImagesBulk = async (
+  mediaIds: number[],
+): Promise<BulkDeleteResponse> => {
+  const response = await api.post<BulkDeleteResponse>(
+    "/api/images/bulk-delete",
+    {
+      media_ids: mediaIds,
+    },
   );
   return response.data;
 };

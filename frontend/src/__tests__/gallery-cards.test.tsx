@@ -2,7 +2,7 @@
 // Uses Vitest and React Testing Library
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import GalleryPage from "../app/gallery/page";
@@ -160,5 +160,45 @@ describe("Gallery card states (light mode)", () => {
     );
     const retryBtn = screen.getByLabelText("Retry analysis");
     expect(retryBtn).toBeInTheDocument();
+  });
+
+  it("can bulk delete selected gallery cards", async () => {
+    vi.mocked(api.getGallery).mockResolvedValue({
+      items: mockItems,
+      total: 3,
+      page: 1,
+      limit: 24,
+    });
+    vi.mocked(api.deleteImagesBulk).mockResolvedValue({
+      message: "Bulk delete completed",
+      deleted_ids: [1, 2],
+      missing_ids: [],
+      failed_ids: [],
+      deleted_count: 2,
+      missing_count: 0,
+      failed_count: 0,
+    });
+
+    renderWithClient(<GalleryPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select image1.jpg")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText("Select image1.jpg"));
+    fireEvent.click(screen.getByLabelText("Select image2.jpg"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+    const deleteButtons = screen.getAllByRole("button", {
+      name: "Delete selected",
+    });
+    const confirmButton = deleteButtons.at(-1);
+    if (!confirmButton) {
+      throw new Error("Expected delete confirmation button");
+    }
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(api.deleteImagesBulk).toHaveBeenCalledWith([1, 2]);
+    });
   });
 });
