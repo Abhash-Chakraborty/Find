@@ -51,6 +51,7 @@ services:
       retries: 3
 
   api:
+    image: find-light-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -90,13 +91,7 @@ services:
     restart: unless-stopped
 
   worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        BASE_IMAGE: python:3.12-slim
-        PYTHON_VERSION: "3.12"
-        UV_SYNC_EXTRAS: ""
+    image: find-light-backend
     container_name: find-light-worker
     command: rq worker --worker-class ${RQ_WORKER_CLASS:-rq.worker.worker_classes.SimpleWorker} --url redis://redis:6379 high default low
     environment:

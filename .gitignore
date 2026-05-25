@@ -35,7 +35,7 @@ Thumbs.db
 .env.*.local
 
 # Docker
-*.dockerignore
+!**/.dockerignore
 
 # Data
 uploads/
