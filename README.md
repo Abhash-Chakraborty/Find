@@ -11,7 +11,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/gssoc-2026-banner.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/gssoc-2026-banner-light.png">
-  <img alt="Fallback image description" src="default-image.png">
+  <img alt="Fallback image description" src="docs/assets/gssoc-2026-banner.svg">
 </picture>
 
 Find is a local-first AI image intelligence platform for uploading, indexing, searching, and clustering images on your own machine.
@@ -39,7 +39,7 @@ See the mobile direction in [`docs/mobile-strategy.md`](./docs/mobile-strategy.m
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/architecture-light.png">
-  <img alt="Fallback image description" src="default-image.png">
+  <img alt="Fallback image description" src="docs/assets/architecture.png">
 </picture>
 
 ## Screenshots
@@ -384,7 +384,7 @@ docker compose -f docker-compose.light.yml up --build
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/contribution.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/contribution-light.png">
-  <img alt="Fallback image description" src="default-image.png">
+  <img alt="Fallback image description" src="docs/assets/contribution.png">
 </picture>
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for full details.
