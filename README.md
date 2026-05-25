@@ -8,9 +8,11 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License MIT"></a>
 </p>
 
-<p align="center">
-  <img src="docs/assets/gssoc-2026-banner.svg" alt="Find x GSSoC 2026">
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/gssoc-2026-banner.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/gssoc-2026-banner-light.png">
+  <img alt="Fallback image description" src="default-image.png">
+</picture>
 
 Find is a local-first AI image intelligence platform for uploading, indexing, searching, and clustering images on your own machine.
 
@@ -34,7 +36,11 @@ See the mobile direction in [`docs/mobile-strategy.md`](./docs/mobile-strategy.m
 
 ## Architecture
 
-![Architecture](docs/assets/architecture.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/architecture-light.png">
+  <img alt="Fallback image description" src="default-image.png">
+</picture>
 
 ## Screenshots
 
@@ -375,7 +381,11 @@ docker compose -f docker-compose.light.yml up --build
 
 ## Contribution Workflow
 
-![Contribution Workflow](docs/assets/contribution.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/contribution.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/contribution-light.png">
+  <img alt="Fallback image description" src="default-image.png">
+</picture>
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for full details.
 Labels: [`good first issue`](https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue) · [`level:beginner`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Abeginner%22) · [`level:intermediate`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Aintermediate%22) · [`level:advanced`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Aadvanced%22) · [`level:critical`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Acritical%22) · [`help wanted`](https://github.com/Abhash-Chakraborty/Find/labels/help%20wanted)
