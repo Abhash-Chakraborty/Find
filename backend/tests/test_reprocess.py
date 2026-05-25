@@ -52,6 +52,7 @@ class FakeMedia(Base):
     content_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     liked: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(50), default="pending")
     analysis_job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

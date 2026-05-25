@@ -41,6 +41,7 @@ Thumbs.db
 uploads/
 *.db
 *.sqlite
+backend/vault_storage/
 
 # ML weights/checkpoints (download locally, don't commit)
 *.pt

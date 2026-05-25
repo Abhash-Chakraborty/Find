@@ -19,15 +19,17 @@ from slowapi.util import get_remote_address
 
 from find_api.core.crypto import (
     VAULT_STORAGE_DIR,
+    create_key_verifier,
     delete_session_key,
     decrypt_file_stream,
     derive_master_key,
+    verify_master_key,
     get_session_key,
     encrypt_file,
     set_session_key,
 )
 from find_api.core.database import get_db
-from find_api.core.storage import get_file, delete_file
+from find_api.core.storage import delete_file, download_file_to_path
 from find_api.models.media import Media
 
 router = APIRouter()
@@ -82,35 +84,83 @@ def _get_cached_master_key(session_token: str) -> bytes:
         ) from exc
 
 
-def _load_or_create_vault_salt(db: Session) -> bytes:
-    row = db.execute(text("SELECT salt FROM vault_config ORDER BY id ASC LIMIT 1")).first()
-    if row and row[0] is not None:
-        return _normalize_binary(row[0])
+def _load_vault_config(db: Session) -> Optional[tuple[bytes, bytes, bytes]]:
+    row = db.execute(
+        text(
+            "SELECT salt, verifier_nonce, verifier_ciphertext "
+            "FROM vault_config ORDER BY id ASC LIMIT 1"
+        )
+    ).first()
+    if not row:
+        return None
+    if row[0] is None or row[1] is None or row[2] is None:
+        return None
+    return (
+        _normalize_binary(row[0]),
+        _normalize_binary(row[1]),
+        _normalize_binary(row[2]),
+    )
 
+
+def _create_vault_config(db: Session, passphrase: str) -> bytes:
     salt = os.urandom(16)
+    master_key = derive_master_key(passphrase, salt)
+    verifier_nonce, verifier_ciphertext = create_key_verifier(master_key)
+
     try:
         dialect_name = db.get_bind().dialect.name
     except Exception:
         dialect_name = "postgresql"
     if dialect_name == "sqlite":
         db.execute(
-            text("INSERT OR IGNORE INTO vault_config (id, salt) VALUES (1, :salt)"),
-            {"salt": salt},
+            text(
+                "INSERT OR IGNORE INTO vault_config "
+                "(id, salt, verifier_nonce, verifier_ciphertext) "
+                "VALUES (1, :salt, :verifier_nonce, :verifier_ciphertext)"
+            ),
+            {
+                "salt": salt,
+                "verifier_nonce": verifier_nonce,
+                "verifier_ciphertext": verifier_ciphertext,
+            },
         )
     else:
         db.execute(
             text(
-                "INSERT INTO vault_config (id, salt) VALUES (1, :salt) "
+                "INSERT INTO vault_config "
+                "(id, salt, verifier_nonce, verifier_ciphertext) "
+                "VALUES (1, :salt, :verifier_nonce, :verifier_ciphertext) "
                 "ON CONFLICT (id) DO NOTHING"
             ),
-            {"salt": salt},
+            {
+                "salt": salt,
+                "verifier_nonce": verifier_nonce,
+                "verifier_ciphertext": verifier_ciphertext,
+            },
         )
     db.commit()
 
-    row = db.execute(text("SELECT salt FROM vault_config ORDER BY id ASC LIMIT 1")).first()
-    if not row or row[0] is None:
-        raise HTTPException(status_code=500, detail="Failed to initialize vault salt")
-    return _normalize_binary(row[0])
+    config = _load_vault_config(db)
+    if config is None:
+        raise HTTPException(status_code=500, detail="Failed to initialize vault")
+
+    stored_salt, stored_nonce, stored_ciphertext = config
+    stored_key = derive_master_key(passphrase, stored_salt)
+    if not verify_master_key(stored_key, stored_nonce, stored_ciphertext):
+        raise HTTPException(status_code=401, detail="Invalid vault passphrase")
+    return stored_key
+
+
+def _load_or_create_master_key(db: Session, passphrase: str) -> bytes:
+    config = _load_vault_config(db)
+    if config is None:
+        return _create_vault_config(db, passphrase)
+
+    salt, verifier_nonce, verifier_ciphertext = config
+    master_key = derive_master_key(passphrase, salt)
+    if not verify_master_key(master_key, verifier_nonce, verifier_ciphertext):
+        raise HTTPException(status_code=401, detail="Invalid vault passphrase")
+    return master_key
 
 
 def _load_media_or_404(db: Session, media_id: int) -> Media:
@@ -134,6 +184,23 @@ def _load_vault_metadata(db: Session, media_id: int) -> Optional[tuple[str, byte
     return row[0], _normalize_binary(row[1])
 
 
+def _rollback_hidden_state_after_delete_failure(
+    db: Session, media: Media, encrypted_path: Path
+) -> None:
+    """Best-effort rollback when original object deletion fails after encryption."""
+    try:
+        db.execute(
+            text("DELETE FROM vault_metadata WHERE media_id = :media_id"),
+            {"media_id": media.id},
+        )
+        media.is_hidden = False
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+    finally:
+        encrypted_path.unlink(missing_ok=True)
+
+
 @router.post("/vault/unlock")
 @limiter.limit("5/minute")
 def unlock_vault(
@@ -142,11 +209,8 @@ def unlock_vault(
     db: Session = Depends(get_db),
 ):
     if not payload.passphrase or not payload.passphrase.strip():
-        raise HTTPException(
-            status_code=400, detail="Passphrase must not be empty"
-        )
-    salt = _load_or_create_vault_salt(db)
-    master_key = derive_master_key(payload.passphrase, salt)
+        raise HTTPException(status_code=400, detail="Passphrase must not be empty")
+    master_key = _load_or_create_master_key(db, payload.passphrase)
     session_token = secrets.token_urlsafe(32)
     set_session_key(session_token, master_key)
     return {"session_token": session_token}
@@ -208,7 +272,6 @@ def hide_media(
     if existing_metadata is not None:
         raise HTTPException(status_code=409, detail="Vault metadata already exists")
 
-    source_bytes = get_file(media.minio_key)
     encrypted_path = VAULT_STORAGE_DIR / f"{media.id}-{uuid4().hex}.enc"
     encrypted_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -216,30 +279,36 @@ def hide_media(
     os.close(fd)
 
     try:
-        with open(temp_source_path, "wb") as temp_handle:
-            temp_handle.write(source_bytes)
+        try:
+            download_file_to_path(media.minio_key, temp_source_path)
+            iv = encrypt_file(master_key, temp_source_path, str(encrypted_path))
 
-        iv = encrypt_file(master_key, temp_source_path, str(encrypted_path))
+            db.execute(
+                text(
+                    "INSERT INTO vault_metadata (media_id, encrypted_path, iv) "
+                    "VALUES (:media_id, :encrypted_path, :iv)"
+                ),
+                {
+                    "media_id": media.id,
+                    "encrypted_path": str(encrypted_path),
+                    "iv": iv,
+                },
+            )
+            media.is_hidden = True
+            db.commit()
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            encrypted_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=500, detail="Failed to hide image") from exc
 
-        db.execute(
-            text(
-                "INSERT INTO vault_metadata (media_id, encrypted_path, iv) "
-                "VALUES (:media_id, :encrypted_path, :iv)"
-            ),
-            {
-                "media_id": media.id,
-                "encrypted_path": str(encrypted_path),
-                "iv": iv,
-            },
-        )
-        media.is_hidden = True
-        db.commit()
-    except Exception as exc:  # noqa: BLE001
-        db.rollback()
-        Path(encrypted_path).unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail="Failed to hide image") from exc
-    else:
-        delete_file(media.minio_key)
+        try:
+            delete_file(media.minio_key)
+        except Exception as exc:  # noqa: BLE001
+            _rollback_hidden_state_after_delete_failure(db, media, encrypted_path)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to remove original image from storage",
+            ) from exc
     finally:
         Path(temp_source_path).unlink(missing_ok=True)
 

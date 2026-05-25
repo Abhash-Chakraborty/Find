@@ -45,6 +45,8 @@ def upgrade() -> None:
         "vault_config",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("salt", sa.LargeBinary(), nullable=False),
+        sa.Column("verifier_nonce", sa.LargeBinary(), nullable=False),
+        sa.Column("verifier_ciphertext", sa.LargeBinary(), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

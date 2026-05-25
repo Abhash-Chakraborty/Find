@@ -67,9 +67,7 @@ export function VaultUnlock() {
       >
         {isSubmitting ? "Unlocking" : "Unlock Vault"}
       </button>
-      {errorMessage && (
-        <p className="text-sm text-[#ff9bab]">{errorMessage}</p>
-      )}
+      {errorMessage && <p className="text-sm text-[#ff9bab]">{errorMessage}</p>}
     </form>
   );
 }

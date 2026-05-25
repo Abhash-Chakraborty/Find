@@ -48,9 +48,9 @@ export function VaultGallery() {
 
   useEffect(() => {
     if (!isUnlocked) {
-      Object.values(objectUrlsRef.current).forEach((url) =>
-        URL.revokeObjectURL(url),
-      );
+      Object.values(objectUrlsRef.current).forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
       objectUrlsRef.current = {};
       setStreamUrls({});
       return;
@@ -72,12 +72,15 @@ export function VaultGallery() {
       try {
         await Promise.all(
           listQuery.data.map(async (item) => {
-            const response = await api.get<Blob>(`/api/vault/stream/${item.id}`, {
-              headers: {
-                Authorization: `Bearer ${sessionToken}`,
+            const response = await api.get<Blob>(
+              `/api/vault/stream/${item.id}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${sessionToken}`,
+                },
+                responseType: "blob",
               },
-              responseType: "blob",
-            });
+            );
 
             if (!cancelled) {
               nextUrls[item.id] = URL.createObjectURL(response.data);
@@ -86,17 +89,21 @@ export function VaultGallery() {
         );
 
         if (cancelled) {
-          Object.values(nextUrls).forEach((url) => URL.revokeObjectURL(url));
+          Object.values(nextUrls).forEach((url) => {
+            URL.revokeObjectURL(url);
+          });
           return;
         }
 
-        Object.values(objectUrlsRef.current).forEach((url) =>
-          URL.revokeObjectURL(url),
-        );
+        Object.values(objectUrlsRef.current).forEach((url) => {
+          URL.revokeObjectURL(url);
+        });
         objectUrlsRef.current = nextUrls;
         setStreamUrls(nextUrls);
       } catch (error) {
-        Object.values(nextUrls).forEach((url) => URL.revokeObjectURL(url));
+        Object.values(nextUrls).forEach((url) => {
+          URL.revokeObjectURL(url);
+        });
 
         if (axios.isAxiosError(error) && error.response?.status === 401) {
           vaultStore.getState().lock();
@@ -118,9 +125,9 @@ export function VaultGallery() {
 
   useEffect(() => {
     return () => {
-      Object.values(objectUrlsRef.current).forEach((url) =>
-        URL.revokeObjectURL(url),
-      );
+      Object.values(objectUrlsRef.current).forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
       objectUrlsRef.current = {};
     };
   }, []);
@@ -202,6 +209,7 @@ export function VaultGallery() {
                 >
                   <div className="relative aspect-square w-full overflow-hidden bg-[color:var(--surface-soft)]">
                     {imageSrc ? (
+                      // biome-ignore lint/performance/noImgElement: Vault previews use authenticated blob URLs from decrypted local streams, not public image URLs.
                       <img
                         src={imageSrc}
                         alt={item.filename}

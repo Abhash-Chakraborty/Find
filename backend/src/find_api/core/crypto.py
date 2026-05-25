@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import time
 import threading
 from pathlib import Path
 from typing import Dict, Iterator
 
 import argon2
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 active_vault_sessions: Dict[str, tuple[bytes, float]] = {}
@@ -20,6 +23,7 @@ _AES_KEY_SIZE = 32
 _GCM_IV_SIZE = 12
 _GCM_TAG_SIZE = 16
 _CHUNK_SIZE = 1024 * 1024
+_VAULT_VERIFIER_PLAINTEXT = b"find-vault-verifier-v1"
 
 
 def derive_master_key(passphrase: str, salt: bytes) -> bytes:
@@ -34,6 +38,26 @@ def derive_master_key(passphrase: str, salt: bytes) -> bytes:
         type=argon2.low_level.Type.ID,
         version=argon2.low_level.ARGON2_VERSION,
     )
+
+
+def create_key_verifier(master_key: bytes) -> tuple[bytes, bytes]:
+    """Create encrypted verifier data for checking future passphrases."""
+    nonce = os.urandom(_GCM_IV_SIZE)
+    ciphertext = AESGCM(master_key).encrypt(
+        nonce,
+        _VAULT_VERIFIER_PLAINTEXT,
+        None,
+    )
+    return nonce, ciphertext
+
+
+def verify_master_key(master_key: bytes, nonce: bytes, ciphertext: bytes) -> bool:
+    """Return True only when the derived master key can decrypt the verifier."""
+    try:
+        plaintext = AESGCM(master_key).decrypt(nonce, ciphertext, None)
+    except InvalidTag:
+        return False
+    return plaintext == _VAULT_VERIFIER_PLAINTEXT
 
 
 def get_session_key(token: str) -> bytes:
@@ -100,32 +124,47 @@ def encrypt_file(master_key: bytes, source_path: str, dest_path: str) -> bytes:
 def decrypt_file_stream(
     master_key: bytes, iv: bytes, encrypted_path: str
 ) -> Iterator[bytes]:
-    """Yield decrypted chunks from an AES-256-GCM encrypted blob on disk."""
+    """Yield decrypted chunks only after AES-GCM tag verification succeeds."""
     encrypted_file = Path(encrypted_path)
     file_size = encrypted_file.stat().st_size
     if file_size < _GCM_TAG_SIZE:
         raise ValueError("Encrypted file is too small to contain an auth tag")
 
+    fd, verified_plaintext_path = tempfile.mkstemp(prefix="vault-verified-")
+    os.close(fd)
+    verified_plaintext = Path(verified_plaintext_path)
+
     with encrypted_file.open("rb") as handle:
-        handle.seek(file_size - _GCM_TAG_SIZE)
-        tag = handle.read(_GCM_TAG_SIZE)
-        if len(tag) != _GCM_TAG_SIZE:
-            raise ValueError("Encrypted file is missing an auth tag")
+        try:
+            handle.seek(file_size - _GCM_TAG_SIZE)
+            tag = handle.read(_GCM_TAG_SIZE)
+            if len(tag) != _GCM_TAG_SIZE:
+                raise ValueError("Encrypted file is missing an auth tag")
 
-        handle.seek(0)
-        cipher = Cipher(algorithms.AES(master_key), modes.GCM(iv, tag))
-        decryptor = cipher.decryptor()
+            handle.seek(0)
+            cipher = Cipher(algorithms.AES(master_key), modes.GCM(iv, tag))
+            decryptor = cipher.decryptor()
 
-        remaining = file_size - _GCM_TAG_SIZE
-        while remaining > 0:
-            chunk = handle.read(min(_CHUNK_SIZE, remaining))
-            if not chunk:
-                break
-            remaining -= len(chunk)
-            decrypted_chunk = decryptor.update(chunk)
-            if decrypted_chunk:
-                yield decrypted_chunk
+            remaining = file_size - _GCM_TAG_SIZE
+            with verified_plaintext.open("wb") as output:
+                while remaining > 0:
+                    chunk = handle.read(min(_CHUNK_SIZE, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    decrypted_chunk = decryptor.update(chunk)
+                    if decrypted_chunk:
+                        output.write(decrypted_chunk)
 
-        final_chunk = decryptor.finalize()
-        if final_chunk:
-            yield final_chunk
+                final_chunk = decryptor.finalize()
+                if final_chunk:
+                    output.write(final_chunk)
+
+            with verified_plaintext.open("rb") as output:
+                while True:
+                    chunk = output.read(_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    yield chunk
+        finally:
+            verified_plaintext.unlink(missing_ok=True)
