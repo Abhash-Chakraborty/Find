@@ -1,12 +1,12 @@
 "use client";
 
-import { ChevronDown, Calendar } from "lucide-react";
+import { Calendar, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DateRangePreset, SortOrder } from "@/lib/api";
 
 interface GalleryDateFilterProps {
   sortOrder: SortOrder;
-  dateRange: DateRangePreset | null;
+  dateRange: DateRangePreset | undefined | null;
   dateStart: string | null;
   dateEnd: string | null;
   onSortOrderChange: (order: SortOrder) => void;
@@ -191,11 +191,15 @@ export function GalleryDateFilter({
 
               {/* Custom date inputs */}
               <div className="border-t border-[var(--frost)] pt-3">
-                <label className="block text-xs font-medium text-[color:var(--silver)] mb-2">
-                  Custom date range
-                </label>
                 <div className="space-y-2">
+                  <label
+                    htmlFor="custom-date-start"
+                    className="block text-xs font-medium text-[color:var(--silver)] mb-2"
+                  >
+                    Custom date range
+                  </label>
                   <input
+                    id="custom-date-start"
                     type="date"
                     value={customStart}
                     onChange={(e) => setCustomStart(e.target.value)}
@@ -203,6 +207,7 @@ export function GalleryDateFilter({
                     placeholder="Start date"
                   />
                   <input
+                    id="custom-date-end"
                     type="date"
                     value={customEnd}
                     onChange={(e) => setCustomEnd(e.target.value)}

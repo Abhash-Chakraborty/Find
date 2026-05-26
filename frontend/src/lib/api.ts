@@ -241,9 +241,9 @@ export const getGallery = async (
     status?: MediaStatus;
     liked?: boolean;
     sortOrder?: SortOrder;
-    dateRange?: DateRangePreset;
-    dateStart?: string;
-    dateEnd?: string;
+    dateRange?: DateRangePreset | undefined;
+    dateStart?: string | undefined;
+    dateEnd?: string | undefined;
   } = {},
 ): Promise<GalleryResponse> => {
   const page = params.page || 1;

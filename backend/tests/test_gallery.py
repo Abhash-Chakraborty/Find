@@ -638,4 +638,3 @@ class TestGalleryDateFiltering:
 
         body = client.get("/api/gallery").json()
         assert body["total"] == 2
-

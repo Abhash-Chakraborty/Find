@@ -72,20 +72,20 @@ def parse_date_range(
 ) -> tuple[Optional[datetime], Optional[datetime]]:
     """
     Parse date range parameters and return (start_date, end_date) in UTC.
-    
+
     Args:
         preset: One of "last_30_days", "last_60_days", "last_90_days", or "custom"
         custom_start: ISO 8601 date string (YYYY-MM-DD) for custom range start
         custom_end: ISO 8601 date string (YYYY-MM-DD) for custom range end
-    
+
     Returns:
         Tuple of (start_datetime, end_datetime) in UTC, or (None, None) if no filtering
     """
     if not preset:
         return None, None
-    
+
     now = datetime.now(timezone.utc)
-    
+
     if preset == "last_30_days":
         start = now - timedelta(days=30)
         return start, now
@@ -98,7 +98,7 @@ def parse_date_range(
     elif preset == "custom":
         start_date = None
         end_date = None
-        
+
         try:
             if custom_start:
                 start_date = datetime.strptime(custom_start, "%Y-%m-%d").replace(
@@ -106,22 +106,23 @@ def parse_date_range(
                 )
         except (ValueError, TypeError):
             logger.warning("Invalid custom_start date: %s", custom_start)
-        
+
         try:
             if custom_end:
                 # End of day for the end date (23:59:59.999999)
-                end_date = (
-                    datetime.strptime(custom_end, "%Y-%m-%d").replace(
-                        hour=23, minute=59, second=59, microsecond=999999,
-                        tzinfo=timezone.utc
-                    )
+                end_date = datetime.strptime(custom_end, "%Y-%m-%d").replace(
+                    hour=23,
+                    minute=59,
+                    second=59,
+                    microsecond=999999,
+                    tzinfo=timezone.utc,
                 )
         except (ValueError, TypeError):
             logger.warning("Invalid custom_end date: %s", custom_end)
-        
+
         if start_date or end_date:
             return start_date, end_date
-    
+
     return None, None
 
 

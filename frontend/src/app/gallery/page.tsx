@@ -31,12 +31,12 @@ import {
 } from "@/components/image-preview-modal";
 import { StatusIndicator } from "@/components/status-indicator";
 import {
-  api,
-  deleteImage,
-  deleteImagesBulk,
   type DateRangePreset,
   type GalleryResponse,
   type SortOrder,
+  api,
+  deleteImage,
+  deleteImagesBulk,
   getGallery,
   getImageDetail,
   reprocessImage,
@@ -170,9 +170,9 @@ const getSortOrderFromParam = (sortOrder: string | null): SortOrder => {
 /**
  * Maps a raw URL date_range parameter to a strongly-typed DateRangePreset.
  * @param dateRange - The raw string parameter from the URL.
- * @returns The resolved DateRangePreset type or null.
+ * @returns The resolved DateRangePreset type or undefined if not set.
  */
-const getDateRangeFromParam = (dateRange: string | null): DateRangePreset | null => {
+const getDateRangeFromParam = (dateRange: string | null): DateRangePreset | undefined => {
   if (
     dateRange === "last_30_days" ||
     dateRange === "last_60_days" ||
@@ -181,7 +181,7 @@ const getDateRangeFromParam = (dateRange: string | null): DateRangePreset | null
   ) {
     return dateRange;
   }
-  return null;
+  return undefined;
 };
 
 /**
@@ -198,10 +198,10 @@ const getSortOrderParam = (sortOrder: SortOrder): string | null => {
 
 /**
  * Maps a strongly-typed DateRangePreset back to a URL-friendly string.
- * @param dateRange - The active DateRangePreset type or null.
- * @returns The string value to use in the URL.
+ * @param dateRange - The active DateRangePreset type or undefined.
+ * @returns The string value to use in the URL, or null if not set.
  */
-const getDateRangeParam = (dateRange: DateRangePreset | null): string | null => {
+const getDateRangeParam = (dateRange: DateRangePreset | undefined): string | null => {
   return dateRange || null;
 };
 
@@ -268,7 +268,7 @@ function GalleryPageContent() {
         status: filter === "all" ? undefined : filter,
         liked: likedOnly ? true : undefined,
         sortOrder,
-        dateRange: dateRange || undefined,
+        dateRange,
         dateStart: dateStart || undefined,
         dateEnd: dateEnd || undefined,
       }),
@@ -360,14 +360,16 @@ function GalleryPageContent() {
       filter?: GalleryFilter;
       likedOnly?: boolean;
       sortOrder?: SortOrder;
-      dateRange?: DateRangePreset | null;
+      dateRange?: DateRangePreset | undefined | null;
       dateStart?: string | null;
       dateEnd?: string | null;
     }) => {
       const nextFilter = nextState.filter ?? filter;
       const nextLikedOnly = nextState.likedOnly ?? likedOnly;
       const nextSortOrder = nextState.sortOrder ?? sortOrder;
+      // Use !== undefined check to allow explicit null values to override existing dateRange
       const nextDateRange = nextState.dateRange !== undefined ? nextState.dateRange : dateRange;
+      // Use !== undefined check to allow explicit null values to override existing dates
       const nextDateStart = nextState.dateStart !== undefined ? nextState.dateStart : dateStart;
       const nextDateEnd = nextState.dateEnd !== undefined ? nextState.dateEnd : dateEnd;
       const nextParams = new URLSearchParams(searchParams.toString());

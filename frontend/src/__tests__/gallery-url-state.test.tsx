@@ -165,6 +165,7 @@ vi.mock("@/components/gallery-date-filter", () => ({
   }) => (
     <div data-testid="gallery-date-filter">
       <button
+        type="button"
         data-testid={`sort-${sortOrder}`}
         onClick={() => {
           onSortOrderChange(sortOrder === "newest" ? "oldest" : "newest");
@@ -173,6 +174,7 @@ vi.mock("@/components/gallery-date-filter", () => ({
         {sortOrder === "newest" ? "Newest first" : "Oldest first"}
       </button>
       <button
+        type="button"
         data-testid={`date-range-${dateRange || "all"}`}
         onClick={() => {
           onDateRangeChange(dateRange === "last_30_days" ? null : "last_30_days");
