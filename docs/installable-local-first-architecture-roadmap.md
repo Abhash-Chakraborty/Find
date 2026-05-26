@@ -217,7 +217,10 @@ Tauri is the best default desktop shell, Electron is the fallback if packaging f
 
 Find currently follows a local-first storage approach.
 
-When running through Docker, application data is stored locally on the user's machine using Docker volumes.
+When running through Docker, the stack stores application data on the user's machine through Docker volumes:
+- MinIO/S3-compatible object storage keeps uploaded image files and generated image artifacts.
+- PostgreSQL with pgvector keeps media records, processing status, captions, OCR text, detected objects, embeddings, and search metadata.
+- Redis/RQ keeps queue and worker job state for background processing.
 
 This means:
 - user data remains on the local device by default
@@ -234,19 +237,19 @@ Find separates binary file storage from metadata database storage.
 
 #### File / Image Storage
 
-Stores actual binary files such as:
-- screenshots
-- uploaded images
-- attachments
-- other media assets
+Stores actual image binaries and derived image files such as:
+- uploaded photos and screenshots
+- thumbnails or preview files
+- future generated image artifacts, if those features are added
 
 #### Metadata Database Storage
 
 Stores structured information related to files, including:
 - filenames
 - timestamps
-- tags
-- indexing information
+- processing status
+- captions, OCR text, and detected objects
+- vector embeddings used for semantic search
 - references to file locations
 
 This separation helps simplify indexing, searching, and future backup strategies.
