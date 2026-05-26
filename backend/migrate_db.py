@@ -2,6 +2,8 @@ import logging
 import os
 import sys
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 # Add the src-layout package to the path when running this script directly.
@@ -63,6 +65,11 @@ def migrate_db():
             )
             conn.commit()
             logger.info("Successfully updated vector column dimension.")
+
+        cfg = Config(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic.ini")
+        )
+        command.upgrade(cfg, "head")
 
     except Exception as e:
         logger.error(f"Migration failed: {e}")

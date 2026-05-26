@@ -1,9 +1,10 @@
-"""Tests for GET /api/gallery — response shape and status/liked filtering."""
+"""Tests for gallery endpoints — list/detail/delete and related behavior."""
 
 import hashlib
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+from find_api.models.cluster import Cluster
 from find_api.models.media import Media
 
 
@@ -31,6 +32,21 @@ def _seed(db, *, filename, status, liked=False, metadata_json=None):
     db.commit()
     db.refresh(media)
     return media
+
+
+def _seed_cluster(db, *, member_ids: list[int]) -> Cluster:
+    cluster = Cluster(
+        cluster_type="general",
+        member_ids=member_ids,
+        member_count=len(member_ids),
+        label="Test cluster",
+        description="Cluster used in tests",
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(cluster)
+    db.commit()
+    db.refresh(cluster)
+    return cluster
 
 
 class TestGalleryResponseShape:
@@ -250,3 +266,114 @@ class TestGalleryFiltering:
         assert body["total"] == 5
         assert len(body["items"]) == 2
         assert body["skip"] == 2
+
+
+class TestDeleteImage:
+    """DELETE /api/image/{media_id}"""
+
+    def test_delete_success_removes_db_row_and_minio_objects(self, client, db):
+        media = _seed(db, filename="delete-me.jpg", status="indexed")
+
+        with patch("find_api.routers.gallery.delete_file") as mock_delete_file:
+            response = client.delete(f"/api/image/{media.id}")
+
+        assert response.status_code == 200
+        assert response.json() == {"message": "Image deleted", "id": media.id}
+        assert db.query(Media).filter(Media.id == media.id).first() is None
+        mock_delete_file.assert_any_call(media.minio_key)
+        mock_delete_file.assert_any_call(media.thumbnail_key)
+
+    def test_delete_not_found_returns_404(self, client):
+        response = client.delete("/api/image/99999")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Image not found"
+
+    def test_delete_updates_cluster_member_ids(self, client, db):
+        first = _seed(db, filename="cluster-a.jpg", status="indexed")
+        second = _seed(db, filename="cluster-b.jpg", status="indexed")
+        third = _seed(db, filename="cluster-c.jpg", status="indexed")
+        cluster = _seed_cluster(db, member_ids=[first.id, second.id, third.id])
+
+        with patch("find_api.routers.gallery.delete_file"):
+            response = client.delete(f"/api/image/{second.id}")
+
+        assert response.status_code == 200
+        db.refresh(cluster)
+        assert cluster.member_ids == [first.id, third.id]
+        assert cluster.member_count == 2
+        assert db.query(Media).filter(Media.id == second.id).first() is None
+
+
+class TestBulkDeleteImages:
+    """POST /api/images/bulk-delete"""
+
+    def test_bulk_delete_removes_rows_storage_and_cluster_members(self, client, db):
+        first = _seed(db, filename="bulk-a.jpg", status="indexed")
+        second = _seed(db, filename="bulk-b.jpg", status="indexed")
+        third = _seed(db, filename="bulk-c.jpg", status="indexed")
+        cluster = _seed_cluster(db, member_ids=[first.id, second.id, third.id])
+
+        with patch("find_api.routers.gallery.delete_file") as mock_delete_file:
+            response = client.post(
+                "/api/images/bulk-delete",
+                json={"media_ids": [first.id, second.id]},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["deleted_ids"] == [first.id, second.id]
+        assert body["deleted_count"] == 2
+        assert body["missing_ids"] == []
+        assert body["failed_ids"] == []
+        assert db.query(Media).filter(Media.id.in_([first.id, second.id])).all() == []
+        db.refresh(cluster)
+        assert cluster.member_ids == [third.id]
+        assert cluster.member_count == 1
+        mock_delete_file.assert_any_call(first.minio_key)
+        mock_delete_file.assert_any_call(first.thumbnail_key)
+        mock_delete_file.assert_any_call(second.minio_key)
+        mock_delete_file.assert_any_call(second.thumbnail_key)
+
+    def test_bulk_delete_reports_missing_ids_without_failing_valid_deletes(
+        self, client, db
+    ):
+        media = _seed(db, filename="bulk-existing.jpg", status="indexed")
+
+        with patch("find_api.routers.gallery.delete_file"):
+            response = client.post(
+                "/api/images/bulk-delete",
+                json={"media_ids": [media.id, 99999]},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["deleted_ids"] == [media.id]
+        assert body["missing_ids"] == [99999]
+        assert body["failed_ids"] == []
+        assert db.query(Media).filter(Media.id == media.id).first() is None
+
+    def test_bulk_delete_reports_storage_failures_and_keeps_failed_rows(
+        self, client, db
+    ):
+        first = _seed(db, filename="bulk-fail-a.jpg", status="indexed")
+        second = _seed(db, filename="bulk-fail-b.jpg", status="indexed")
+
+        def fail_first_delete(key: str) -> None:
+            if key == first.minio_key:
+                raise RuntimeError("storage unavailable")
+
+        with patch(
+            "find_api.routers.gallery.delete_file", side_effect=fail_first_delete
+        ):
+            response = client.post(
+                "/api/images/bulk-delete",
+                json={"media_ids": [first.id, second.id]},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["deleted_ids"] == [second.id]
+        assert body["failed_ids"] == [first.id]
+        assert db.query(Media).filter(Media.id == first.id).first() is not None
+        assert db.query(Media).filter(Media.id == second.id).first() is None

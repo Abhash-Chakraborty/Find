@@ -37,6 +37,9 @@ class Media(Base):
     liked = Column(
         Boolean, nullable=False, default=False, server_default=sa_text("false")
     )
+    is_hidden = Column(
+        Boolean, nullable=False, default=False, server_default=sa_text("false")
+    )
 
     # Status tracking
     status = Column(String(50), default="pending", index=True)

@@ -54,6 +54,7 @@ services:
 
   # FastAPI Backend
   api:
+    image: find-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -101,12 +102,7 @@ services:
 
   # RQ Worker for background ML processing
   worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}
-        PYTHON_VERSION: ${BACKEND_PYTHON_VERSION:-3.12}
+    image: find-backend
     container_name: find-worker
     command: rq worker --worker-class ${RQ_WORKER_CLASS:-rq.worker.worker_classes.SimpleWorker} --url ${REDIS_URL:-redis://redis:6379} high default low
     environment:

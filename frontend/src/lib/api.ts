@@ -96,6 +96,16 @@ export interface GalleryResponse {
   limit: number;
 }
 
+export interface BulkDeleteResponse {
+  message: string;
+  deleted_ids: number[];
+  missing_ids: number[];
+  failed_ids: number[];
+  deleted_count: number;
+  missing_count: number;
+  failed_count: number;
+}
+
 export interface ClusterSample {
   id: number;
   filename: string;
@@ -152,6 +162,10 @@ export interface SearchResponse {
   results: SearchResult[];
   total: number;
   query: string;
+  page: number;
+  limit: number;
+  skip: number;
+  has_more: boolean;
 }
 
 export interface JobStatus {
@@ -266,12 +280,29 @@ export const deleteImage = async (
   return response.data;
 };
 
+export const deleteImagesBulk = async (
+  mediaIds: number[],
+): Promise<BulkDeleteResponse> => {
+  const response = await api.post<BulkDeleteResponse>(
+    "/api/images/bulk-delete",
+    {
+      media_ids: mediaIds,
+    },
+  );
+  return response.data;
+};
+
 export const searchImages = async (params: {
   query: string;
   limit?: number;
+  skip?: number;
 }): Promise<SearchResponse> => {
   const response = await api.get<SearchResponse>("/api/search", {
-    params: { q: params.query, limit: params.limit || 20 },
+    params: {
+      q: params.query,
+      limit: params.limit || 24,
+      skip: params.skip || 0,
+    },
   });
   return response.data;
 };

@@ -134,7 +134,17 @@ def generate_hybrid_embedding(
     image: Image.Image, metadata: Dict[str, Any]
 ) -> List[float]:
     """
-    Generate hybrid embedding from image, caption, and objects
+    Generate hybrid embedding from image, caption, and detected objects.
+
+    Weighted average depends on which text signals are present:
+      - image + caption + objects  →  equal thirds  (1/3 each)
+      - image + caption only       →  halves         (1/2 each)
+      - image + objects only       →  halves         (1/2 each)
+      - image only                 →  image vector directly
+
+    Empty strings are never passed to embed_text() because CLIP encodes
+    them as a deterministic non-zero vector that would introduce a
+    systematic bias across all images lacking that signal.
     """
     if settings.ML_MODE.lower() == "mock":
         logger.info("Using mock embedding generator")
@@ -146,29 +156,63 @@ def generate_hybrid_embedding(
 
         embedder = get_clip_embedder()
 
-        # Generate Image Embedding
+        # --- 1. Image vector (always computed) ---
         image_embedding = embedder.embed_image(image)
 
-        # Generate caption/object text embeddings in one model pass.
-        objects = metadata.get("objects", [])
-        object_names = [obj["class"] for obj in objects]
-        if object_names:
-            objects_text = "detected objects: " + ", ".join(
-                sorted(list(set(object_names)))
-            )
-        else:
-            objects_text = ""
-        caption_embedding, objects_embedding = embedder.embed_text(
-            [metadata.get("caption", ""), objects_text]
+        # --- 2. Build text signals — only non-empty strings qualify ---
+        caption = (metadata.get("caption") or "").strip()
+
+        raw_objects = metadata.get("objects") or []
+        object_names_set: set[str] = set()
+        for obj in raw_objects:
+            if not isinstance(obj, dict):
+                continue
+
+            label = str(obj.get("class", "")).strip()
+            if label:
+                object_names_set.add(label)
+
+        object_names = sorted(object_names_set)
+        objects_text = (
+            "detected objects: " + ", ".join(object_names) if object_names else ""
         )
 
-        # Create Hybrid Vector (Average)
-        hybrid_vector = (image_embedding + caption_embedding + objects_embedding) / 3.0
+        has_caption = bool(caption)
+        has_objects = bool(objects_text)
 
-        # Normalize
-        hybrid_vector = hybrid_vector / np.linalg.norm(hybrid_vector)
+        # --- 3. Embed only what exists, in a single model pass where possible ---
+        if has_caption and has_objects:
+            # Two text inputs → embed_text returns a 2-row matrix; unpack into two 1-D vectors
+            caption_embedding, objects_embedding = embedder.embed_text(
+                [caption, objects_text]
+            )
+            components = [image_embedding, caption_embedding, objects_embedding]
+            active_signals = ["image", "caption", "objects"]
+        elif has_caption:
+            caption_embedding = embedder.embed_text(caption)
+            components = [image_embedding, caption_embedding]
+            active_signals = ["image", "caption"]
+        elif has_objects:
+            objects_embedding = embedder.embed_text(objects_text)
+            components = [image_embedding, objects_embedding]
+            active_signals = ["image", "objects"]
+        else:
+            # No text signal at all — use the image embedding directly
+            components = [image_embedding]
+            active_signals = ["image"]
 
-        logger.info("Hybrid embedding generated")
+        # --- 4. Equal-weight average then re-normalise ---
+        n = len(components)
+        hybrid_vector: np.ndarray = sum(components) / n  # type: ignore[assignment]
+
+        norm = np.linalg.norm(hybrid_vector)
+        if norm > 0:
+            hybrid_vector = hybrid_vector / norm
+        else:
+            # Degenerate fallback — return the image vector unchanged
+            hybrid_vector = image_embedding
+
+        logger.info("Hybrid embedding generated (signals=%d: %s)", n, active_signals)
         return hybrid_vector.tolist()
 
     except Exception:

@@ -25,11 +25,13 @@ export function FeedbackRating({ label, onRate }: FeedbackRatingProps) {
   });
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] px-3 py-2">
-      <span className="text-xs font-medium text-[color:var(--silver)]">
-        {label}
-      </span>
-      <fieldset className="flex items-center gap-1">
+    <div className="flex min-w-0 flex-col gap-2 rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] px-3 py-2">
+      {label ? (
+        <span className="text-xs font-medium leading-4 text-[color:var(--silver)]">
+          {label}
+        </span>
+      ) : null}
+      <fieldset className="flex flex-wrap items-center gap-1">
         <legend className="sr-only">{label} rating</legend>
         {[1, 2, 3, 4, 5].map((rating) => {
           const isActive = selectedRating !== null && rating <= selectedRating;
