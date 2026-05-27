@@ -7,8 +7,8 @@ Create Date: 2026-05-26
 from alembic import op
 import sqlalchemy as sa
 
-revision = 'add_dup_of_media_001'
-down_revision = '20260521hiddenvault'
+revision = "add_dup_of_media_001"
+down_revision = "20260521hiddenvault"
 branch_labels = None
 depends_on = None
 
