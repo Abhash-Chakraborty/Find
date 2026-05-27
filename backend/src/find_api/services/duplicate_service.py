@@ -1,10 +1,9 @@
 """Near-duplicate detection via pgvector cosine similarity."""
 
 from __future__ import annotations
-from typing import Optional
+
 import logging
-from tarfile import NUL
-from typing import Optional
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -14,28 +13,28 @@ logger = logging.getLogger(__name__)
 # images with cosine similarity above this are flagged as near-duplicates
 SIMILARITY_THRESHOLD = 0.97
 
+
 def find_near_duplicate(
     db: Session,
     media_id: int,
     embedding: list[float],
-    user_id: Optional[int] = None,  
-) -> Optional[int]:
+) -> int | None:
     """Query pgvector for a near-duplicate of a newly indexed image."""
     result = db.execute(
-        text("""
-            SELECT id, 1 - (vector <=> :embedding::vector) AS similarity
+        text(
+            """
+            SELECT id, 1 - (vector <=> CAST(:embedding AS vector)) AS similarity
             FROM media
             WHERE id != :media_id
               AND duplicate_of IS NULL
               AND vector IS NOT NULL
-              AND (:user_id IS NULL OR user_id = :user_id)
-            ORDER BY vector <=> :embedding::vector
+            ORDER BY vector <=> CAST(:embedding AS vector)
             LIMIT 1
-        """),
+        """
+        ),
         {
             "embedding": str(embedding),
             "media_id": media_id,
-            "user_id": user_id,
         },
     ).fetchone()
 
@@ -47,15 +46,7 @@ def find_near_duplicate(
         return similar_id
     return None
 
-def flag_as_duplicate(db: Session, media_id: int, duplicate_of: int) -> None:
-    """Mark media_id as a near-duplicate of duplicate_of."""
-    db.execute(
-        text("UPDATE media SET duplicate_of = :dup_of WHERE id = :media_id"),
-        {"dup_of": duplicate_of, "media_id": media_id},
-    )
-    db.commit()
-    logger.info("flagged media=%s as duplicate of %s", media_id, duplicate_of)
-    
+
 def flag_as_duplicate(db: Session, media_id: int, duplicate_of: int) -> None:
     """Mark media_id as a near-duplicate of duplicate_of."""
     try:
@@ -68,4 +59,50 @@ def flag_as_duplicate(db: Session, media_id: int, duplicate_of: int) -> None:
     except Exception as e:
         db.rollback()
         logger.error("failed to flag duplicate media=%s: %s", media_id, e)
-        raise    
+        raise
+
+
+def list_duplicate_pairs(db: Session, page: int, limit: int) -> dict[str, Any]:
+    """Return paginated near-duplicate image pairs."""
+    offset = (page - 1) * limit
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                m.id AS duplicate_id,
+                m.filename AS duplicate_name,
+                m.duplicate_of AS original_id,
+                o.filename AS original_name
+            FROM media m
+            JOIN media o ON o.id = m.duplicate_of
+            WHERE m.duplicate_of IS NOT NULL
+            ORDER BY m.id DESC
+            LIMIT :limit OFFSET :offset
+        """
+        ),
+        {"limit": limit, "offset": offset},
+    ).mappings()
+
+    total = db.execute(
+        text("SELECT COUNT(*) FROM media WHERE duplicate_of IS NOT NULL")
+    ).scalar()
+
+    return {
+        "total": total or 0,
+        "page": page,
+        "limit": limit,
+        "items": [dict(row) for row in rows],
+    }
+
+
+def clear_duplicate_flag(db: Session, media_id: int) -> None:
+    """Clear a media row duplicate flag when the user keeps both images."""
+    try:
+        db.execute(
+            text("UPDATE media SET duplicate_of = NULL WHERE id = :media_id"),
+            {"media_id": media_id},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise

@@ -1,61 +1,164 @@
-"""Near-duplicate detection via pgvector cosine similarity."""
+"""Tests for near-duplicate detection services and endpoints."""
+
 from __future__ import annotations
 
-import logging
-from typing import Optional
+import hashlib
+from datetime import datetime, timezone
+from typing import Any
 
-from sqlalchemy import text
-from sqlalchemy.orm import Session
+import pytest
 
-logger = logging.getLogger(__name__)
+from find_api.models.media import Media
+from find_api.services.duplicate_service import (
+    flag_as_duplicate,
+    find_near_duplicate,
+)
 
-SIMILARITY_THRESHOLD = 0.97
+
+def _seed_media(db, *, filename: str, duplicate_of: int | None = None) -> Media:
+    media = Media(
+        file_hash=hashlib.sha256(filename.encode()).hexdigest(),
+        minio_key=f"images/test/{filename}",
+        filename=filename,
+        content_type="image/jpeg",
+        file_size=1024,
+        status="indexed",
+        width=800,
+        height=600,
+        thumbnail_key=f"thumbnails/test/{filename}.webp",
+        thumbnail_content_type="image/webp",
+        thumbnail_size=512,
+        thumbnail_width=256,
+        thumbnail_height=192,
+        duplicate_of=duplicate_of,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(media)
+    db.commit()
+    db.refresh(media)
+    return media
 
 
-def find_near_duplicate(
-    db: Session,
-    media_id: int,
-    embedding: list[float],
-    user_id: Optional[int] = None,
-) -> Optional[int]:
-    """Query pgvector for a near-duplicate of a newly indexed image."""
-    result = db.execute(
-        text("""
-            SELECT id, 1 - (vector <=> :embedding::vector) AS similarity
-            FROM media
-            WHERE id != :media_id
-              AND duplicate_of IS NULL
-              AND vector IS NOT NULL
-              AND (:user_id IS NULL OR user_id = :user_id)
-            ORDER BY vector <=> :embedding::vector
-            LIMIT 1
-        """),
+class _FakeResult:
+    def __init__(self, row: tuple[int, float] | None):
+        self.row = row
+
+    def fetchone(self) -> tuple[int, float] | None:
+        return self.row
+
+
+class _FakeDb:
+    def __init__(self, row: tuple[int, float] | None):
+        self.row = row
+        self.statements: list[str] = []
+
+    def execute(self, statement: Any, params: dict[str, Any] | None = None):
+        self.statements.append(str(statement))
+        return _FakeResult(self.row)
+
+
+class _FailingDb:
+    def __init__(self):
+        self.rolled_back = False
+
+    def execute(self, statement: Any, params: dict[str, Any] | None = None):
+        raise RuntimeError("database failed")
+
+    def rollback(self):
+        self.rolled_back = True
+
+
+def test_find_near_duplicate_returns_match_above_threshold():
+    db = _FakeDb((42, 0.98))
+
+    result = find_near_duplicate(db, media_id=7, embedding=[0.1, 0.2, 0.3])
+
+    assert result == 42
+    assert "user_id" not in db.statements[0]
+
+
+def test_find_near_duplicate_ignores_match_below_threshold():
+    db = _FakeDb((42, 0.96))
+
+    result = find_near_duplicate(db, media_id=7, embedding=[0.1, 0.2, 0.3])
+
+    assert result is None
+
+
+def test_find_near_duplicate_handles_no_candidate():
+    db = _FakeDb(None)
+
+    result = find_near_duplicate(db, media_id=7, embedding=[0.1, 0.2, 0.3])
+
+    assert result is None
+
+
+def test_flag_as_duplicate_updates_media(db):
+    original = _seed_media(db, filename="original.jpg")
+    duplicate = _seed_media(db, filename="duplicate.jpg")
+
+    flag_as_duplicate(db, media_id=duplicate.id, duplicate_of=original.id)
+
+    db.refresh(duplicate)
+    assert duplicate.duplicate_of == original.id
+
+
+def test_flag_as_duplicate_rolls_back_on_error():
+    db = _FailingDb()
+
+    with pytest.raises(RuntimeError, match="database failed"):
+        flag_as_duplicate(db, media_id=2, duplicate_of=1)
+
+    assert db.rolled_back is True
+
+
+def test_list_duplicates_paginates_pairs(client, db):
+    first_original = _seed_media(db, filename="first-original.jpg")
+    first_duplicate = _seed_media(
+        db,
+        filename="first-duplicate.jpg",
+        duplicate_of=first_original.id,
+    )
+    second_original = _seed_media(db, filename="second-original.jpg")
+    second_duplicate = _seed_media(
+        db,
+        filename="second-duplicate.jpg",
+        duplicate_of=second_original.id,
+    )
+
+    response = client.get("/api/duplicates", params={"page": 1, "limit": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    assert body["page"] == 1
+    assert body["limit"] == 1
+    assert body["items"] == [
         {
-            "embedding": str(embedding),
-            "media_id": media_id,
-            "user_id": user_id,
-        },
-    ).fetchone()
+            "duplicate_id": second_duplicate.id,
+            "duplicate_name": "second-duplicate.jpg",
+            "original_id": second_original.id,
+            "original_name": "second-original.jpg",
+        }
+    ]
 
-    if result is None:
-        return None
+    response = client.get("/api/duplicates", params={"page": 2, "limit": 1})
 
-    similar_id, similarity = result
-    if similarity >= SIMILARITY_THRESHOLD:
-        return similar_id
-    return None
+    assert response.status_code == 200
+    assert response.json()["items"][0]["duplicate_id"] == first_duplicate.id
 
 
-def flag_as_duplicate(db: Session, media_id: int, duplicate_of: int) -> None:
-    """Mark media_id as a near-duplicate of duplicate_of."""
-    try:
-        db.execute(
-            text("UPDATE media SET duplicate_of = :dup_of WHERE id = :media_id"),
-            {"dup_of": duplicate_of, "media_id": media_id},
-        )
-        db.commit()
-        logger.info("flagged media=%s as duplicate of %s", media_id, duplicate_of)
-    except Exception as e:
-        db.rollback()
-        logger.error("failed to flag duplicate media=%s: %s", media_id, e)
-        raise
+def test_keep_both_clears_duplicate_flag(client, db):
+    original = _seed_media(db, filename="original.jpg")
+    duplicate = _seed_media(
+        db,
+        filename="duplicate.jpg",
+        duplicate_of=original.id,
+    )
+
+    response = client.post(f"/api/image/{duplicate.id}/keep")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    db.refresh(duplicate)
+    assert duplicate.duplicate_of is None

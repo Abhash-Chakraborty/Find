@@ -171,12 +171,19 @@ def analyze_image(media_id: int):
 
         # near-duplicate detection
         try:
-            from find_api.services.duplicate_service import find_near_duplicate, flag_as_duplicate
+            from find_api.services.duplicate_service import (
+                find_near_duplicate,
+                flag_as_duplicate,
+            )
+
             if media.vector is not None:
-                dup_id = find_near_duplicate(db=db, media_id=media.id, embedding=media.vector)
+                dup_id = find_near_duplicate(
+                    db=db, media_id=media.id, embedding=media.vector
+                )
                 if dup_id is not None:
                     flag_as_duplicate(db=db, media_id=media.id, duplicate_of=dup_id)
         except Exception as e:
+            db.rollback()
             logger.warning("Near-duplicate check failed for media %s: %s", media_id, e)
 
         from find_api.workers.processors import (

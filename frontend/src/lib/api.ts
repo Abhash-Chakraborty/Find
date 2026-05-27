@@ -107,6 +107,20 @@ export interface BulkDeleteResponse {
   failed_count: number;
 }
 
+export interface DuplicatePair {
+  duplicate_id: number;
+  duplicate_name: string;
+  original_id: number;
+  original_name: string;
+}
+
+export interface DuplicatesResponse {
+  total: number;
+  page: number;
+  limit: number;
+  items: DuplicatePair[];
+}
+
 export interface ClusterSample {
   id: number;
   filename: string;
@@ -291,6 +305,27 @@ export const deleteImagesBulk = async (
     {
       media_ids: mediaIds,
     },
+  );
+  return response.data;
+};
+
+export const getDuplicates = async (
+  params: { page?: number; limit?: number } = {},
+): Promise<DuplicatesResponse> => {
+  const response = await api.get<DuplicatesResponse>("/api/duplicates", {
+    params: {
+      page: params.page ?? 1,
+      limit: params.limit ?? 20,
+    },
+  });
+  return response.data;
+};
+
+export const keepBothDuplicateImages = async (
+  mediaId: number,
+): Promise<{ status: "ok" }> => {
+  const response = await api.post<{ status: "ok" }>(
+    `/api/image/${mediaId}/keep`,
   );
   return response.data;
 };
