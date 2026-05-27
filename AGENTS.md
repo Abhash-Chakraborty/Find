@@ -8,10 +8,10 @@ This is the main shared instruction file for AI coding agents working on Find. T
 - `CODEX.md` is a Codex compatibility pointer back to this file.
 - `CLAUDE.md` is a Claude Code entry point and imports this file.
 - `.github/copilot-instructions.md` is the GitHub Copilot repository instruction entry point and points back here.
-- `.cursor/rules/find-agent-guidelines.mdc` is the Cursor project rule entry point and points back here.
+- `.cursor/rules/find-agent-guidelines.mdc` is a symlink back to this file for Cursor.
 - `.windsurfrules` is the Windsurf entry point and points back here.
 - `.agents.md` is a lowercase compatibility pointer for tools or contributors that look for that spelling.
-- `docs/AGENT_SECURITY.md` contains the detailed AI-agent security policy for this project.
+- `docs/policies/agent-security.md` contains the detailed AI-agent security policy for this project.
 - Keep tool-specific files as thin pointers. Put shared behavior, project structure, commands, and review expectations in this file.
 - If a tool supports extra local or user-level rules, keep those personal files outside the repo. Do not commit personal agent memories or machine-specific rules.
 - If future scoped rules are needed, prefer additional `AGENTS.md` files inside a specific directory only when the guidance truly applies only to that directory.
@@ -22,7 +22,7 @@ This is the main shared instruction file for AI coding agents working on Find. T
 2. Read `CONTRIBUTING.md` for branch, PR, and review process.
 3. Check the linked issue before editing. If the PR has no linked issue, keep the change blocked until the maintainer confirms scope.
 4. Keep the branch focused on one issue. Do not bundle opportunistic refactors, unrelated docs, formatting churn, or cleanup.
-5. Read `docs/AGENT_SECURITY.md` before touching upload, storage, ML, face/person data, feedback, secrets, Docker, CI, or dependency files.
+5. Read `docs/policies/agent-security.md` before touching upload, storage, ML, face/person data, feedback, secrets, Docker, CI, or dependency files.
 
 ## Project Structure & Module Organization
 
@@ -105,7 +105,7 @@ Pull requests should include a clear description, linked issue when relevant, te
 
 Do not commit `.env`, MinIO data, database files, downloaded model weights, or secrets. Keep `EMBEDDING_DIM` aligned with the configured CLIP/SigLIP model and pgvector columns.
 
-Follow the detailed agent security policy in `docs/AGENT_SECURITY.md`. In short: Find is local-first and privacy-focused. Do not add cloud calls, hosted model APIs, telemetry, analytics, or external uploads for user images, captions, OCR text, embeddings, faces, feedback, or storage data unless the linked issue explicitly asks for that architecture.
+Follow the detailed agent security policy in `docs/policies/agent-security.md`. In short: Find is local-first and privacy-focused. Do not add cloud calls, hosted model APIs, telemetry, analytics, or external uploads for user images, captions, OCR text, embeddings, faces, feedback, or storage data unless the linked issue explicitly asks for that architecture.
 
 ## Agent Review Checklist
 

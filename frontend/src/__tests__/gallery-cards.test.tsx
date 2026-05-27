@@ -2,14 +2,14 @@
 // Uses Vitest and React Testing Library
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import GalleryPage from "../app/gallery/page";
 
 // Mock next/navigation utilities with original exports preserved
 vi.mock("next/navigation", async (importOriginal) => {
-  const original = await importOriginal();
+  const original = await importOriginal<typeof import("next/navigation")>();
   return {
     ...original,
     useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -20,7 +20,7 @@ vi.mock("next/navigation", async (importOriginal) => {
 
 vi.mock("@/lib/api");
 vi.mock("@/lib/media", async (importOriginal) => {
-  const original = await importOriginal();
+  const original = await importOriginal<typeof import("@/lib/media")>();
   return {
     ...original,
     resolveMediaUrl: vi.fn((url) => url),
@@ -65,7 +65,12 @@ describe("Gallery card states (light mode)", () => {
   });
 
   it("displays empty state when no items are returned", async () => {
-    vi.mocked(api.getGallery).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(api.getGallery).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 24,
+    });
     renderWithClient(<GalleryPage />);
     await waitFor(() => {
       expect(screen.getByText(/No images found/i)).toBeInTheDocument();
@@ -75,7 +80,7 @@ describe("Gallery card states (light mode)", () => {
     });
   });
 
-  const mockItems = [
+  const mockItems: api.MediaItem[] = [
     {
       id: 1,
       filename: "image1.jpg",
@@ -84,6 +89,7 @@ describe("Gallery card states (light mode)", () => {
       status: "indexed",
       liked: false,
       caption: "A caption",
+      created_at: "2026-05-24T00:00:00Z",
     },
     {
       id: 2,
@@ -92,40 +98,61 @@ describe("Gallery card states (light mode)", () => {
       minio_key: "key2",
       status: "failed",
       liked: false,
-      caption: null,
+      caption: undefined,
+      created_at: "2026-05-24T00:00:00Z",
     },
     {
       id: 3,
       filename: "image3.jpg",
-      url: null,
-      minio_key: null,
+      url: undefined,
+      minio_key: "key3",
       status: "indexed",
       liked: true,
       caption: "Liked image",
+      created_at: "2026-05-24T00:00:00Z",
     },
   ];
 
   it("renders cards with correct UI for normal, liked and failed states", async () => {
-    vi.mocked(api.getGallery).mockResolvedValue({ items: mockItems, total: 3 });
+    vi.mocked(api.getGallery).mockResolvedValue({
+      items: mockItems,
+      total: 3,
+      page: 1,
+      limit: 24,
+    });
     renderWithClient(<GalleryPage />);
     // Wait for cards to appear
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: /View/i })).toHaveLength(3);
     });
+    const indexedLabels = screen.getAllByLabelText("Status: Indexed");
+    expect(indexedLabels).toHaveLength(2);
+    const [firstIndexedLabel, secondIndexedLabel] = indexedLabels;
+    expect(firstIndexedLabel).toBeDefined();
+    expect(secondIndexedLabel).toBeDefined();
+    if (!firstIndexedLabel || !secondIndexedLabel) {
+      throw new Error(
+        "Expected indexed status labels for rendered gallery cards",
+      );
+    }
+
     // Normal card (id 1) should show image and no filled heart
     const card1Img = screen.getByAltText("image1.jpg");
     expect(card1Img).toBeInTheDocument();
-    expect(card1Img.closest("article")).toContainElement(
-      screen.getAllByLabelText("Status: Indexed")[0],
-    );
+    expect(card1Img.closest("article")).toContainElement(firstIndexedLabel);
     const heartBtn1 = screen.getAllByLabelText("Like image")[0];
     expect(heartBtn1).toBeInTheDocument();
+
     // Liked card (id 3) should have filled heart
-    const heartBtn3 = screen.getAllByLabelText("Unlike image")[0];
+    const unlikeBtns = screen.getAllByLabelText("Unlike image");
+    expect(unlikeBtns).toHaveLength(1);
+    const [heartBtn3] = unlikeBtns;
+    expect(heartBtn3).toBeDefined();
+    if (!heartBtn3) {
+      throw new Error("Expected unlike button for liked gallery card");
+    }
     expect(heartBtn3).toBeInTheDocument();
-    expect(heartBtn3.closest("article")).toContainElement(
-      screen.getAllByLabelText("Status: Indexed")[1],
-    );
+    expect(heartBtn3.closest("article")).toContainElement(secondIndexedLabel);
     // Failed card (id 2) should show retry button
     const card2Img = screen.getByAltText("image2.jpg");
     expect(card2Img.closest("article")).toContainElement(
@@ -133,5 +160,45 @@ describe("Gallery card states (light mode)", () => {
     );
     const retryBtn = screen.getByLabelText("Retry analysis");
     expect(retryBtn).toBeInTheDocument();
+  });
+
+  it("can bulk delete selected gallery cards", async () => {
+    vi.mocked(api.getGallery).mockResolvedValue({
+      items: mockItems,
+      total: 3,
+      page: 1,
+      limit: 24,
+    });
+    vi.mocked(api.deleteImagesBulk).mockResolvedValue({
+      message: "Bulk delete completed",
+      deleted_ids: [1, 2],
+      missing_ids: [],
+      failed_ids: [],
+      deleted_count: 2,
+      missing_count: 0,
+      failed_count: 0,
+    });
+
+    renderWithClient(<GalleryPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select image1.jpg")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText("Select image1.jpg"));
+    fireEvent.click(screen.getByLabelText("Select image2.jpg"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+    const deleteButtons = screen.getAllByRole("button", {
+      name: "Delete selected",
+    });
+    const confirmButton = deleteButtons.at(-1);
+    if (!confirmButton) {
+      throw new Error("Expected delete confirmation button");
+    }
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(api.deleteImagesBulk).toHaveBeenCalledWith([1, 2]);
+    });
   });
 });

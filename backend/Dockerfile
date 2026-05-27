@@ -51,9 +51,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy application code
 COPY . .
 
-# Install the local package after source is available.
+# Install only the local package after source is available. Dependencies were
+# already synced from pyproject.toml/uv.lock above, so source-only changes should
+# not force uv to re-resolve the full ML environment on every rebuild.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev ${UV_SYNC_EXTRAS}
+    uv pip install --no-deps .
 
 # Create directories for model cache
 RUN mkdir -p /root/.cache/torch/hub/checkpoints \

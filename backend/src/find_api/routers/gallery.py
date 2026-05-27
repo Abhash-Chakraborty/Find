@@ -5,10 +5,12 @@ Gallery endpoint for browsing images
 import json
 import logging
 from typing import Literal, Optional
-from fastapi import APIRouter, Depends, Query, HTTPException
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
 
 from find_api.core.config import settings
 from find_api.core.database import get_db
@@ -23,6 +25,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 GalleryStatus = Literal["pending", "processing", "indexed", "failed"]
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request body for deleting multiple media records."""
+
+    media_ids: list[int] = Field(..., min_length=1, max_length=200)
+
+
+class BulkDeleteResponse(BaseModel):
+    """Summary of a bulk delete request."""
+
+    message: str
+    deleted_ids: list[int]
+    missing_ids: list[int]
+    failed_ids: list[int]
+    deleted_count: int
+    missing_count: int
+    failed_count: int
 
 
 def build_thumbnail_url(media_id: int) -> str:
@@ -65,7 +85,7 @@ def get_gallery(
         Paginated list of media records
     """
     # Build query
-    query = db.query(Media)
+    query = db.query(Media).filter(Media.is_hidden.is_(False))
 
     if status:
         query = query.filter(Media.status == status)
@@ -139,11 +159,17 @@ def get_image_detail(media_id: int, db: Session = Depends(get_db)):
     Returns:
         Complete media information including metadata
     """
-    media = db.query(Media).filter(Media.id == media_id).first()
+    row = (
+        db.query(Media, Cluster.label)
+        .outerjoin(Cluster, Media.cluster_id == Cluster.id)
+        .filter(Media.id == media_id)
+        .first()
+    )
 
-    if not media:
+    if not row:
         raise HTTPException(404, "Image not found")
 
+    media, cluster_label = row
     metadata = normalize_metadata(media.metadata_json)
 
     # Build response
@@ -160,6 +186,7 @@ def get_image_detail(media_id: int, db: Session = Depends(get_db)):
         "created_at": media.created_at.isoformat() if media.created_at else None,
         "processed_at": media.processed_at.isoformat() if media.processed_at else None,
         "cluster_id": media.cluster_id,
+        "cluster_label": cluster_label,
         "thumbnail_key": media.thumbnail_key,
         "thumbnail_content_type": media.thumbnail_content_type,
         "thumbnail_size": media.thumbnail_size,
@@ -322,16 +349,30 @@ def reprocess_image(media_id: int, db: Session = Depends(get_db)):
     return {"media_id": media_id, "job_id": job.id, "status": "queued"}
 
 
-@router.delete("/image/{media_id}")
-def delete_image(media_id: int, db: Session = Depends(get_db)):
-    media = db.query(Media).filter(Media.id == media_id).first()
-    if not media:
-        raise HTTPException(404, "Image not found")
+def _remove_media_ids_from_clusters(db: Session, media_ids: set[int]) -> None:
+    """Drop deleted media ids from every cluster that references them."""
+    if not media_ids:
+        return
 
-    try:
-        delete_file(media.minio_key)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(500, f"Failed to delete file from storage: {exc}") from exc
+    cluster_query = db.query(Cluster)
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        cluster_query = cluster_query.filter(
+            Cluster.member_ids.overlap(list(media_ids))
+        )
+
+    for cluster in cluster_query.all():
+        current_members = cluster.member_ids or []
+        if not any(member_id in media_ids for member_id in current_members):
+            continue
+        cluster.member_ids = [
+            member_id for member_id in current_members if member_id not in media_ids
+        ]
+        cluster.member_count = len(cluster.member_ids)
+
+
+def _delete_media_files(media: Media) -> None:
+    """Delete original storage object and best-effort thumbnail object."""
+    delete_file(media.minio_key)
 
     if media.thumbnail_key:
         try:
@@ -344,18 +385,71 @@ def delete_image(media_id: int, db: Session = Depends(get_db)):
                 exc,
             )
 
+
+@router.delete("/image/{media_id}")
+def delete_image(media_id: int, db: Session = Depends(get_db)):
+    media = db.query(Media).filter(Media.id == media_id).first()
+    if not media:
+        raise HTTPException(404, "Image not found")
+
+    try:
+        _delete_media_files(media)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"Failed to delete file from storage: {exc}") from exc
+
     db.delete(media)
     db.flush()
 
-    clusters = db.query(Cluster).filter(Cluster.member_ids.contains([media_id])).all()
-    for cluster in clusters:
-        current_members = cluster.member_ids or []
-        if media_id in current_members:
-            cluster.member_ids = [
-                member_id for member_id in current_members if member_id != media_id
-            ]
-            cluster.member_count = len(cluster.member_ids)
+    _remove_media_ids_from_clusters(db, {media_id})
 
     db.commit()
 
     return {"message": "Image deleted", "id": media_id}
+
+
+@router.post("/images/bulk-delete", response_model=BulkDeleteResponse)
+def bulk_delete_images(
+    request: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+):
+    requested_ids = list(dict.fromkeys(request.media_ids))
+    media_rows = db.query(Media).filter(Media.id.in_(requested_ids)).all()
+    media_by_id = {media.id: media for media in media_rows}
+    missing_ids = [
+        media_id for media_id in requested_ids if media_id not in media_by_id
+    ]
+    deleted_ids: list[int] = []
+    failed_ids: list[int] = []
+
+    for media_id in requested_ids:
+        media = media_by_id.get(media_id)
+        if media is None:
+            continue
+
+        try:
+            _delete_media_files(media)
+        except Exception as exc:  # noqa: BLE001
+            failed_ids.append(media_id)
+            logger.warning(
+                "Failed to delete media %s during bulk delete: %s", media_id, exc
+            )
+            continue
+
+        db.delete(media)
+        deleted_ids.append(media_id)
+
+    if deleted_ids:
+        db.flush()
+        _remove_media_ids_from_clusters(db, set(deleted_ids))
+
+    db.commit()
+
+    return {
+        "message": "Bulk delete completed",
+        "deleted_ids": deleted_ids,
+        "missing_ids": missing_ids,
+        "failed_ids": failed_ids,
+        "deleted_count": len(deleted_ids),
+        "missing_count": len(missing_ids),
+        "failed_count": len(failed_ids),
+    }

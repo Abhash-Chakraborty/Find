@@ -76,13 +76,18 @@ def list_people(db: Session = Depends(get_db)):
     for person in persons:
         # Count how many faces belong to this person
         face_count = (
-            db.query(func.count(Face.id)).filter(Face.person_id == person.id).scalar()
+            db.query(func.count(Face.id))
+            .join(Media, Media.id == Face.media_id)
+            .filter(Face.person_id == person.id, Media.is_hidden.is_(False))
+            .scalar()
         )
 
         # Get up to 4 sample media IDs for thumbnail preview
         sample_faces = (
             db.query(Face.media_id)
+            .join(Media, Media.id == Face.media_id)
             .filter(Face.person_id == person.id)
+            .filter(Media.is_hidden.is_(False))
             .distinct()
             .limit(4)
             .all()
@@ -126,7 +131,7 @@ def get_person_images(person_id: int, db: Session = Depends(get_db)):
             Face.confidence,
         )
         .join(Media, Media.id == Face.media_id)
-        .filter(Face.person_id == person_id)
+        .filter(Face.person_id == person_id, Media.is_hidden.is_(False))
         .order_by(Media.created_at.desc())
         .all()
     )

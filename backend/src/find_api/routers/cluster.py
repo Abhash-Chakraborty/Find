@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 import logging
 
 from find_api.core.queue import enqueue_clustering_job
@@ -15,6 +15,9 @@ def trigger_clustering():
     try:
         result = enqueue_clustering_job(reason="manual-alias")
         return {"status": "success", **result}
-    except Exception as e:
-        logger.error(f"Failed to trigger clustering: {e}")
-        return {"status": "error", "message": str(e)}
+    except Exception as exc:
+        logger.exception("Failed to trigger clustering")
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to queue clustering job. Please retry.",
+        ) from exc

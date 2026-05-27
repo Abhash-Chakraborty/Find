@@ -198,6 +198,30 @@ def get_file(object_name: str) -> bytes:
         raise
 
 
+def download_file_to_path(object_name: str, destination_path: str) -> None:
+    """
+    Stream a MinIO object to a local path without loading it all into memory.
+
+    Args:
+        object_name: Object name in bucket
+        destination_path: Local filesystem path to write
+    """
+    response = None
+    try:
+        response = minio_client.get_object(settings.MINIO_BUCKET, object_name)
+        with open(destination_path, "wb") as destination:
+            for chunk in response.stream(1024 * 1024):
+                if chunk:
+                    destination.write(chunk)
+    except S3Error as e:
+        logger.error(f"Failed to stream file from MinIO: {e}")
+        raise
+    finally:
+        if response is not None:
+            response.close()
+            response.release_conn()
+
+
 def get_file_url(object_name: str, expires: int = 3600) -> str:
     """
     Get presigned URL for file

@@ -1,0 +1,29 @@
+.git
+.gitignore
+.ruff_cache
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+
+# Local dependency/build outputs
+**/.venv
+**/venv
+**/node_modules
+**/.next
+**/coverage
+**/dist
+**/out
+**/target
+frontend/src-tauri/gen
+
+# Runtime data and local-only artifacts
+backend/vault_storage
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+.env
+
+# Logs and temporary files
+**/*.log
+**/*.tmp

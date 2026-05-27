@@ -1,4 +1,4 @@
-# Find
+  # Find
 
 <p align="center">
   <a href="https://gssoc.girlscript.org/"><img src="https://img.shields.io/badge/GSSoC-2026-ff4f8b?style=for-the-badge" alt="GSSoC 2026"></a>
@@ -16,7 +16,7 @@ Find is a local-first AI image intelligence platform for uploading, indexing, se
 
 All image processing, vector generation, and search stay inside your local stack.
 
-See the mobile direction in [`docs/mobile-strategy.md`](./docs/mobile-strategy.md), the desktop framework tradeoff analysis in [`docs/desktop-tauri-vs-electron-adr.md`](./docs/desktop-tauri-vs-electron-adr.md), and the broader installable local-first roadmap in [`docs/installable-local-first-architecture-roadmap.md`](./docs/installable-local-first-architecture-roadmap.md).
+See the documentation index in [`docs/index.md`](./docs/index.md), the mobile direction in [`docs/plans/not-started/mobile-strategy.md`](./docs/plans/not-started/mobile-strategy.md), the desktop framework tradeoff analysis in [`docs/plans/partial/desktop-tauri-vs-electron-adr.md`](./docs/plans/partial/desktop-tauri-vs-electron-adr.md), and the broader installable local-first roadmap in [`docs/plans/partial/local-first-roadmap.md`](./docs/plans/partial/local-first-roadmap.md).
 
 ## What it does
 
@@ -240,7 +240,7 @@ uv run pytest tests/ -v
 
 For debugging real caption generation, OCR extraction, embeddings, object detection, and semantic search quality issues, see:
 
-- [Real ML Troubleshooting Guide](docs/REAL_ML_TROUBLESHOOTING.md)
+- [Real ML Troubleshooting Guide](docs/guides/real-ml-troubleshooting.md)
 
 The guide covers:
 
@@ -305,7 +305,7 @@ These only affect the worker and the `/api/cluster/run` path. Frontend and API b
 
 ## Troubleshooting
 
-- [Common Setup Errors](docs/COMMON_SETUP_ERRORS.md)
+- [Common Setup Errors](docs/guides/common-setup-errors.md)
 
 ### Images stuck in processing
 

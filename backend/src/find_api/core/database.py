@@ -38,8 +38,8 @@ def init_db():
     Initialize database - create tables and pgvector extension
     """
     try:
-        # Import models to register them
-        from find_api.models import cluster, media  # noqa: F401
+        # Import all models to register them for metadata creation
+        from find_api.models import media, cluster, face, person, feedback  # noqa: F401
 
         # pgvector must exist before SQLAlchemy creates vector columns.
         if engine.dialect.name == "postgresql":
@@ -56,6 +56,12 @@ def init_db():
                     text(
                         "ALTER TABLE IF EXISTS media "
                         "ADD COLUMN IF NOT EXISTS liked BOOLEAN DEFAULT false"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT false"
                     )
                 )
                 conn.execute(
@@ -96,11 +102,74 @@ def init_db():
                 )
                 conn.execute(
                     text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS duplicate_of INTEGER"
+                    )
+                )
+                conn.execute(
+                    text(
                         "CREATE INDEX IF NOT EXISTS ix_media_analysis_job_id "
                         "ON media (analysis_job_id)"
                     )
                 )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_duplicate_of "
+                        "ON media (duplicate_of)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        """
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1
+                                FROM pg_constraint
+                                WHERE conname = 'fk_media_duplicate_of'
+                            ) THEN
+                                ALTER TABLE media
+                                ADD CONSTRAINT fk_media_duplicate_of
+                                FOREIGN KEY (duplicate_of)
+                                REFERENCES media(id)
+                                ON DELETE SET NULL;
+                            END IF;
+                        END
+                        $$;
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_is_hidden_false "
+                        "ON media (is_hidden) WHERE is_hidden = false"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS vault_config ("
+                        "id INTEGER PRIMARY KEY CHECK (id = 1), "
+                        "salt BYTEA NOT NULL, "
+                        "verifier_nonce BYTEA NOT NULL, "
+                        "verifier_ciphertext BYTEA NOT NULL, "
+                        "created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()"
+                        ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS vault_metadata ("
+                        "media_id INTEGER PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE, "
+                        "encrypted_path TEXT NOT NULL, "
+                        "iv BYTEA NOT NULL, "
+                        "created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()"
+                        ")"
+                    )
+                )
                 conn.execute(text("UPDATE media SET liked = false WHERE liked IS NULL"))
+                conn.execute(
+                    text("UPDATE media SET is_hidden = false WHERE is_hidden IS NULL")
+                )
                 conn.execute(
                     text(
                         "UPDATE clusters SET centroid_vector = NULL WHERE centroid_vector IS NOT NULL"
