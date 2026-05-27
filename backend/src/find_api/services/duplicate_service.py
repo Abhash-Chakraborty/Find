@@ -1,7 +1,7 @@
 """Near-duplicate detection via pgvector cosine similarity."""
 
 from __future__ import annotations
-
+from typing import Optional
 import logging
 from tarfile import NUL
 from typing import Optional
@@ -18,7 +18,7 @@ def find_near_duplicate(
     db: Session,
     media_id: int,
     embedding: list[float],
-    user_id: None = None,  
+    user_id: Optional[int] = None,  
 ) -> Optional[int]:
     """Query pgvector for a near-duplicate of a newly indexed image."""
     result = db.execute(
@@ -28,12 +28,14 @@ def find_near_duplicate(
             WHERE id != :media_id
               AND duplicate_of IS NULL
               AND vector IS NOT NULL
+              AND (:user_id IS NULL OR user_id = :user_id)
             ORDER BY vector <=> :embedding::vector
             LIMIT 1
         """),
         {
             "embedding": str(embedding),
             "media_id": media_id,
+            "user_id": user_id,
         },
     ).fetchone()
 
