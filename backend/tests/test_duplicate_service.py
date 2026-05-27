@@ -162,3 +162,10 @@ def test_keep_both_clears_duplicate_flag(client, db):
     assert response.json() == {"status": "ok"}
     db.refresh(duplicate)
     assert duplicate.duplicate_of is None
+
+
+def test_keep_both_returns_404_for_missing_media(client):
+    response = client.post("/api/image/99999/keep")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Image not found"

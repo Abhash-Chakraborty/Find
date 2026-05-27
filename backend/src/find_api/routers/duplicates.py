@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from find_api.core.database import get_db
@@ -27,5 +27,6 @@ def get_duplicates(
 @router.post("/api/image/{media_id}/keep")
 def keep_both(media_id: int, db: Session = Depends(get_db)):
     """Clear duplicate_of flag — user wants to keep both images."""
-    clear_duplicate_flag(db=db, media_id=media_id)
+    if not clear_duplicate_flag(db=db, media_id=media_id):
+        raise HTTPException(status_code=404, detail="Image not found")
     return {"status": "ok"}

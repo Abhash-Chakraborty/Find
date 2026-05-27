@@ -95,14 +95,15 @@ def list_duplicate_pairs(db: Session, page: int, limit: int) -> dict[str, Any]:
     }
 
 
-def clear_duplicate_flag(db: Session, media_id: int) -> None:
+def clear_duplicate_flag(db: Session, media_id: int) -> bool:
     """Clear a media row duplicate flag when the user keeps both images."""
     try:
-        db.execute(
+        result = db.execute(
             text("UPDATE media SET duplicate_of = NULL WHERE id = :media_id"),
             {"media_id": media_id},
         )
         db.commit()
+        return result.rowcount > 0
     except Exception:
         db.rollback()
         raise
