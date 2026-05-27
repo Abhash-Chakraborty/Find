@@ -38,7 +38,13 @@ class ObjectDetector:
         Detect objects in image
         """
         try:
-            with self.manager.use_model("yolo", self._load_model) as model:
+            config_key = (
+                f"model={settings.YOLO_MODEL}|gpu={settings.USE_GPU}|"
+                f"half={settings.YOLO_HALF}"
+            )
+            with self.manager.use_model(
+                "yolo", self._load_model, config_key=config_key
+            ) as model:
                 # Run inference
                 # Note: In a single-worker setup, we don't strictly need the lock for safety,
                 # but we use it to ensure we don't accidentally run multiple GPU tasks if threaded.

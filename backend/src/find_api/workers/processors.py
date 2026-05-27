@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 
 from find_api.core.config import settings
+from find_api.core.model_manager import ModelUnavailableError
 from find_api.ml.mock_embedder import get_mock_embedder
 from find_api.utils.errors import sanitize_error
 
@@ -25,6 +26,16 @@ PERSON_OBJECT_LABELS = {
     "girl",
     "face",
 }
+
+
+def _record_stage_error(metadata: Dict[str, Any], stage: str, error: Exception) -> None:
+    """Store a safe, user-facing stage failure without stack traces."""
+    if isinstance(error, ModelUnavailableError):
+        message = str(error)
+    else:
+        message = f"{stage} failed during processing."
+
+    metadata.setdefault("stage_errors", {})[stage] = message
 
 
 def extract_image_metadata(
@@ -79,6 +90,7 @@ def extract_image_metadata(
     except Exception as e:
         logger.exception("Object detection failed")
         metadata["objects"] = []
+        _record_stage_error(metadata, "objects", e)
         metadata["stage_status"]["object_detection"] = {
             "status": "failed",
             "error": sanitize_error(e),
@@ -99,6 +111,7 @@ def extract_image_metadata(
     except Exception as e:
         logger.exception("Captioning failed")
         metadata["caption"] = ""
+        _record_stage_error(metadata, "caption", e)
         metadata["stage_status"]["captioning"] = {
             "status": "failed",
             "error": sanitize_error(e),
@@ -122,6 +135,7 @@ def extract_image_metadata(
         logger.exception("OCR failed")
         metadata["ocr_text"] = ""
         metadata["text_blocks"] = []
+        _record_stage_error(metadata, "ocr", e)
         metadata["stage_status"]["ocr"] = {
             "status": "failed",
             "error": sanitize_error(e),

@@ -6,6 +6,8 @@ import asyncio
 import gc
 import json
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
 import os
 import threading
 import time
@@ -20,6 +22,37 @@ except ImportError:
     torch = None
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ModelLoadFailure:
+    """Safe process-local record for a failed model load."""
+
+    name: str
+    error_type: str
+    reason: str
+    failed_at: datetime
+    config_key: str | None = None
+
+
+class ModelUnavailableError(RuntimeError):
+    """Raised when a model is known to be unavailable in this process."""
+
+    def __init__(self, name: str, failure: ModelLoadFailure):
+        self.name = name
+        self.failure = failure
+        super().__init__(
+            f"Model '{name}' is unavailable after a failed load. "
+            "Restart the worker or clear model failure state to retry."
+        )
+
+
+def _safe_failure_reason(exc: Exception) -> str:
+    """Return a short single-line reason for logs and diagnostics."""
+    message = str(exc).replace("\n", " ").strip()
+    if not message:
+        return exc.__class__.__name__
+    return f"{exc.__class__.__name__}: {message[:240]}"
 
 
 class ModelManager:
@@ -46,6 +79,7 @@ class ModelManager:
         self.last_used: Dict[str, float] = {}
         self._loading: Dict[str, threading.Event] = {}
         self.failed_loads: Dict[str, Dict[str, Any]] = {}
+        self.unavailable_models: Dict[str, ModelLoadFailure] = {}
         self._lock = threading.RLock()
         self.gpu_lock = asyncio.Lock()
         self._cleanup_thread = None
@@ -105,13 +139,17 @@ class ModelManager:
             self.gpu_lock.release()
             logger.debug("GPU lock released")
 
-    def get_model(self, name: str, loader: Callable[[], Any]) -> Any:
+    def get_model(
+        self, name: str, loader: Callable[[], Any], config_key: str | None = None
+    ) -> Any:
         """
         Get a model instance, loading it if necessary.
 
         Args:
             name: Unique identifier for the model
             loader: Function that returns the loaded model
+            config_key: Optional model configuration fingerprint. When it changes,
+                a previously unavailable model is allowed to retry.
 
         Returns:
             The model instance
@@ -121,6 +159,22 @@ class ModelManager:
                 if name in self.models:
                     self.last_used[name] = time.time()
                     return self.models[name]
+
+                if name in self.unavailable_models:
+                    failure = self.unavailable_models[name]
+                    if failure.config_key != config_key:
+                        logger.info(
+                            "Retrying unavailable model %s because configuration changed",
+                            name,
+                        )
+                        self._clear_model_failure_locked(name)
+                    else:
+                        logger.warning(
+                            "Skipping load for unavailable model %s: %s",
+                            name,
+                            failure.reason,
+                        )
+                        raise ModelUnavailableError(name, failure)
 
                 loading_event = self._loading.get(name)
                 if loading_event is None:
@@ -134,16 +188,27 @@ class ModelManager:
         try:
             model = loader()
         except Exception as exc:
+            failed_at = datetime.now(timezone.utc)
+            failure = ModelLoadFailure(
+                name=name,
+                error_type=exc.__class__.__name__,
+                reason=_safe_failure_reason(exc),
+                failed_at=failed_at,
+                config_key=config_key,
+            )
             with self._lock:
+                self.unavailable_models[name] = failure
                 self.failed_loads[name] = {
-                    "error": str(exc),
+                    "error": failure.reason,
+                    "error_type": failure.error_type,
                     "failed_at": time.time(),
+                    "config_key": config_key,
                 }
                 self._loading.pop(name, None)
                 loading_event.set()
                 self.publish_status()
             logger.exception("Failed to load model %s", name)
-            raise
+            raise ModelUnavailableError(name, failure) from exc
 
         with self._lock:
             try:
@@ -155,6 +220,7 @@ class ModelManager:
                 self.in_flight.setdefault(name, 0)
                 self.last_used[name] = time.time()
                 self.failed_loads.pop(name, None)
+                self.unavailable_models.pop(name, None)
                 self.publish_status()
                 logger.info("Model loaded successfully: %s", name)
                 return model
@@ -163,9 +229,11 @@ class ModelManager:
                 loading_event.set()
 
     @contextmanager
-    def use_model(self, name: str, loader: Callable[[], Any]) -> Iterator[Any]:
+    def use_model(
+        self, name: str, loader: Callable[[], Any], config_key: str | None = None
+    ) -> Iterator[Any]:
         """Lease a model for inference so idle cleanup cannot unload it mid-use."""
-        model = self.get_model(name, loader)
+        model = self.get_model(name, loader, config_key=config_key)
         with self._lock:
             self.in_flight[name] = self.in_flight.get(name, 0) + 1
         try:
@@ -235,6 +303,7 @@ class ModelManager:
             self.last_used.clear()
             self._loading.clear()
             self.failed_loads.clear()
+            self.unavailable_models.clear()
             self.max_loaded_models = settings.ML_MAX_LOADED_MODELS
             self.publish_status()
 
@@ -292,6 +361,20 @@ class ModelManager:
                 oldest_name,
             )
             self._drop_model_locked(oldest_name)
+
+    def _clear_model_failure_locked(self, name: str) -> None:
+        self.unavailable_models.pop(name, None)
+        self.failed_loads.pop(name, None)
+
+    def clear_model_failure(self, name: str) -> None:
+        """Allow a known-unavailable model to be retried."""
+        with self._lock:
+            self._clear_model_failure_locked(name)
+            self.publish_status()
+
+    def clear(self) -> None:
+        """Clear cached models and failures for tests or controlled reloads."""
+        self.reset_for_tests()
 
 
 # Global instance
