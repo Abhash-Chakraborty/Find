@@ -47,11 +47,14 @@ import {
   MINIO_URL_STALE_TIME_MS,
   resolveMediaUrl,
 } from "@/lib/media";
+import {
+  type GalleryFilter,
+  type GalleryFilterState,
+  galleryStore,
+} from "@/store/galleryStore";
 import { vaultStore } from "@/store/vaultStore";
 
 const GALLERY_LIMIT = 24;
-
-type GalleryFilter = "all" | "indexed" | "processing" | "failed";
 
 type GalleryEmptyState = {
   title: string;
@@ -245,12 +248,28 @@ function GalleryPageContent() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const filter = getFilterFromStatusParam(searchParams.get("status"));
-  const likedOnly = searchParams.get("liked") === "true";
-  const sortOrder = getSortOrderFromParam(searchParams.get("sort_order"));
-  const dateRange = getDateRangeFromParam(searchParams.get("date_range"));
-  const dateStart = searchParams.get("date_start");
-  const dateEnd = searchParams.get("date_end");
+  const filter = galleryStore((state) => state.filter);
+  const likedOnly = galleryStore((state) => state.likedOnly);
+  const sortOrder = galleryStore((state) => state.sortOrder);
+  const dateRange = galleryStore((state) => state.dateRange);
+  const dateStart = galleryStore((state) => state.dateStart);
+  const dateEnd = galleryStore((state) => state.dateEnd);
+  const setGalleryFilters = galleryStore((state) => state.setFilters);
+  const parsedGalleryFilters = useMemo<GalleryFilterState>(
+    () => ({
+      filter: getFilterFromStatusParam(searchParams.get("status")),
+      likedOnly: searchParams.get("liked") === "true",
+      sortOrder: getSortOrderFromParam(searchParams.get("sort_order")),
+      dateRange: getDateRangeFromParam(searchParams.get("date_range")),
+      dateStart: searchParams.get("date_start"),
+      dateEnd: searchParams.get("date_end"),
+    }),
+    [searchParams],
+  );
+
+  useEffect(() => {
+    setGalleryFilters(parsedGalleryFilters);
+  }, [parsedGalleryFilters, setGalleryFilters]);
 
   // The query key includes filter + likedOnly + sort/date params so any URL filter change
   // automatically resets the infinite query back to page 1.
