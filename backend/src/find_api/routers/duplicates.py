@@ -24,9 +24,9 @@ def get_duplicates(
         text("""
             SELECT
                 m.id          AS duplicate_id,
-                m.file_name   AS duplicate_name,
+                m.filename   AS duplicate_name,
                 m.duplicate_of AS original_id,
-                o.file_name   AS original_name
+                o.filename   AS original_name
             FROM media m
             JOIN media o ON o.id = m.duplicate_of
             WHERE m.duplicate_of IS NOT NULL
