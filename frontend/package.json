@@ -53,6 +53,7 @@
       "postcss": "^8.5.14"
     },
     "onlyBuiltDependencies": [
+      "sharp",
       "sharp"
     ],
     "allowedDeprecatedVersions": {},

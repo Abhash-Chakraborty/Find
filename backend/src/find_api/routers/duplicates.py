@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -54,13 +54,19 @@ def get_duplicates(
             for row in rows
         ],
     }
-    
+
+
 @router.post("/api/image/{media_id}/keep")
 def keep_both(media_id: int, db: Session = Depends(get_db)):
     """Clear duplicate_of flag — user wants to keep both images."""
-    db.execute(
+    result = db.execute(
         text("UPDATE media SET duplicate_of = NULL WHERE id = :media_id"),
         {"media_id": media_id},
     )
     db.commit()
+    
+    # Check if any rows were actually updated
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
     return {"status": "ok"}    
