@@ -55,3 +55,17 @@ def flag_as_duplicate(db: Session, media_id: int, duplicate_of: int) -> None:
     )
     db.commit()
     logger.info("flagged media=%s as duplicate of %s", media_id, duplicate_of)
+    
+def flag_as_duplicate(db: Session, media_id: int, duplicate_of: int) -> None:
+    """Mark media_id as a near-duplicate of duplicate_of."""
+    try:
+        db.execute(
+            text("UPDATE media SET duplicate_of = :dup_of WHERE id = :media_id"),
+            {"dup_of": duplicate_of, "media_id": media_id},
+        )
+        db.commit()
+        logger.info("flagged media=%s as duplicate of %s", media_id, duplicate_of)
+    except Exception as e:
+        db.rollback()
+        logger.error("failed to flag duplicate media=%s: %s", media_id, e)
+        raise    

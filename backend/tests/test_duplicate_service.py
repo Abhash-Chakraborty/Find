@@ -54,3 +54,49 @@ class TestFlagAsDuplicate:
         params = db.execute.call_args[0][1]
         assert params["media_id"] == 10
         assert params["dup_of"] == 5
+        
+        
+class TestDuplicatesEndpoint:
+    def test_get_duplicates_returns_200(self):
+        """GET /api/duplicates should return 200 with pagination fields."""
+        from unittest.mock import MagicMock, patch
+        from fastapi.testclient import TestClient
+        from find_api.main import app
+
+        mock_rows = []
+        mock_total = 0
+
+        with patch("find_api.routers.duplicates.get_db") as mock_get_db:
+            mock_db = MagicMock()
+            mock_db.execute.return_value.fetchall.return_value = mock_rows
+            mock_db.execute.return_value.scalar.return_value = mock_total
+            mock_get_db.return_value = iter([mock_db])
+
+            client = TestClient(app)
+            response = client.get("/api/duplicates")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "total" in data
+        assert "items" in data
+        assert "page" in data
+
+    def test_get_duplicates_pagination_params(self):
+        """GET /api/duplicates should accept page and limit params."""
+        from unittest.mock import MagicMock, patch
+        from fastapi.testclient import TestClient
+        from find_api.main import app
+
+        with patch("find_api.routers.duplicates.get_db") as mock_get_db:
+            mock_db = MagicMock()
+            mock_db.execute.return_value.fetchall.return_value = []
+            mock_db.execute.return_value.scalar.return_value = 0
+            mock_get_db.return_value = iter([mock_db])
+
+            client = TestClient(app)
+            response = client.get("/api/duplicates?page=2&limit=10")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["page"] == 2
+        assert data["limit"] == 10        
