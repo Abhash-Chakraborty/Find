@@ -75,6 +75,7 @@ def test_find_near_duplicate_returns_match_above_threshold():
 
     assert result == 42
     assert "user_id" not in db.statements[0]
+    assert "id != :media_id" in db.statements[0]
 
 
 def test_find_near_duplicate_ignores_match_below_threshold():

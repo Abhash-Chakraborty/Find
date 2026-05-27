@@ -25,7 +25,7 @@ def find_near_duplicate(
             """
             SELECT id, 1 - (vector <=> CAST(:embedding AS vector)) AS similarity
             FROM media
-            WHERE id > :media_id
+            WHERE id != :media_id
               AND duplicate_of IS NULL
               AND vector IS NOT NULL
             ORDER BY vector <=> CAST(:embedding AS vector)

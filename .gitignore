@@ -8,9 +8,6 @@ venv/
 env/
 ENV/
 .venv
-*.egg-info/
-.ruff_cache/
-.pytest_cache/
 
 # Node
 node_modules/
