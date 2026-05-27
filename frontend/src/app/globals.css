@@ -417,6 +417,29 @@
     background-color: var(--surface-soft);
   }
 
+  /* Keep light-mode image cards clear without changing the dark theme fade. */
+  html.light .card-hover .bg-gradient-to-t,
+  html[data-theme="light"] .card-hover .bg-gradient-to-t {
+    background-image: linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.035) 0%,
+      transparent 40%,
+      transparent 100%
+    );
+    opacity: 0.25;
+  }
+
+  html.light .card-hover:hover .bg-gradient-to-t,
+  html[data-theme="light"] .card-hover:hover .bg-gradient-to-t {
+    background-image: linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.07) 0%,
+      transparent 50%,
+      transparent 100%
+    );
+    opacity: 0.45;
+  }
+
   .page-enter {
     animation: fade-up 520ms ease both;
   }

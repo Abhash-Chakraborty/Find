@@ -9,8 +9,8 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
 
 from find_api.core.config import settings
 from find_api.core.database import get_db
@@ -159,11 +159,17 @@ def get_image_detail(media_id: int, db: Session = Depends(get_db)):
     Returns:
         Complete media information including metadata
     """
-    media = db.query(Media).filter(Media.id == media_id).first()
+    row = (
+        db.query(Media, Cluster.label)
+        .outerjoin(Cluster, Media.cluster_id == Cluster.id)
+        .filter(Media.id == media_id)
+        .first()
+    )
 
-    if not media:
+    if not row:
         raise HTTPException(404, "Image not found")
 
+    media, cluster_label = row
     metadata = normalize_metadata(media.metadata_json)
 
     # Build response
@@ -180,6 +186,7 @@ def get_image_detail(media_id: int, db: Session = Depends(get_db)):
         "created_at": media.created_at.isoformat() if media.created_at else None,
         "processed_at": media.processed_at.isoformat() if media.processed_at else None,
         "cluster_id": media.cluster_id,
+        "cluster_label": cluster_label,
         "thumbnail_key": media.thumbnail_key,
         "thumbnail_content_type": media.thumbnail_content_type,
         "thumbnail_size": media.thumbnail_size,

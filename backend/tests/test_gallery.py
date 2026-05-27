@@ -238,6 +238,19 @@ class TestGalleryResponseShape:
             == "Model loading failed"
         )
 
+    def test_image_detail_includes_cluster_label(self, client, db):
+        media = _seed(db, filename="clustered.jpg", status="indexed")
+        cluster = _seed_cluster(db, member_ids=[media.id])
+        media.cluster_id = cluster.id
+        db.commit()
+
+        response = client.get(f"/api/image/{media.id}")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["cluster_id"] == cluster.id
+        assert body["cluster_label"] == "Test cluster"
+
 
 class TestGalleryFiltering:
     """Status and liked filtering."""

@@ -66,10 +66,10 @@ class Media(Base):
     cluster_id = Column(Integer, index=True, nullable=True)
     # Near-duplicate detection
     duplicate_of = Column(
-    Integer,
-    ForeignKey("media.id", ondelete="SET NULL"),
-    nullable=True,
-    index=True,
+        Integer,
+        ForeignKey("media.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     # Vector embedding for semantic search

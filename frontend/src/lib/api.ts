@@ -35,6 +35,7 @@ export interface MediaItem {
   height?: number | null;
   file_size?: number | null;
   cluster_id?: number | null;
+  cluster_label?: string | null;
   url?: string | null;
   thumbnail_url?: string | null;
   caption?: string;
@@ -106,6 +107,20 @@ export interface BulkDeleteResponse {
   failed_count: number;
 }
 
+export interface DuplicatePair {
+  duplicate_id: number;
+  duplicate_name: string;
+  original_id: number;
+  original_name: string;
+}
+
+export interface DuplicatesResponse {
+  total: number;
+  page: number;
+  limit: number;
+  items: DuplicatePair[];
+}
+
 export interface ClusterSample {
   id: number;
   filename: string;
@@ -144,6 +159,8 @@ export interface ClusterDetail {
     caption?: string;
   }>;
 }
+
+export type ClusterUpdateResponse = Omit<ClusterInfo, "samples">;
 
 export interface ClusteringJobResponse {
   message: string;
@@ -292,6 +309,27 @@ export const deleteImagesBulk = async (
   return response.data;
 };
 
+export const getDuplicates = async (
+  params: { page?: number; limit?: number } = {},
+): Promise<DuplicatesResponse> => {
+  const response = await api.get<DuplicatesResponse>("/api/duplicates", {
+    params: {
+      page: params.page ?? 1,
+      limit: params.limit ?? 20,
+    },
+  });
+  return response.data;
+};
+
+export const keepBothDuplicateImages = async (
+  mediaId: number,
+): Promise<{ status: "ok" }> => {
+  const response = await api.post<{ status: "ok" }>(
+    `/api/image/${mediaId}/keep`,
+  );
+  return response.data;
+};
+
 export const searchImages = async (params: {
   query: string;
   limit?: number;
@@ -331,6 +369,17 @@ export const getClusterDetail = async (
   clusterId: number,
 ): Promise<ClusterDetail> => {
   const response = await api.get<ClusterDetail>(`/api/cluster/${clusterId}`);
+  return response.data;
+};
+
+export const updateCluster = async (
+  clusterId: number,
+  payload: { label?: string | null },
+): Promise<ClusterUpdateResponse> => {
+  const response = await api.patch<ClusterUpdateResponse>(
+    `/api/cluster/${clusterId}`,
+    payload,
+  );
   return response.data;
 };
 

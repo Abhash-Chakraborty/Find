@@ -1,206 +1,224 @@
 "use client";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
-import { useState } from "react";
-import { api } from "@/lib/api";
+import { useEffect, useState } from "react";
+import {
+  type DuplicatePair,
+  deleteImage,
+  getDuplicates,
+  keepBothDuplicateImages,
+} from "@/lib/api";
+import { getFallbackImageUrl, resolveMediaUrl } from "@/lib/media";
 
-interface DuplicatePair {
-  duplicate_id: number;
-  duplicate_name: string;
-  original_id: number;
-  original_name: string;
+const PAGE_SIZE = 20;
+
+function DuplicateImage({
+  id,
+  name,
+  label,
+}: {
+  id: number;
+  name: string;
+  label: string;
+}) {
+  return (
+    <div className="min-w-0 space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+        {label}
+      </p>
+      <div className="relative aspect-square overflow-hidden rounded-lg border border-[var(--frost)] bg-[color:var(--surface-soft)]">
+        <Image
+          src={resolveMediaUrl(null, null, id, true) ?? getFallbackImageUrl()}
+          alt={name}
+          fill
+          sizes="(max-width: 768px) 50vw, 220px"
+          unoptimized
+          className="object-cover"
+          onError={(event) => {
+            event.currentTarget.src = getFallbackImageUrl();
+          }}
+        />
+      </div>
+      <p className="truncate text-xs text-[color:var(--silver)]" title={name}>
+        {name}
+      </p>
+    </div>
+  );
 }
 
-interface DuplicatesResponse {
-  total: number;
-  page: number;
-  limit: number;
-  items: DuplicatePair[];
-}
+function DuplicateCard({
+  pair,
+  onDelete,
+  onKeepBoth,
+  isDeleting,
+  isKeeping,
+}: {
+  pair: DuplicatePair;
+  onDelete: (mediaId: number) => void;
+  onKeepBoth: (mediaId: number) => void;
+  isDeleting: boolean;
+  isKeeping: boolean;
+}) {
+  return (
+    <article className="rounded-xl border border-[var(--frost)] bg-[color:var(--frost-soft)] p-4 shadow-sm">
+      <div className="grid grid-cols-2 gap-4">
+        <DuplicateImage
+          id={pair.original_id}
+          name={pair.original_name}
+          label="Original"
+        />
+        <DuplicateImage
+          id={pair.duplicate_id}
+          name={pair.duplicate_name}
+          label="Near-duplicate"
+        />
+      </div>
 
-async function fetchDuplicates(page: number): Promise<DuplicatesResponse> {
-  const response = await api.get<DuplicatesResponse>("/api/duplicates", {
-    params: { page, limit: 20 },
-  });
-  return response.data;
-}
-
-async function deleteImage(mediaId: number): Promise<void> {
-  await api.delete(`/api/image/${mediaId}`);
-}
-
-async function clearDuplicateFlag(mediaId: number): Promise<void> {
-  await api.post(`/api/image/${mediaId}/keep`);
+      <div className="mt-4 grid gap-2 border-t border-[var(--frost)] pt-4 sm:grid-cols-3">
+        <button
+          type="button"
+          onClick={() => onDelete(pair.duplicate_id)}
+          disabled={isDeleting}
+          className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-200"
+        >
+          Delete duplicate
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete(pair.original_id)}
+          disabled={isDeleting}
+          className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-200"
+        >
+          Delete original
+        </button>
+        <button
+          type="button"
+          onClick={() => onKeepBoth(pair.duplicate_id)}
+          disabled={isKeeping}
+          className="rounded-lg border border-[var(--frost)] bg-[color:var(--surface-soft)] px-3 py-2 text-sm font-medium text-[color:var(--near-white)] transition hover:bg-[color:var(--frost-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Keep both
+        </button>
+      </div>
+    </article>
+  );
 }
 
 export default function DuplicatesPage() {
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["duplicates", page],
-    queryFn: () => fetchDuplicates(page),
+    queryFn: () => getDuplicates({ page, limit: PAGE_SIZE }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteImage,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["duplicates"] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["duplicates"] });
+    },
   });
 
   const keepBothMutation = useMutation({
-    mutationFn: clearDuplicateFlag,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["duplicates"] }),
+    mutationFn: keepBothDuplicateImages,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["duplicates"] });
+    },
   });
+
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, totalPages));
+  }, [totalPages]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-600 dark:text-gray-400">Loading duplicates...</p>
-      </div>
+      <main className="container-shell flex min-h-[60vh] items-center justify-center py-10">
+        <p className="text-sm text-[color:var(--silver)]">
+          Loading duplicates...
+        </p>
+      </main>
     );
   }
 
-  if (error) {
+  if (isError) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-red-600 dark:text-red-400">Failed to load duplicates.</p>
-      </div>
+      <main className="container-shell flex min-h-[60vh] items-center justify-center py-10">
+        <p className="text-sm font-medium text-red-700 dark:text-red-200">
+          Failed to load duplicates.
+        </p>
+      </main>
     );
   }
 
-  const totalPages = data ? Math.ceil(data.total / data.limit) : 1;
+  const pairs = data?.items ?? [];
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
-          Near-Duplicate Images
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
+    <main className="container-shell py-10">
+      <section className="mb-6">
+        <h1 className="section-heading">Near-Duplicate Images</h1>
+        <p className="mt-2 text-sm text-[color:var(--silver)]">
           {data?.total ?? 0} near-duplicate pairs found
         </p>
-      </div>
+      </section>
 
-      {data?.items.length === 0 ? (
-        <div className="text-center py-16 text-gray-500 dark:text-gray-400">
-          <p className="text-lg">No near-duplicates found.</p>
-          <p className="text-sm mt-2">
-            Upload more images to detect similar pairs.
+      {pairs.length === 0 ? (
+        <section className="rounded-xl border border-[var(--frost)] bg-[color:var(--frost-soft)] px-6 py-14 text-center">
+          <p className="text-base font-medium text-[color:var(--near-white)]">
+            No near-duplicates found.
           </p>
-        </div>
+          <p className="mt-2 text-sm text-[color:var(--silver)]">
+            Upload more images to detect visually similar pairs.
+          </p>
+        </section>
       ) : (
-        <div className="space-y-4">
-          {data?.items.map((pair) => (
-            <div
+        <section className="grid gap-4 lg:grid-cols-2">
+          {pairs.map((pair) => (
+            <DuplicateCard
               key={pair.duplicate_id}
-              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4"
-            >
-              <div className="grid grid-cols-2 gap-4">
-                {/* Original */}
-                <div className="space-y-2">
-                  <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wide">
-                    Original
-                  </p>
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
-                    <Image
-                      src={`/api/image/${pair.original_id}/thumb`}
-                      alt={pair.original_name}
-                      width={200}
-                      height={200}
-                      unoptimized
-                      className="object-cover w-full h-full"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "/placeholder.svg";
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                    {pair.original_name}
-                  </p>
-                </div>
-
-                {/* Duplicate */}
-                <div className="space-y-2">
-                  <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wide">
-                    Near-duplicate
-                  </p>
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
-                    <Image
-                      src={`/api/image/${pair.duplicate_id}/thumb`}
-                      alt={pair.duplicate_name}
-                      width={200}
-                      height={200}
-                      unoptimized
-                      className="object-cover w-full h-full"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "/placeholder.svg";
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                    {pair.duplicate_name}
-                  </p>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
-                <button
-                  type="button"
-                  onClick={() => deleteMutation.mutate(pair.duplicate_id)}
-                  disabled={deleteMutation.isPending}
-                  className="flex-1 px-3 py-2 bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 text-sm rounded-lg transition-colors disabled:opacity-50"
-                >
-                  Delete duplicate
-                </button>
-                <button
-                  type="button"
-                  onClick={() => deleteMutation.mutate(pair.original_id)}
-                  disabled={deleteMutation.isPending}
-                  className="flex-1 px-3 py-2 bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 text-sm rounded-lg transition-colors disabled:opacity-50"
-                >
-                  Delete original
-                </button>
-                <button
-                  type="button"
-                  onClick={() => keepBothMutation.mutate(pair.duplicate_id)}
-                  disabled={keepBothMutation.isPending}
-                  className="flex-1 px-3 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-50"
-                >
-                  Keep both
-                </button>
-              </div>
-            </div>
+              pair={pair}
+              onDelete={(mediaId) => deleteMutation.mutate(mediaId)}
+              onKeepBoth={(mediaId) => keepBothMutation.mutate(mediaId)}
+              isDeleting={deleteMutation.isPending}
+              isKeeping={keepBothMutation.isPending}
+            />
           ))}
-        </div>
+        </section>
       )}
 
-      {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex justify-center gap-2 mt-8">
+        <nav
+          className="mt-8 flex items-center justify-center gap-3"
+          aria-label="Duplicate image pages"
+        >
           <button
             type="button"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() =>
+              setPage((currentPage) => Math.max(1, currentPage - 1))
+            }
             disabled={page === 1}
-            className="px-4 py-2 bg-gray-200 dark:bg-gray-800 rounded-lg text-sm disabled:opacity-40 text-gray-900 dark:text-gray-300"
+            className="frost-button disabled:cursor-not-allowed disabled:opacity-45"
           >
             Previous
           </button>
-          <span className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
+          <span className="min-w-20 text-center text-sm text-[color:var(--silver)]">
             {page} / {totalPages}
           </span>
           <button
             type="button"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() =>
+              setPage((currentPage) => Math.min(totalPages, currentPage + 1))
+            }
             disabled={page === totalPages}
-            className="px-4 py-2 bg-gray-200 dark:bg-gray-800 rounded-lg text-sm disabled:opacity-40 text-gray-900 dark:text-gray-300"
+            className="frost-button disabled:cursor-not-allowed disabled:opacity-45"
           >
             Next
           </button>
-        </div>
+        </nav>
       )}
-    </div>
+    </main>
   );
 }

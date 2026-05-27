@@ -38,8 +38,8 @@ def init_db():
     Initialize database - create tables and pgvector extension
     """
     try:
-        # Import models to register them
-        from find_api.models import cluster, media  # noqa: F401
+        # Import all models to register them for metadata creation
+        from find_api.models import media, cluster, face, person, feedback  # noqa: F401
 
         # pgvector must exist before SQLAlchemy creates vector columns.
         if engine.dialect.name == "postgresql":
