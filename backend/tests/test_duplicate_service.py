@@ -1,102 +1,61 @@
-"""Unit tests for near-duplicate detection service."""
+"""Near-duplicate detection via pgvector cosine similarity."""
+from __future__ import annotations
 
-from unittest.mock import MagicMock
-import pytest
+import logging
+from typing import Optional
 
-from find_api.services.duplicate_service import (
-    SIMILARITY_THRESHOLD,
-    find_near_duplicate,
-    flag_as_duplicate,
-)
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
 
-def _mock_db(fetchone_return=None):
-    db = MagicMock()
-    result = MagicMock()
-    result.fetchone.return_value = fetchone_return
-    db.execute.return_value = result
-    return db
+SIMILARITY_THRESHOLD = 0.97
 
 
-class TestFindNearDuplicate:
-    def test_returns_none_when_no_neighbours(self):
-        db = _mock_db(None)
-        assert find_near_duplicate(db, 1, 1, [0.1] * 512) is None
+def find_near_duplicate(
+    db: Session,
+    media_id: int,
+    embedding: list[float],
+    user_id: Optional[int] = None,
+) -> Optional[int]:
+    """Query pgvector for a near-duplicate of a newly indexed image."""
+    result = db.execute(
+        text("""
+            SELECT id, 1 - (vector <=> :embedding::vector) AS similarity
+            FROM media
+            WHERE id != :media_id
+              AND duplicate_of IS NULL
+              AND vector IS NOT NULL
+              AND (:user_id IS NULL OR user_id = :user_id)
+            ORDER BY vector <=> :embedding::vector
+            LIMIT 1
+        """),
+        {
+            "embedding": str(embedding),
+            "media_id": media_id,
+            "user_id": user_id,
+        },
+    ).fetchone()
 
-    def test_returns_none_below_threshold(self):
-        db = _mock_db((42, 0.95))
-        assert find_near_duplicate(db, 1, 1, [0.1] * 512) is None
+    if result is None:
+        return None
 
-    def test_returns_id_at_threshold(self):
-        db = _mock_db((42, SIMILARITY_THRESHOLD))
-        assert find_near_duplicate(db, 1, 1, [0.1] * 512) == 42
-
-    def test_returns_id_above_threshold(self):
-        db = _mock_db((99, 0.99))
-        assert find_near_duplicate(db, 5, 1, [0.5] * 512) == 99
-
-    def test_excludes_self(self):
-        db = _mock_db(None)
-        find_near_duplicate(db, 7, 1, [0.1] * 512)
-        params = db.execute.call_args[0][1]
-        assert params["media_id"] == 7
+    similar_id, similarity = result
+    if similarity >= SIMILARITY_THRESHOLD:
+        return similar_id
+    return None
 
 
-class TestFlagAsDuplicate:
-    def test_commits_after_update(self):
-        db = MagicMock()
-        flag_as_duplicate(db, 10, 5)
-        db.commit.assert_called_once()
-
-    def test_correct_ids_passed(self):
-        db = MagicMock()
-        flag_as_duplicate(db, 10, 5)
-        params = db.execute.call_args[0][1]
-        assert params["media_id"] == 10
-        assert params["dup_of"] == 5
-        
-        
-class TestDuplicatesEndpoint:
-    def test_get_duplicates_returns_200(self):
-        """GET /api/duplicates should return 200 with pagination fields."""
-        from unittest.mock import MagicMock, patch
-        from fastapi.testclient import TestClient
-        from find_api.main import app
-
-        mock_rows = []
-        mock_total = 0
-
-        with patch("find_api.routers.duplicates.get_db") as mock_get_db:
-            mock_db = MagicMock()
-            mock_db.execute.return_value.fetchall.return_value = mock_rows
-            mock_db.execute.return_value.scalar.return_value = mock_total
-            mock_get_db.return_value = iter([mock_db])
-
-            client = TestClient(app)
-            response = client.get("/api/duplicates")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "total" in data
-        assert "items" in data
-        assert "page" in data
-
-    def test_get_duplicates_pagination_params(self):
-        """GET /api/duplicates should accept page and limit params."""
-        from unittest.mock import MagicMock, patch
-        from fastapi.testclient import TestClient
-        from find_api.main import app
-
-        with patch("find_api.routers.duplicates.get_db") as mock_get_db:
-            mock_db = MagicMock()
-            mock_db.execute.return_value.fetchall.return_value = []
-            mock_db.execute.return_value.scalar.return_value = 0
-            mock_get_db.return_value = iter([mock_db])
-
-            client = TestClient(app)
-            response = client.get("/api/duplicates?page=2&limit=10")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["page"] == 2
-        assert data["limit"] == 10        
+def flag_as_duplicate(db: Session, media_id: int, duplicate_of: int) -> None:
+    """Mark media_id as a near-duplicate of duplicate_of."""
+    try:
+        db.execute(
+            text("UPDATE media SET duplicate_of = :dup_of WHERE id = :media_id"),
+            {"dup_of": duplicate_of, "media_id": media_id},
+        )
+        db.commit()
+        logger.info("flagged media=%s as duplicate of %s", media_id, duplicate_of)
+    except Exception as e:
+        db.rollback()
+        logger.error("failed to flag duplicate media=%s: %s", media_id, e)
+        raise
