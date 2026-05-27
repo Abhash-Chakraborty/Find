@@ -85,6 +85,15 @@ def test_find_near_duplicate_ignores_match_below_threshold():
     assert result is None
 
 
+def test_find_near_duplicate_accepts_match_at_threshold():
+    """Test boundary: exactly 0.97 similarity is a match (>= check)."""
+    db = _FakeDb((42, 0.97))
+
+    result = find_near_duplicate(db, media_id=7, embedding=[0.1, 0.2, 0.3])
+
+    assert result == 42
+
+
 def test_find_near_duplicate_handles_no_candidate():
     db = _FakeDb(None)
 
