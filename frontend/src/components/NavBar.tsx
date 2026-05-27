@@ -12,6 +12,7 @@ const navLinks = [
   { href: "/vault", label: "Vault" },
   { href: "/search", label: "Search" },
   { href: "/clusters", label: "Clusters" },
+  { href: "/duplicates", label: "Duplicates" },
   { href: "/people", label: "People" },
 ];
 

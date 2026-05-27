@@ -7,11 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import logging
-
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-
+from find_api.routers.duplicates import router as duplicates_router
 from find_api.core.database import init_db
 from find_api.core.recovery import run_analysis_recovery_loop
 from find_api.core.storage import init_storage
@@ -116,6 +115,7 @@ app.include_router(config.router, prefix="/api", tags=["config"])
 app.include_router(people.router, prefix="/api", tags=["people"])
 app.include_router(vault.router, prefix="/api", tags=["vault"])
 app.include_router(feedback.router, tags=["feedback"])
+app.include_router(duplicates_router)
 
 
 @app.get("/")
