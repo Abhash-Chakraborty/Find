@@ -49,6 +49,7 @@ export type PreviewMedia = Pick<MediaItem, "id" | "filename"> &
       | "height"
       | "file_size"
       | "cluster_id"
+      | "cluster_label"
       | "liked"
       | "caption"
       | "objects"
@@ -482,7 +483,8 @@ export function ImagePreviewModal({
                       href="/clusters"
                       className="text-[color:var(--blue)] underline"
                     >
-                      Cluster {clusterId}
+                      {(detailData?.cluster_label ?? media.cluster_label) ||
+                        `Cluster ${clusterId}`}
                     </Link>
                   </DetailRow>
                 )}

@@ -35,6 +35,7 @@ export interface MediaItem {
   height?: number | null;
   file_size?: number | null;
   cluster_id?: number | null;
+  cluster_label?: string | null;
   url?: string | null;
   thumbnail_url?: string | null;
   caption?: string;
@@ -144,6 +145,8 @@ export interface ClusterDetail {
     caption?: string;
   }>;
 }
+
+export type ClusterUpdateResponse = Omit<ClusterInfo, "samples">;
 
 export interface ClusteringJobResponse {
   message: string;
@@ -331,6 +334,17 @@ export const getClusterDetail = async (
   clusterId: number,
 ): Promise<ClusterDetail> => {
   const response = await api.get<ClusterDetail>(`/api/cluster/${clusterId}`);
+  return response.data;
+};
+
+export const updateCluster = async (
+  clusterId: number,
+  payload: { label?: string | null },
+): Promise<ClusterUpdateResponse> => {
+  const response = await api.patch<ClusterUpdateResponse>(
+    `/api/cluster/${clusterId}`,
+    payload,
+  );
   return response.data;
 };
 
