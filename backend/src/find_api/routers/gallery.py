@@ -4,13 +4,14 @@ Gallery endpoint for browsing images
 
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, and_
 
 from find_api.core.config import settings
 from find_api.core.database import get_db
@@ -25,6 +26,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 GalleryStatus = Literal["pending", "processing", "indexed", "failed"]
+SortOrder = Literal["newest", "oldest"]
+DateRangePreset = Literal["last_30_days", "last_60_days", "last_90_days", "custom"]
 
 
 class BulkDeleteRequest(BaseModel):
@@ -62,6 +65,90 @@ def normalize_metadata(value):
     return {}
 
 
+def parse_date_range(
+    preset: Optional[DateRangePreset] = None,
+    custom_start: Optional[str] = None,
+    custom_end: Optional[str] = None,
+) -> tuple[Optional[datetime], Optional[datetime]]:
+    """
+    Parse date range parameters and return (start_date, end_date) in UTC.
+
+    Args:
+        preset: One of "last_30_days", "last_60_days", "last_90_days", or "custom"
+        custom_start: ISO 8601 date string (YYYY-MM-DD) for custom range start
+        custom_end: ISO 8601 date string (YYYY-MM-DD) for custom range end
+
+    Returns:
+        Tuple of (start_datetime, end_datetime) in UTC, or (None, None) if no filtering
+    """
+    if not preset:
+        return None, None
+
+    now = datetime.now(timezone.utc)
+
+    if preset == "last_30_days":
+        start = now - timedelta(days=30)
+        return start, now
+    elif preset == "last_60_days":
+        start = now - timedelta(days=60)
+        return start, now
+    elif preset == "last_90_days":
+        start = now - timedelta(days=90)
+        return start, now
+    elif preset == "custom":
+        start_date = None
+        end_date = None
+
+        try:
+            if custom_start:
+                start_date = datetime.strptime(custom_start, "%Y-%m-%d").replace(
+                    tzinfo=timezone.utc
+                )
+        except (ValueError, TypeError) as exc:
+            logger.warning("Invalid custom_start date: %s", custom_start)
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid date_start. Use YYYY-MM-DD.",
+            ) from exc
+
+        try:
+            if custom_end:
+                # End of day for the end date (23:59:59.999999)
+                end_date = datetime.strptime(custom_end, "%Y-%m-%d").replace(
+                    hour=23,
+                    minute=59,
+                    second=59,
+                    microsecond=999999,
+                    tzinfo=timezone.utc,
+                )
+        except (ValueError, TypeError) as exc:
+            logger.warning("Invalid custom_end date: %s", custom_end)
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid date_end. Use YYYY-MM-DD.",
+            ) from exc
+
+        if start_date or end_date:
+            # Normalize reversed date bounds
+            if start_date and end_date and start_date > end_date:
+                logger.warning(
+                    "Custom date range inverted (start > end): %s > %s, swapping",
+                    custom_start,
+                    custom_end,
+                )
+                start_date, end_date = end_date, start_date
+                # Correct time components after swap: earlier date should be 00:00:00, later date 23:59:59.999999
+                start_date = start_date.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                end_date = end_date.replace(
+                    hour=23, minute=59, second=59, microsecond=999999
+                )
+            return start_date, end_date
+
+    return None, None
+
+
 @router.get("/gallery")
 def get_gallery(
     skip: int = Query(0, ge=0),
@@ -71,15 +158,36 @@ def get_gallery(
         description="Filter by processing status",
     ),
     liked: Optional[bool] = None,
+    sort_order: SortOrder = Query(
+        "newest",
+        description="Sort by upload date: 'newest' (default) or 'oldest'",
+    ),
+    date_range: Optional[DateRangePreset] = Query(
+        None,
+        description="Date range preset: 'last_30_days', 'last_60_days', 'last_90_days', or 'custom'",
+    ),
+    date_start: Optional[str] = Query(
+        None,
+        description="Custom range start date (YYYY-MM-DD) when date_range='custom'",
+    ),
+    date_end: Optional[str] = Query(
+        None,
+        description="Custom range end date (YYYY-MM-DD) when date_range='custom'",
+    ),
     db: Session = Depends(get_db),
 ):
     """
-    Get paginated list of images
+    Get paginated list of images with optional date filtering and sorting.
 
     Args:
         skip: Number of records to skip
         limit: Max number of records to return
         status: Filter by status (pending, processing, indexed, failed)
+        liked: Filter by like status (true/false)
+        sort_order: Sort by upload date ('newest' or 'oldest')
+        date_range: Date range preset or 'custom'
+        date_start: Custom range start (YYYY-MM-DD)
+        date_end: Custom range end (YYYY-MM-DD)
 
     Returns:
         Paginated list of media records
@@ -92,11 +200,28 @@ def get_gallery(
     if liked is not None:
         query = query.filter(Media.liked == liked)
 
+    # Apply date range filter if specified
+    start_date, end_date = parse_date_range(date_range, date_start, date_end)
+    if start_date or end_date:
+        filters = []
+        if start_date:
+            filters.append(Media.created_at >= start_date)
+        if end_date:
+            filters.append(Media.created_at <= end_date)
+        if filters:
+            query = query.filter(and_(*filters))
+
     # Get total count
     total = query.count()
 
+    # Apply sorting (newest first is default)
+    if sort_order == "oldest":
+        query = query.order_by(Media.created_at)
+    else:
+        query = query.order_by(desc(Media.created_at))
+
     # Get paginated results
-    media_list = query.order_by(desc(Media.created_at)).offset(skip).limit(limit).all()
+    media_list = query.offset(skip).limit(limit).all()
 
     # Build response
     items = []

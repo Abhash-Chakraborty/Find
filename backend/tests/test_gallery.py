@@ -377,3 +377,264 @@ class TestBulkDeleteImages:
         assert body["failed_ids"] == [first.id]
         assert db.query(Media).filter(Media.id == first.id).first() is not None
         assert db.query(Media).filter(Media.id == second.id).first() is None
+
+
+class TestGalleryDateFiltering:
+    """Date-based filtering and sorting."""
+
+    def test_sort_by_newest_default(self, client, db):
+        """Gallery sorts by newest first by default."""
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+        old = _seed(db, filename="old.jpg", status="indexed")
+        old.created_at = now - timedelta(days=10)
+        db.commit()
+
+        new = _seed(db, filename="new.jpg", status="indexed")
+        new.created_at = now
+        db.commit()
+
+        body = client.get("/api/gallery").json()
+        assert len(body["items"]) == 2
+        assert body["items"][0]["id"] == new.id
+        assert body["items"][1]["id"] == old.id
+
+    def test_sort_by_oldest(self, client, db):
+        """Gallery can sort by oldest first."""
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+        old = _seed(db, filename="old.jpg", status="indexed")
+        old.created_at = now - timedelta(days=10)
+        db.commit()
+
+        new = _seed(db, filename="new.jpg", status="indexed")
+        new.created_at = now
+        db.commit()
+
+        body = client.get("/api/gallery", params={"sort_order": "oldest"}).json()
+        assert len(body["items"]) == 2
+        assert body["items"][0]["id"] == old.id
+        assert body["items"][1]["id"] == new.id
+
+    def test_filter_by_last_30_days(self, client, db):
+        """Filter shows only images from last 30 days."""
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+
+        # Create images at different times
+        within_30 = _seed(db, filename="recent.jpg", status="indexed")
+        within_30.created_at = now - timedelta(days=5)
+        db.commit()
+
+        outside_30 = _seed(db, filename="old.jpg", status="indexed")
+        outside_30.created_at = now - timedelta(days=60)
+        db.commit()
+
+        body = client.get("/api/gallery", params={"date_range": "last_30_days"}).json()
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == within_30.id
+
+    def test_filter_by_last_60_days(self, client, db):
+        """Filter shows only images from last 60 days."""
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+
+        within_60 = _seed(db, filename="recent.jpg", status="indexed")
+        within_60.created_at = now - timedelta(days=30)
+        db.commit()
+
+        outside_60 = _seed(db, filename="old.jpg", status="indexed")
+        outside_60.created_at = now - timedelta(days=90)
+        db.commit()
+
+        body = client.get("/api/gallery", params={"date_range": "last_60_days"}).json()
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == within_60.id
+
+    def test_filter_by_last_90_days(self, client, db):
+        """Filter shows only images from last 90 days."""
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+
+        within_90 = _seed(db, filename="recent.jpg", status="indexed")
+        within_90.created_at = now - timedelta(days=45)
+        db.commit()
+
+        outside_90 = _seed(db, filename="old.jpg", status="indexed")
+        outside_90.created_at = now - timedelta(days=120)
+        db.commit()
+
+        body = client.get("/api/gallery", params={"date_range": "last_90_days"}).json()
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == within_90.id
+
+    def test_filter_by_custom_date_range(self, client, db):
+        """Filter by custom date range using ISO 8601 dates."""
+        # Seed images with specific dates
+        before = _seed(db, filename="before.jpg", status="indexed")
+        before.created_at = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        db.commit()
+
+        within = _seed(db, filename="within.jpg", status="indexed")
+        within.created_at = datetime(2025, 5, 15, 12, 0, 0, tzinfo=timezone.utc)
+        db.commit()
+
+        after = _seed(db, filename="after.jpg", status="indexed")
+        after.created_at = datetime(2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+        db.commit()
+
+        body = client.get(
+            "/api/gallery",
+            params={
+                "date_range": "custom",
+                "date_start": "2025-05-01",
+                "date_end": "2025-05-31",
+            },
+        ).json()
+
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == within.id
+
+    def test_custom_date_range_start_only(self, client, db):
+        """Custom date range with only start date."""
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+
+        before = _seed(db, filename="before.jpg", status="indexed")
+        before.created_at = now - timedelta(days=30)
+        db.commit()
+
+        after = _seed(db, filename="after.jpg", status="indexed")
+        after.created_at = now - timedelta(days=5)
+        db.commit()
+
+        body = client.get(
+            "/api/gallery",
+            params={
+                "date_range": "custom",
+                "date_start": (now - timedelta(days=10)).strftime("%Y-%m-%d"),
+            },
+        ).json()
+
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == after.id
+
+    def test_custom_date_range_end_only(self, client, db):
+        """Custom date range with only end date."""
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+
+        before = _seed(db, filename="before.jpg", status="indexed")
+        before.created_at = now - timedelta(days=30)
+        db.commit()
+
+        after = _seed(db, filename="after.jpg", status="indexed")
+        after.created_at = now - timedelta(days=5)
+        db.commit()
+
+        body = client.get(
+            "/api/gallery",
+            params={
+                "date_range": "custom",
+                "date_end": (now - timedelta(days=10)).strftime("%Y-%m-%d"),
+            },
+        ).json()
+
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == before.id
+
+    def test_date_filter_works_with_status_filter(self, client, db):
+        """Date filters work together with status filters."""
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+
+        # Create indexed image within last 30 days
+        indexed_recent = _seed(db, filename="indexed_recent.jpg", status="indexed")
+        indexed_recent.created_at = now - timedelta(days=5)
+        db.commit()
+
+        # Create indexed image outside 30 days
+        indexed_old = _seed(db, filename="indexed_old.jpg", status="indexed")
+        indexed_old.created_at = now - timedelta(days=60)
+        db.commit()
+
+        # Create processing image within last 30 days
+        processing_recent = _seed(db, filename="proc_recent.jpg", status="processing")
+        processing_recent.created_at = now - timedelta(days=5)
+        db.commit()
+
+        body = client.get(
+            "/api/gallery",
+            params={
+                "status": "indexed",
+                "date_range": "last_30_days",
+            },
+        ).json()
+
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == indexed_recent.id
+
+    def test_date_filter_works_with_liked_filter(self, client, db):
+        """Date filters work together with liked filters."""
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+
+        liked_recent = _seed(
+            db, filename="liked_recent.jpg", status="indexed", liked=True
+        )
+        liked_recent.created_at = now - timedelta(days=5)
+        db.commit()
+
+        liked_old = _seed(db, filename="liked_old.jpg", status="indexed", liked=True)
+        liked_old.created_at = now - timedelta(days=60)
+        db.commit()
+
+        liked_notliked = _seed(
+            db, filename="not_liked.jpg", status="indexed", liked=False
+        )
+        liked_notliked.created_at = now - timedelta(days=5)
+        db.commit()
+
+        body = client.get(
+            "/api/gallery",
+            params={
+                "liked": True,
+                "date_range": "last_30_days",
+            },
+        ).json()
+
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == liked_recent.id
+
+    def test_invalid_custom_dates_are_rejected(self, client, db):
+        """Invalid custom dates return a validation error."""
+        _seed(db, filename="valid.jpg", status="indexed")
+
+        response = client.get(
+            "/api/gallery",
+            params={
+                "date_range": "custom",
+                "date_start": "not-a-date",
+                "date_end": "2025-12-99",
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"] == "Invalid date_start. Use YYYY-MM-DD."
+
+    def test_date_range_none_returns_all(self, client, db):
+        """No date range parameter returns all items."""
+        _seed(db, filename="a.jpg", status="indexed")
+        _seed(db, filename="b.jpg", status="indexed")
+
+        body = client.get("/api/gallery").json()
+        assert body["total"] == 2
