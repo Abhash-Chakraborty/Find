@@ -107,6 +107,9 @@ export default function DuplicatesPage() {
                     <Image
                       src={`/api/image/${pair.original_id}/thumb`}
                       alt={pair.original_name}
+                      width={200}
+                      height={200}
+                      unoptimized
                       className="object-cover w-full h-full"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = "/placeholder.svg";
@@ -127,6 +130,9 @@ export default function DuplicatesPage() {
                     <Image
                       src={`/api/image/${pair.duplicate_id}/thumb`}
                       alt={pair.duplicate_name}
+                      width={200}
+                      height={200}
+                      unoptimized
                       className="object-cover w-full h-full"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = "/placeholder.svg";
