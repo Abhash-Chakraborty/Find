@@ -1,0 +1,9 @@
+node_modules
+.next
+coverage
+dist
+out
+src-tauri/target
+src-tauri/gen
+.git
+*.log

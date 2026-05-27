@@ -2,6 +2,8 @@ import logging
 import os
 import sys
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 # Add the src-layout package to the path when running this script directly.
@@ -19,6 +21,33 @@ def migrate_db():
     try:
         engine = create_engine(settings.DATABASE_URL)
         with engine.connect() as conn:
+            logger.info("Adding thumbnail metadata columns if missing...")
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumbnail_key VARCHAR(255);"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumbnail_content_type VARCHAR(100);"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumbnail_size INTEGER;"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumbnail_width INTEGER;"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS thumbnail_height INTEGER;"
+                )
+            )
+
             # Check current dimension
             logger.info("Clearing existing vectors to allow dimension change...")
             conn.execute(text("UPDATE media SET vector = NULL;"))
@@ -36,6 +65,11 @@ def migrate_db():
             )
             conn.commit()
             logger.info("Successfully updated vector column dimension.")
+
+        cfg = Config(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic.ini")
+        )
+        command.upgrade(cfg, "head")
 
     except Exception as e:
         logger.error(f"Migration failed: {e}")

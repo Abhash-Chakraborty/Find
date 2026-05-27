@@ -10,8 +10,14 @@ from minio.error import S3Error
 from find_api.core.config import settings
 import logging
 from io import BytesIO
+from PIL import Image, ImageOps
 
 logger = logging.getLogger(__name__)
+
+THUMBNAIL_MAX_SIZE = (256, 256)
+THUMBNAIL_CONTENT_TYPE = "image/webp"
+THUMBNAIL_EXTENSION = ".webp"
+THUMBNAIL_QUALITY = 78
 
 # Create MinIO client
 minio_client = Minio(
@@ -116,6 +122,61 @@ def upload_file(
         raise
 
 
+def generate_thumbnail(file_data: bytes) -> tuple[bytes, int, int]:
+    """
+    Generate a small WEBP thumbnail from image bytes.
+
+    The original bytes are never modified. Any caller should treat failures as
+    non-fatal so image ingestion and analysis can continue without thumbnails.
+    """
+    with Image.open(BytesIO(file_data)) as image:
+        image = ImageOps.exif_transpose(image)
+        if image.mode not in {"RGB", "RGBA"}:
+            image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+
+        image.thumbnail(THUMBNAIL_MAX_SIZE, Image.Resampling.LANCZOS)
+
+        output = BytesIO()
+        image.save(
+            output,
+            format="WEBP",
+            quality=THUMBNAIL_QUALITY,
+            method=4,
+        )
+        thumbnail_data = output.getvalue()
+
+    return thumbnail_data, image.width, image.height
+
+
+def upload_thumbnail(file_data: bytes, file_hash: str) -> dict | None:
+    """
+    Generate and upload a thumbnail for an image.
+
+    Returns thumbnail storage metadata, or None when thumbnail creation/upload
+    fails. Original image storage must not depend on this helper succeeding.
+    """
+    thumbnail_key = f"thumbnails/{file_hash[:2]}/{file_hash}{THUMBNAIL_EXTENSION}"
+
+    try:
+        thumbnail_data, width, height = generate_thumbnail(file_data)
+        upload_file(thumbnail_data, thumbnail_key, THUMBNAIL_CONTENT_TYPE)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to generate thumbnail for image hash %s: %s",
+            file_hash,
+            exc,
+        )
+        return None
+
+    return {
+        "thumbnail_key": thumbnail_key,
+        "thumbnail_content_type": THUMBNAIL_CONTENT_TYPE,
+        "thumbnail_size": len(thumbnail_data),
+        "thumbnail_width": width,
+        "thumbnail_height": height,
+    }
+
+
 def get_file(object_name: str) -> bytes:
     """
     Download file from MinIO
@@ -135,6 +196,30 @@ def get_file(object_name: str) -> bytes:
     except S3Error as e:
         logger.error(f"Failed to download file from MinIO: {e}")
         raise
+
+
+def download_file_to_path(object_name: str, destination_path: str) -> None:
+    """
+    Stream a MinIO object to a local path without loading it all into memory.
+
+    Args:
+        object_name: Object name in bucket
+        destination_path: Local filesystem path to write
+    """
+    response = None
+    try:
+        response = minio_client.get_object(settings.MINIO_BUCKET, object_name)
+        with open(destination_path, "wb") as destination:
+            for chunk in response.stream(1024 * 1024):
+                if chunk:
+                    destination.write(chunk)
+    except S3Error as e:
+        logger.error(f"Failed to stream file from MinIO: {e}")
+        raise
+    finally:
+        if response is not None:
+            response.close()
+            response.release_conn()
 
 
 def get_file_url(object_name: str, expires: int = 3600) -> str:

@@ -9,9 +9,10 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FeedbackRating } from "@/components/feedback-rating";
 import { ImagePreviewModal } from "@/components/image-preview-modal";
 import { StatusIndicator } from "@/components/status-indicator";
-import { searchImages } from "@/lib/api";
+import { type SearchResult, searchImages, submitSearchRating } from "@/lib/api";
 import { MINIO_URL_REFRESH_INTERVAL_MS, resolveMediaUrl } from "@/lib/media";
 
 const examples = [
@@ -23,6 +24,7 @@ const examples = [
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
+  const [activeQuery, setActiveQuery] = useState("");
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
   const [allResults, setAllResults] = useState<SearchResult[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -33,53 +35,55 @@ export default function SearchPage() {
   const LIMIT = 24;
 
   const searchMutation = useMutation({
-    mutationFn: async (searchQuery: string) => {
-      const data = await searchImages({ query: searchQuery, limit: LIMIT, skip: 0 });
-      return { data, isInitial: true };
+    mutationFn: async (params: {
+      searchQuery: string;
+      limit?: number;
+      skip?: number;
+    }) => {
+      return searchImages({
+        query: params.searchQuery,
+        limit: params.limit ?? LIMIT,
+        skip: params.skip ?? 0,
+      });
+    },
+    onSuccess: (data) => {
+      setAllResults(data.results);
+      setHasMore(data.has_more);
+      setCurrentSkip(data.skip + data.results.length);
     },
   });
-
-  const activeQuery = searchMutation.data?.data.query;
-  const { mutate } = searchMutation;
-
-  useEffect(() => {
-    // Only update results if it's an initial search (not a refresh)
-    if (searchMutation.data?.isInitial && searchMutation.data?.data) {
-      setAllResults(searchMutation.data.data.results);
-      setHasMore(searchMutation.data.data.has_more);
-      setCurrentSkip(searchMutation.data.data.results.length);
-    }
-  }, [searchMutation.data]);
 
   // Periodic refresh - update first page results without losing loaded pages
   useEffect(() => {
     if (!activeQuery) return;
 
     const intervalId = setInterval(() => {
-      // On refresh, only update if we have results and only refresh first page
-      if (allResults.length > 0) {
-        // For refresh, we could refresh in place, but for simplicity
-        // we'll skip the refresh if user has loaded more pages
-        if (currentSkip <= LIMIT) {
-          mutate(activeQuery);
-        }
-      } else {
-        mutate(activeQuery);
-      }
+      const refreshLimit = Math.min(Math.max(currentSkip, LIMIT), 100);
+      searchMutation.mutate({
+        searchQuery: activeQuery,
+        limit: refreshLimit,
+        skip: 0,
+      });
     }, MINIO_URL_REFRESH_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [activeQuery, mutate, allResults.length, currentSkip]);
+  }, [activeQuery, currentSkip, searchMutation.mutate]);
 
   const handleSearch = (event: React.FormEvent) => {
     event.preventDefault();
-    if (query.trim()) {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery) {
       clearedRef.current = false;
       setSelectedMediaId(null);
       setAllResults([]);
       setHasMore(false);
       setCurrentSkip(0);
-      searchMutation.mutate(query.trim());
+      setActiveQuery(trimmedQuery);
+      searchMutation.mutate({
+        searchQuery: trimmedQuery,
+        limit: LIMIT,
+        skip: 0,
+      });
     }
   };
 
@@ -88,14 +92,14 @@ export default function SearchPage() {
 
     setIsLoadingMore(true);
     try {
-      const data = await searchImages({ 
-        query: activeQuery, 
-        limit: LIMIT, 
-        skip: currentSkip 
+      const data = await searchImages({
+        query: activeQuery,
+        limit: LIMIT,
+        skip: currentSkip,
       });
-      setAllResults(prev => [...prev, ...data.results]);
+      setAllResults((prev) => [...prev, ...data.results]);
       setHasMore(data.has_more);
-      setCurrentSkip(prev => prev + data.results.length);
+      setCurrentSkip(data.skip + data.results.length);
     } catch (error) {
       console.error("Failed to load more results:", error);
     } finally {
@@ -175,6 +179,10 @@ export default function SearchPage() {
                   setQuery("");
                   searchMutation.reset();
                   setSelectedMediaId(null);
+                  setActiveQuery("");
+                  setAllResults([]);
+                  setHasMore(false);
+                  setCurrentSkip(0);
                 }}
                 className="frost-button h-11 px-5 text-sm font-semibold"
               >
@@ -192,7 +200,15 @@ export default function SearchPage() {
                   clearedRef.current = false;
                   setQuery(example);
                   setSelectedMediaId(null);
-                  searchMutation.mutate(example);
+                  setAllResults([]);
+                  setHasMore(false);
+                  setCurrentSkip(0);
+                  setActiveQuery(example);
+                  searchMutation.mutate({
+                    searchQuery: example,
+                    limit: LIMIT,
+                    skip: 0,
+                  });
                 }}
                 className="frost-button px-3 py-1.5 text-xs text-[color:var(--silver)]"
               >
@@ -250,62 +266,77 @@ export default function SearchPage() {
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
               {allResults.map((result) => {
                 const imageSrc = resolveMediaUrl(
-                  result.metadata.url,
+                  result.metadata.thumbnail_url ?? result.metadata.url,
                   result.metadata.minio_key,
+                  result.media_id,
+                  !result.metadata.thumbnail_url,
                 );
 
                 return (
-                  <button
-                    type="button"
+                  <article
                     key={result.media_id}
-                    onClick={() => setSelectedMediaId(result.media_id)}
                     className="frost-panel card-hover group relative overflow-hidden rounded-2xl text-left"
-                    aria-label={`Preview ${result.metadata.filename}`}
                   >
-                    <div className="relative aspect-square overflow-hidden bg-[color:var(--surface-soft)]">
-                      {imageSrc ? (
-                        <Image
-                          src={imageSrc}
-                          alt={result.metadata.filename}
-                          fill
-                          className="object-cover transition duration-500 group-hover:scale-[1.035]"
-                          sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 16vw"
-                          unoptimized
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMediaId(result.media_id)}
+                      className="block w-full text-left"
+                      aria-label={`Preview ${result.metadata.filename}`}
+                    >
+                      <div className="relative aspect-square overflow-hidden bg-[color:var(--surface-soft)]">
+                        {imageSrc ? (
+                          <Image
+                            src={imageSrc}
+                            alt={result.metadata.filename}
+                            fill
+                            className="object-cover transition duration-500 group-hover:scale-[1.035]"
+                            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 16vw"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-[color:var(--muted)]">
+                            <ImageOff className="h-7 w-7" />
+                            <span className="text-xs">No preview</span>
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent opacity-70 transition-opacity group-hover:opacity-95" />
+                        <span className="absolute right-3 top-3 rounded-full border border-[var(--frost)] bg-[color:var(--overlay)] px-2.5 py-1 text-xs font-medium text-white backdrop-blur-md">
+                          {Math.round(result.similarity * 100)}%
+                        </span>
+                        <StatusIndicator
+                          status={result.metadata.status}
+                          className="absolute bottom-3 right-3"
                         />
-                      ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-[color:var(--muted)]">
-                          <ImageOff className="h-7 w-7" />
-                          <span className="text-xs">No preview</span>
+                      </div>
+
+                      <div className="space-y-3 p-3">
+                        <p className="truncate text-xs font-medium text-[color:var(--near-white)]">
+                          {result.metadata.filename}
+                        </p>
+                        {result.metadata.caption && (
+                          <p className="line-clamp-2 text-xs leading-5 text-[color:var(--silver)]">
+                            {result.metadata.caption}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {typeof result.metadata.cluster_id === "number" && (
+                            <span className="accent-badge status-default">
+                              Cluster {result.metadata.cluster_id}
+                            </span>
+                          )}
                         </div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent opacity-70 transition-opacity group-hover:opacity-95" />
-                      <span className="absolute right-3 top-3 rounded-full border border-[var(--frost)] bg-[color:var(--overlay)] px-2.5 py-1 text-xs font-medium text-white backdrop-blur-md">
-                        {Math.round(result.similarity * 100)}%
-                      </span>
-                      <StatusIndicator
-                        status={result.metadata.status}
-                        className="absolute bottom-3 right-3"
+                      </div>
+                    </button>
+
+                    <div className="px-3 pb-3">
+                      <FeedbackRating
+                        label=""
+                        onRate={(rating) =>
+                          submitSearchRating(result.media_id, rating)
+                        }
                       />
                     </div>
-
-                    <div className="space-y-3 p-3">
-                      <p className="truncate text-xs font-medium text-[color:var(--near-white)]">
-                        {result.metadata.filename}
-                      </p>
-                      {result.metadata.caption && (
-                        <p className="line-clamp-2 text-xs leading-5 text-[color:var(--silver)]">
-                          {result.metadata.caption}
-                        </p>
-                      )}
-                      <div className="flex flex-wrap items-center gap-2">
-                        {typeof result.metadata.cluster_id === "number" && (
-                          <span className="accent-badge status-default">
-                            Cluster {result.metadata.cluster_id}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
+                  </article>
                 );
               })}
             </div>

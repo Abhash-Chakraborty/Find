@@ -14,7 +14,7 @@ import zipfile
 
 from find_api.core.database import get_db
 from find_api.core.queue import get_task_queue
-from find_api.core.storage import upload_file
+from find_api.core.storage import upload_file, upload_thumbnail
 from find_api.core.config import settings
 from find_api.models.media import Media
 from find_api.workers.jobs import analyze_image
@@ -48,10 +48,14 @@ async def upload_images(
             results.append(result)
         except HTTPException:
             raise
-        except Exception as e:
-            logger.error(f"Failed to upload {file.filename}: {e}")
+        except Exception:
+            logger.exception("Failed to upload %s", file.filename)
             results.append(
-                {"filename": file.filename, "status": "failed", "error": str(e)}
+                {
+                    "filename": file.filename,
+                    "status": "failed",
+                    "error": "Upload failed. Please retry.",
+                }
             )
 
     return {"results": results, "total": len(results)}
@@ -79,6 +83,39 @@ async def upload_bulk_images(
             if not members:
                 raise HTTPException(400, "ZIP archive is empty")
 
+            # Pre-extraction archive safety checks
+
+            # 1. Reject nested archives
+            for info in members:
+                name_lower = info.filename.lower()
+                if any(
+                    name_lower.endswith(ext)
+                    for ext in (".zip", ".tar", ".tar.gz", ".tgz", ".7z", ".rar")
+                ):
+                    raise HTTPException(
+                        400,
+                        f"ZIP archive contains a nested archive: {info.filename}",
+                    )
+
+            # 2. Reject if total uncompressed size exceeds limit
+            total_size = sum(info.file_size for info in members)
+            max_total = settings.MAX_BULK_TOTAL_SIZE_MB * 1024 * 1024
+            if total_size > max_total:
+                raise HTTPException(
+                    400,
+                    f"Total uncompressed size exceeds the limit of {settings.MAX_BULK_TOTAL_SIZE_MB} MB",
+                )
+
+            # 3. Reject suspicious compression ratios (ZIP bomb)
+            for info in members:
+                if info.compress_size > 0:
+                    ratio = info.file_size / info.compress_size
+                    if ratio > settings.MAX_BULK_COMPRESSION_RATIO:
+                        raise HTTPException(
+                            400,
+                            f"File {info.filename} has a suspicious compression ratio of {ratio:.1f}",
+                        )
+
             if len(members) > settings.MAX_BULK_FILES:
                 raise HTTPException(
                     400,
@@ -87,10 +124,23 @@ async def upload_bulk_images(
 
             results = []
 
+            max_file_size = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
             for info in members:
-                filename = info.filename.split("/")[-1]
+                filename = _get_zip_member_basename(info.filename)
 
                 if not filename:
+                    continue
+
+                # Per-file size check
+                if info.file_size > max_file_size:
+                    results.append(
+                        {
+                            "filename": filename,
+                            "status": "failed",
+                            "error": f"File {filename} exceeds max upload size",
+                        }
+                    )
                     continue
 
                 try:
@@ -127,15 +177,13 @@ async def upload_bulk_images(
                             "error": detail,
                         }
                     )
-                except Exception as exc:
-                    logger.error(
-                        f"Failed to process {filename} from bulk upload: {exc}"
-                    )
+                except Exception:
+                    logger.exception("Failed to process %s from bulk upload", filename)
                     results.append(
                         {
                             "filename": filename,
                             "status": "failed",
-                            "error": str(exc),
+                            "error": "Upload failed. Please retry.",
                         }
                     )
 
@@ -143,6 +191,11 @@ async def upload_bulk_images(
         raise HTTPException(400, "Uploaded file is not a valid ZIP archive")
 
     return {"results": results, "total": len(results)}
+
+
+def _get_zip_member_basename(member_name: str) -> str:
+    """Return only the final filename from a ZIP member path."""
+    return member_name.replace("\\", "/").split("/")[-1]
 
 
 def _ingest_image(
@@ -189,6 +242,7 @@ def _ingest_image(
     )
 
     upload_file(file_data, minio_key, detected_type)
+    thumbnail_metadata = upload_thumbnail(file_data, file_hash)
 
     media = Media(
         file_hash=file_hash,
@@ -197,6 +251,7 @@ def _ingest_image(
         content_type=detected_type,
         file_size=file_size,
         status="pending",
+        **(thumbnail_metadata or {}),
     )
 
     db.add(media)

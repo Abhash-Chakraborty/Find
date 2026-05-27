@@ -130,6 +130,8 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/lib/media", () => ({
   resolveMediaUrl: vi.fn(() => "/images/mock.jpg"),
+  MINIO_URL_REFRESH_INTERVAL_MS: 0,
+  MINIO_URL_STALE_TIME_MS: 0,
 }));
 
 // ---------------------------------------------------------------------------

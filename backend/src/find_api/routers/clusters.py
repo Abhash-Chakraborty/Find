@@ -1,6 +1,7 @@
 """Clusters endpoints for retrieving cluster information."""
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -8,10 +9,31 @@ from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.queue import enqueue_clustering_job
 from find_api.core.storage import get_file_url
+from find_api.routers.gallery import build_thumbnail_url
 from find_api.models.cluster import Cluster
 from find_api.models.media import Media
 
 router = APIRouter()
+
+
+class ClusterUpdateRequest(BaseModel):
+    """Editable cluster metadata."""
+
+    label: str | None = Field(default=None, max_length=255)
+
+
+def _cluster_payload(cluster: Cluster, *, members: list | None = None):
+    payload = {
+        "id": cluster.id,
+        "type": cluster.cluster_type,
+        "label": cluster.label,
+        "description": cluster.description,
+        "member_count": cluster.member_count,
+        "created_at": cluster.created_at.isoformat() if cluster.created_at else None,
+    }
+    if members is not None:
+        payload["members"] = members
+    return payload
 
 
 @router.get("/clusters")
@@ -28,7 +50,11 @@ def get_clusters(db: Session = Depends(get_db)):
     for cluster in clusters:
         # Get sample images from cluster
         sample_ids = (cluster.member_ids or [])[:5]
-        sample_media = db.query(Media).filter(Media.id.in_(sample_ids)).all()
+        sample_media = (
+            db.query(Media)
+            .filter(Media.id.in_(sample_ids), Media.is_hidden.is_(False))
+            .all()
+        )
 
         samples = []
         for media in sample_media:
@@ -37,19 +63,17 @@ def get_clusters(db: Session = Depends(get_db)):
             except Exception:
                 url = None
 
-            samples.append({"id": media.id, "filename": media.filename, "url": url})
+            samples.append(
+                {
+                    "id": media.id,
+                    "filename": media.filename,
+                    "url": url,
+                    "thumbnail_url": build_thumbnail_url(media.id),
+                }
+            )
 
-        cluster_info = {
-            "id": cluster.id,
-            "type": cluster.cluster_type,
-            "label": cluster.label,
-            "description": cluster.description,
-            "member_count": cluster.member_count,
-            "created_at": cluster.created_at.isoformat()
-            if cluster.created_at
-            else None,
-            "samples": samples,
-        }
+        cluster_info = _cluster_payload(cluster)
+        cluster_info["samples"] = samples
 
         result.append(cluster_info)
 
@@ -78,7 +102,11 @@ def get_cluster_detail(cluster_id: int, db: Session = Depends(get_db)):
 
     # Get all member media
     member_ids = cluster.member_ids or []
-    members = db.query(Media).filter(Media.id.in_(member_ids)).all()
+    members = (
+        db.query(Media)
+        .filter(Media.id.in_(member_ids), Media.is_hidden.is_(False))
+        .all()
+    )
 
     member_list = []
     for media in members:
@@ -92,21 +120,32 @@ def get_cluster_detail(cluster_id: int, db: Session = Depends(get_db)):
                 "id": media.id,
                 "filename": media.filename,
                 "url": url,
+                "thumbnail_url": build_thumbnail_url(media.id),
                 "caption": media.metadata_json.get("caption", "")
                 if media.metadata_json
                 else "",
             }
         )
 
-    return {
-        "id": cluster.id,
-        "type": cluster.cluster_type,
-        "label": cluster.label,
-        "description": cluster.description,
-        "member_count": cluster.member_count,
-        "created_at": cluster.created_at.isoformat() if cluster.created_at else None,
-        "members": member_list,
-    }
+    return _cluster_payload(cluster, members=member_list)
+
+
+@router.patch("/cluster/{cluster_id}")
+def update_cluster(
+    cluster_id: int, payload: ClusterUpdateRequest, db: Session = Depends(get_db)
+):
+    """Update editable cluster metadata."""
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+
+    if not cluster:
+        raise HTTPException(404, "Cluster not found")
+
+    label = payload.label.strip() if payload.label else None
+    cluster.label = label or None
+    db.commit()
+    db.refresh(cluster)
+
+    return _cluster_payload(cluster)
 
 
 @router.post("/cluster/run")

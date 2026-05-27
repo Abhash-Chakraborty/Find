@@ -41,10 +41,18 @@ class FakeMedia(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     file_hash: Mapped[str] = mapped_column(String(64), unique=True)
     minio_key: Mapped[str] = mapped_column(String(255))
+    thumbnail_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    thumbnail_content_type: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True
+    )
+    thumbnail_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    thumbnail_width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    thumbnail_height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     liked: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(50), default="pending")
     analysis_job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -107,7 +115,9 @@ def client():
         yield c
 
 
-def make_media(*, status: str, metadata_json=None, error_message=None) -> FakeMedia:
+def make_media(
+    *, status: str, metadata_json=None, error_message=None, thumbnail_key=None
+) -> FakeMedia:
     db = _fresh_db()
     m = FakeMedia(
         file_hash="abc123",
@@ -118,6 +128,7 @@ def make_media(*, status: str, metadata_json=None, error_message=None) -> FakeMe
         status=status,
         metadata_json=metadata_json,
         error_message=error_message,
+        thumbnail_key=thumbnail_key,
     )
     db.add(m)
     db.commit()
@@ -201,11 +212,30 @@ class TestReprocessEndpoint:
         media = make_media(
             status="indexed",
             metadata_json={"caption": "a dog on a bench", "objects": []},
+            thumbnail_key="thumbnails/ab/abc123.webp",
         )
 
         resp = client.post(f"/api/image/{media.id}/reprocess")
 
         assert resp.status_code == 400
+
+    @patch("find_api.routers.gallery.get_task_queue")
+    def test_reprocess_indexed_missing_thumbnail(self, mock_queue, client):
+        """Indexed image missing a thumbnail is eligible for backfill."""
+        mock_job = MagicMock()
+        mock_job.id = "fake-job-thumbnail"
+        mock_queue.return_value.enqueue.return_value = mock_job
+
+        media = make_media(
+            status="indexed",
+            metadata_json={"caption": "a dog on a bench", "objects": []},
+            thumbnail_key=None,
+        )
+
+        resp = client.post(f"/api/image/{media.id}/reprocess")
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "queued"
 
     def test_reprocess_pending_image_is_rejected(self, client):
         """Already-pending image must not be double-enqueued."""

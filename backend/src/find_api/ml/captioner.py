@@ -31,7 +31,10 @@ class ImageCaptioner:
         torch_dtype = torch.float16 if device == "cuda" else torch.float32
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, trust_remote_code=True, torch_dtype=torch_dtype
+            model_id,
+            trust_remote_code=True,
+            dtype=torch_dtype,
+            attn_implementation="eager",
         ).to(device)
 
         processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
@@ -59,42 +62,47 @@ class ImageCaptioner:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
-            # Get model bundle
-            bundle = self.manager.get_model("florence-2", self._load_model)
-            model = bundle["model"]
-            processor = bundle["processor"]
-            device = bundle["device"]
-            dtype = bundle["dtype"]
+            config_key = f"model={settings.BLIP_MODEL}|gpu={settings.USE_GPU}"
+            with self.manager.use_model(
+                "florence-2", self._load_model, config_key=config_key
+            ) as bundle:
+                model = bundle["model"]
+                processor = bundle["processor"]
+                device = bundle["device"]
+                dtype = bundle["dtype"]
 
-            # Florence-2 uses task prompts
-            task_prompt = "<DETAILED_CAPTION>"
+                # Florence-2 uses task prompts
+                task_prompt = "<DETAILED_CAPTION>"
 
-            inputs = processor(text=task_prompt, images=image, return_tensors="pt")
-            inputs = {
-                k: v.to(device, dtype)
-                if v.dtype == torch.float32 or v.dtype == torch.float16
-                else v.to(device)
-                for k, v in inputs.items()
-            }
+                inputs = processor(text=task_prompt, images=image, return_tensors="pt")
+                inputs = {
+                    k: v.to(device, dtype)
+                    if v.dtype == torch.float32 or v.dtype == torch.float16
+                    else v.to(device)
+                    for k, v in inputs.items()
+                }
 
-            # Generate
-            with torch.inference_mode():
-                generated_ids = model.generate(
-                    input_ids=inputs["input_ids"],
-                    pixel_values=inputs["pixel_values"],
-                    max_new_tokens=max_length,
-                    num_beams=num_beams,
-                    do_sample=False,
+                # Generate
+                with torch.inference_mode():
+                    generated_ids = model.generate(
+                        input_ids=inputs["input_ids"],
+                        pixel_values=inputs["pixel_values"],
+                        max_new_tokens=max_length,
+                        num_beams=num_beams,
+                        do_sample=False,
+                        use_cache=False,
+                    )
+
+                generated_text = processor.batch_decode(
+                    generated_ids, skip_special_tokens=False
+                )[0]
+
+                # Post-process
+                parsed_answer = processor.post_process_generation(
+                    generated_text,
+                    task=task_prompt,
+                    image_size=(image.width, image.height),
                 )
-
-            generated_text = processor.batch_decode(
-                generated_ids, skip_special_tokens=False
-            )[0]
-
-            # Post-process
-            parsed_answer = processor.post_process_generation(
-                generated_text, task=task_prompt, image_size=(image.width, image.height)
-            )
 
             caption = parsed_answer.get(task_prompt, "")
 
@@ -118,47 +126,55 @@ class ImageCaptioner:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
-            bundle = self.manager.get_model("florence-2", self._load_model)
-            model = bundle["model"]
-            processor = bundle["processor"]
-            device = bundle["device"]
-            dtype = bundle["dtype"]
+            config_key = f"model={settings.BLIP_MODEL}|gpu={settings.USE_GPU}"
+            with self.manager.use_model(
+                "florence-2", self._load_model, config_key=config_key
+            ) as bundle:
+                model = bundle["model"]
+                processor = bundle["processor"]
+                device = bundle["device"]
+                dtype = bundle["dtype"]
 
-            # For VQA or specific prompts
-            # For VQA or specific prompts
-            # task_prompt = "<CAPTION>"  # Fallback or use prompt as VQA?
-            # Florence-2 supports <VQA> prompt
-            # If prompt is a question, use <VQA>
-            # But for general conditional captioning, maybe just append?
-            # Let's assume prompt is a question or task for now
+                # For VQA or specific prompts
+                # For VQA or specific prompts
+                # task_prompt = "<CAPTION>"  # Fallback or use prompt as VQA?
+                # Florence-2 supports <VQA> prompt
+                # If prompt is a question, use <VQA>
+                # But for general conditional captioning, maybe just append?
+                # Let's assume prompt is a question or task for now
 
-            full_prompt = f"<VQA>{prompt}" if "?" in prompt else f"<CAPTION>{prompt}"
-
-            inputs = processor(text=full_prompt, images=image, return_tensors="pt")
-            inputs = {
-                k: v.to(device, dtype)
-                if v.dtype == torch.float32 or v.dtype == torch.float16
-                else v.to(device)
-                for k, v in inputs.items()
-            }
-
-            with torch.inference_mode():
-                generated_ids = model.generate(
-                    input_ids=inputs["input_ids"],
-                    pixel_values=inputs["pixel_values"],
-                    max_new_tokens=max_length,
-                    do_sample=False,
+                full_prompt = (
+                    f"<VQA>{prompt}" if "?" in prompt else f"<CAPTION>{prompt}"
                 )
 
-            generated_text = processor.batch_decode(
-                generated_ids, skip_special_tokens=False
-            )[0]
+                inputs = processor(text=full_prompt, images=image, return_tensors="pt")
+                inputs = {
+                    k: v.to(device, dtype)
+                    if v.dtype == torch.float32 or v.dtype == torch.float16
+                    else v.to(device)
+                    for k, v in inputs.items()
+                }
 
-            # We might need manual parsing if post_process doesn't handle custom prompts well
-            # But let's try standard
-            caption = processor.post_process_generation(
-                generated_text, task="<CAPTION>", image_size=(image.width, image.height)
-            )
+                with torch.inference_mode():
+                    generated_ids = model.generate(
+                        input_ids=inputs["input_ids"],
+                        pixel_values=inputs["pixel_values"],
+                        max_new_tokens=max_length,
+                        do_sample=False,
+                        use_cache=False,
+                    )
+
+                generated_text = processor.batch_decode(
+                    generated_ids, skip_special_tokens=False
+                )[0]
+
+                # We might need manual parsing if post_process doesn't handle custom prompts well
+                # But let's try standard
+                caption = processor.post_process_generation(
+                    generated_text,
+                    task="<CAPTION>",
+                    image_size=(image.width, image.height),
+                )
 
             # If it returns dict
             if isinstance(caption, dict):

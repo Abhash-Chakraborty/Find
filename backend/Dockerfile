@@ -33,6 +33,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && install -m 0755 /root/.local/bin/uvx /usr/local/bin/uvx
 ENV UV_PROJECT_ENVIRONMENT="/opt/find/.venv"
 ENV UV_PYTHON="${PYTHON_VERSION}"
+ENV UV_LINK_MODE="copy"
 ENV PATH="/opt/find/.venv/bin:/usr/local/bin:/root/.local/bin:/root/.cargo/bin:$PATH"
 ENV PYTHONPATH="/app/src"
 
@@ -50,9 +51,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy application code
 COPY . .
 
-# Install the local package after source is available.
+# Install only the local package after source is available. Dependencies were
+# already synced from pyproject.toml/uv.lock above, so source-only changes should
+# not force uv to re-resolve the full ML environment on every rebuild.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev ${UV_SYNC_EXTRAS}
+    uv pip install --no-deps .
 
 # Create directories for model cache
 RUN mkdir -p /root/.cache/torch/hub/checkpoints \

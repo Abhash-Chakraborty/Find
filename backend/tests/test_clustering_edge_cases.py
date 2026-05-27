@@ -92,7 +92,8 @@ class TestClusteringJobEdgeCases:
             result = cluster_images()
 
         mock_db.add.assert_not_called()
-        mock_db.commit.assert_called()
+        # No DB commit should occur when clustering finds no stable clusters
+        mock_db.commit.assert_not_called()
         assert result["cluster_ids"] == []
         assert "No stable clusters" in result["message"]
 

@@ -1,14 +1,20 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ChevronLeft,
-  ChevronRight,
+  type InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
+import axios from "axios";
+import {
+  Check,
   Download,
   Eye,
   Heart,
   ImageOff,
   Loader2,
+  Lock,
   RotateCcw,
   Trash2,
   X,
@@ -24,7 +30,9 @@ import {
 } from "@/components/image-preview-modal";
 import { StatusIndicator } from "@/components/status-indicator";
 import {
+  api,
   deleteImage,
+  deleteImagesBulk,
   type GalleryResponse,
   getGallery,
   getImageDetail,
@@ -36,6 +44,9 @@ import {
   MINIO_URL_STALE_TIME_MS,
   resolveMediaUrl,
 } from "@/lib/media";
+import { vaultStore } from "@/store/vaultStore";
+
+const GALLERY_LIMIT = 24;
 
 type GalleryFilter = "all" | "indexed" | "processing" | "failed";
 
@@ -46,6 +57,12 @@ type GalleryEmptyState = {
   showClearLikedOnly: boolean;
 };
 
+/**
+ * Determines the appropriate empty state messaging based on current gallery filters.
+ * @param filter - The current status filter applied to the gallery.
+ * @param likedOnly - Whether the gallery is currently filtered to show only liked images.
+ * @returns A configuration object for the empty state UI.
+ */
 function getGalleryEmptyState(
   filter: GalleryFilter,
   likedOnly: boolean,
@@ -118,6 +135,11 @@ function getGalleryEmptyState(
       };
 }
 
+/**
+ * Maps a raw URL status parameter to a strongly-typed GalleryFilter.
+ * @param status - The raw string parameter from the URL.
+ * @returns The resolved GalleryFilter type.
+ */
 const getFilterFromStatusParam = (status: string | null): GalleryFilter => {
   if (status === "completed" || status === "indexed") {
     return "indexed";
@@ -130,6 +152,11 @@ const getFilterFromStatusParam = (status: string | null): GalleryFilter => {
   return "all";
 };
 
+/**
+ * Maps a strongly-typed GalleryFilter back to a URL-friendly status string.
+ * @param filter - The active GalleryFilter type.
+ * @returns The string value to use in the URL, or null if no filter should be applied.
+ */
 const getStatusParamFromFilter = (filter: GalleryFilter): string | null => {
   if (filter === "all") {
     return null;
@@ -138,57 +165,134 @@ const getStatusParamFromFilter = (filter: GalleryFilter): string | null => {
   return filter === "indexed" ? "completed" : filter;
 };
 
+/**
+ * Core gallery component managing infinite scrolling, filtering, and media interactions.
+ * Uses React Query's useInfiniteQuery for paginated data fetching and client-side caching.
+ */
 function GalleryPageContent() {
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState<{
     id: number;
     filename?: string;
   } | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [deletionError, setDeletionError] = useState<string | null>(null);
   const [hasOpenedFromQuery, setHasOpenedFromQuery] = useState(false);
   const [querySelectedItem, setQuerySelectedItem] =
     useState<PreviewMedia | null>(null);
-  const limit = 24;
 
   const queryClient = useQueryClient();
+  const isVaultUnlocked = vaultStore((state) => state.isUnlocked);
+  const vaultSessionToken = vaultStore((state) => state.sessionToken);
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const filter = getFilterFromStatusParam(searchParams.get("status"));
   const likedOnly = searchParams.get("liked") === "true";
-  const filterStateKey = `${filter}:${likedOnly}`;
-  const [pagination, setPagination] = useState({
-    filterStateKey,
-    page: 1,
-  });
-  const page =
-    pagination.filterStateKey === filterStateKey ? pagination.page : 1;
-  const galleryQueryKey = useMemo(
-    () => ["gallery", page, filter, likedOnly] as const,
-    [page, filter, likedOnly],
-  );
 
-  const { data, isLoading, error } = useQuery<GalleryResponse, Error>({
+  // The query key includes filter + likedOnly so any URL filter change
+  // automatically resets the infinite query back to page 1.
+  const galleryQueryKey = ["gallery-infinite", filter, likedOnly] as const;
+
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<GalleryResponse, Error>({
     queryKey: galleryQueryKey,
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       getGallery({
-        page,
-        limit,
+        page: typeof pageParam === "number" ? pageParam : 1,
+        limit: GALLERY_LIMIT,
         status: filter === "all" ? undefined : filter,
         liked: likedOnly ? true : undefined,
       }),
-    placeholderData: (previous) => previous,
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const fetchedSoFar = lastPage.page * lastPage.limit;
+      return fetchedSoFar < lastPage.total ? lastPage.page + 1 : undefined;
+    },
     staleTime: MINIO_URL_STALE_TIME_MS,
     refetchInterval: (query) => {
-      const gallery = query.state.data as GalleryResponse | undefined;
-
-      return gallery?.items.some(
-        (item) => item.status === "processing" || item.status === "pending",
-      )
-        ? 5000
-        : MINIO_URL_REFRESH_INTERVAL_MS;
+      const pages = query.state.data?.pages;
+      const hasProcessing = pages?.some((page) =>
+        page.items.some(
+          (item) => item.status === "processing" || item.status === "pending",
+        ),
+      );
+      return hasProcessing ? 5000 : MINIO_URL_REFRESH_INTERVAL_MS;
     },
   });
+
+  // Flat list of all items across all loaded pages.
+  const allItems = useMemo(
+    () => data?.pages.flatMap((page) => page.items) ?? [],
+    [data],
+  );
+
+  const total = data?.pages[0]?.total ?? 0;
+  const selectedItems = useMemo(
+    () => allItems.filter((item) => selectedIds.has(item.id)),
+    [allItems, selectedIds],
+  );
+  const selectedCount = selectedIds.size;
+  const areAllVisibleSelected =
+    allItems.length > 0 && allItems.every((item) => selectedIds.has(item.id));
+
+  const removeMediaFromGalleryCache = useCallback(
+    (
+      mediaIds: Iterable<number>,
+      previousData?: InfiniteData<GalleryResponse>,
+    ) => {
+      const idsToRemove = new Set(mediaIds);
+      if (idsToRemove.size === 0) {
+        return previousData;
+      }
+
+      const source = previousData ?? data;
+      if (!source) {
+        return previousData;
+      }
+
+      return {
+        ...source,
+        pages: source.pages.map((page) => {
+          const removedFromPage = page.items.filter((item) =>
+            idsToRemove.has(item.id),
+          ).length;
+
+          return {
+            ...page,
+            items: page.items.filter((item) => !idsToRemove.has(item.id)),
+            total: Math.max(0, page.total - removedFromPage),
+          };
+        }),
+      };
+    },
+    [data],
+  );
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) {
+        return current;
+      }
+
+      const visibleIds = new Set(allItems.map((item) => item.id));
+      const next = new Set<number>();
+      for (const mediaId of current) {
+        if (visibleIds.has(mediaId)) {
+          next.add(mediaId);
+        }
+      }
+
+      return next.size === current.size ? current : next;
+    });
+  }, [allItems]);
 
   const buildGalleryHref = useCallback(
     (nextState: { filter?: GalleryFilter; likedOnly?: boolean }) => {
@@ -241,7 +345,7 @@ function GalleryPageContent() {
       return;
     }
 
-    const existingItem = data.items.find((item) => item.id === mediaId);
+    const existingItem = allItems.find((item) => item.id === mediaId);
 
     if (existingItem) {
       setQuerySelectedItem(null);
@@ -273,11 +377,12 @@ function GalleryPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [data, searchParams, hasOpenedFromQuery]);
+  }, [data, allItems, searchParams, hasOpenedFromQuery]);
+
   const likeMutation = useMutation({
     mutationFn: (mediaId: number) => toggleLike(mediaId),
     onSuccess: ({ id }) => {
-      queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", id] });
     },
   });
@@ -286,28 +391,23 @@ function GalleryPageContent() {
     mutationFn: (mediaId: number) => deleteImage(mediaId),
     onMutate: async (mediaId: number) => {
       setDeletionError(null);
-
       await queryClient.cancelQueries({ queryKey: galleryQueryKey });
-
       const previousData =
-        queryClient.getQueryData<GalleryResponse>(galleryQueryKey);
+        queryClient.getQueryData<InfiniteData<GalleryResponse>>(
+          galleryQueryKey,
+        );
 
-      queryClient.setQueryData<GalleryResponse>(galleryQueryKey, (old) => {
-        if (!old) {
-          return old;
-        }
-        const filteredItems = old.items.filter((item) => item.id !== mediaId);
-        if (filteredItems.length === old.items.length) {
-          return old;
-        }
-        return {
-          ...old,
-          items: filteredItems,
-          total: Math.max(0, old.total - 1),
-        };
-      });
+      queryClient.setQueryData<InfiniteData<GalleryResponse>>(
+        galleryQueryKey,
+        (old) => removeMediaFromGalleryCache([mediaId], old),
+      );
 
       setSelectedMediaId((current) => (current === mediaId ? null : current));
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
       return { previousData };
     },
     onError: (mutationError, _variables, context) => {
@@ -325,14 +425,78 @@ function GalleryPageContent() {
       queryClient.invalidateQueries({ queryKey: ["image-detail", id] });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["clusters"] });
+      queryClient.invalidateQueries({ queryKey: ["people"] });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (mediaIds: number[]) => deleteImagesBulk(mediaIds),
+    onMutate: async (mediaIds: number[]) => {
+      setDeletionError(null);
+      await queryClient.cancelQueries({ queryKey: galleryQueryKey });
+      const previousData =
+        queryClient.getQueryData<InfiniteData<GalleryResponse>>(
+          galleryQueryKey,
+        );
+
+      queryClient.setQueryData<InfiniteData<GalleryResponse>>(
+        galleryQueryKey,
+        (old) => removeMediaFromGalleryCache(mediaIds, old),
+      );
+
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        for (const mediaId of mediaIds) {
+          next.delete(mediaId);
+        }
+        return next;
+      });
+      setSelectedMediaId((current) =>
+        current !== null && mediaIds.includes(current) ? null : current,
+      );
+
+      return { previousData };
+    },
+    onError: (mutationError, _variables, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(galleryQueryKey, context.previousData);
+      }
+
+      const message =
+        mutationError instanceof Error
+          ? mutationError.message
+          : "Failed to delete selected images. Please try again.";
+      setDeletionError(message);
+    },
+    onSuccess: (result) => {
+      if (result.failed_count > 0) {
+        toast.error(
+          `Deleted ${result.deleted_count} image${result.deleted_count === 1 ? "" : "s"}, but ${result.failed_count} failed.`,
+        );
+        return;
+      }
+
+      const missingNote =
+        result.missing_count > 0
+          ? ` (${result.missing_count} already gone)`
+          : "";
+      toast.success(
+        `Deleted ${result.deleted_count} image${result.deleted_count === 1 ? "" : "s"}${missingNote}.`,
+      );
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["clusters"] });
+      queryClient.invalidateQueries({ queryKey: ["people"] });
     },
   });
 
   const reprocessMutation = useMutation({
     mutationFn: (mediaId: number) => reprocessImage(mediaId),
     onSuccess: ({ media_id }) => {
-      queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", media_id] });
       toast.success("Retry queued — analysis will restart shortly.");
     },
@@ -343,53 +507,115 @@ function GalleryPageContent() {
     },
   });
 
+  const moveToVaultMutation = useMutation({
+    mutationFn: async (mediaId: number) => {
+      if (!vaultSessionToken) {
+        throw new Error("Vault session missing");
+      }
+
+      await api.post(
+        "/api/vault/hide",
+        { media_id: mediaId },
+        {
+          headers: {
+            Authorization: `Bearer ${vaultSessionToken}`,
+          },
+        },
+      );
+
+      return mediaId;
+    },
+    onMutate: async (mediaId: number) => {
+      await queryClient.cancelQueries({ queryKey: galleryQueryKey });
+
+      const previousData =
+        queryClient.getQueryData<InfiniteData<GalleryResponse>>(
+          galleryQueryKey,
+        );
+
+      queryClient.setQueryData<InfiniteData<GalleryResponse>>(
+        galleryQueryKey,
+        (old) => removeMediaFromGalleryCache([mediaId], old),
+      );
+
+      if (selectedMediaId === mediaId) {
+        setSelectedMediaId(null);
+        setQuerySelectedItem(null);
+      }
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
+
+      return { previousData };
+    },
+    onError: (error, _mediaId, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(galleryQueryKey, context.previousData);
+      }
+
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        vaultStore.getState().lock();
+        toast.error("Vault session expired");
+        return;
+      }
+
+      toast.error("Failed to move to vault");
+    },
+    onSuccess: (mediaId) => {
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["image-detail", mediaId] });
+    },
+  });
+
   const selectedItem = useMemo<PreviewMedia | null>(() => {
     if (selectedMediaId === null) {
       return null;
     }
 
     return (
-      data?.items.find((item) => item.id === selectedMediaId) ??
+      allItems.find((item) => item.id === selectedMediaId) ??
       (querySelectedItem?.id === selectedMediaId ? querySelectedItem : null)
     );
-  }, [data, selectedMediaId, querySelectedItem]);
+  }, [allItems, selectedMediaId, querySelectedItem]);
 
   const selectedIndex = useMemo(() => {
-    if (!data || selectedMediaId === null) {
+    if (selectedMediaId === null) {
       return -1;
     }
-    return data.items.findIndex((item) => item.id === selectedMediaId);
-  }, [data, selectedMediaId]);
+    return allItems.findIndex((item) => item.id === selectedMediaId);
+  }, [allItems, selectedMediaId]);
 
   useEffect(() => {
-    if (!data || selectedMediaId === null) {
+    if (selectedMediaId === null) {
       return;
     }
     if (
-      !data.items.some((item) => item.id === selectedMediaId) &&
+      !allItems.some((item) => item.id === selectedMediaId) &&
       querySelectedItem?.id !== selectedMediaId
     ) {
       setSelectedMediaId(null);
     }
-  }, [data, selectedMediaId, querySelectedItem]);
+  }, [allItems, selectedMediaId, querySelectedItem]);
 
   const goToAdjacent = useCallback(
     (direction: -1 | 1) => {
-      if (!data || selectedMediaId === null) {
+      if (selectedMediaId === null) {
         return;
       }
-      const currentIndex = data.items.findIndex(
+      const currentIndex = allItems.findIndex(
         (item) => item.id === selectedMediaId,
       );
       if (currentIndex === -1) {
         return;
       }
-      const next = data.items[currentIndex + direction];
+      const next = allItems[currentIndex + direction];
       if (next) {
         setSelectedMediaId(next.id);
       }
     },
-    [data, selectedMediaId],
+    [allItems, selectedMediaId],
   );
 
   const closeDetail = useCallback(() => {
@@ -421,20 +647,39 @@ function GalleryPageContent() {
     updateGalleryParams({ likedOnly: false });
   }, [updateGalleryParams]);
 
-  const updatePage = useCallback(
-    (updater: (currentPage: number) => number) => {
-      setPagination((current) => {
-        const currentPage =
-          current.filterStateKey === filterStateKey ? current.page : 1;
+  const handleToggleSelection = useCallback((mediaId: number) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(mediaId)) {
+        next.delete(mediaId);
+      } else {
+        next.add(mediaId);
+      }
+      return next;
+    });
+  }, []);
 
-        return {
-          filterStateKey,
-          page: updater(currentPage),
-        };
-      });
-    },
-    [filterStateKey],
-  );
+  const handleSelectVisible = useCallback(() => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const item of allItems) {
+        next.add(item.id);
+      }
+      return next;
+    });
+  }, [allItems]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleToggleVisibleSelection = useCallback(() => {
+    if (areAllVisibleSelected) {
+      handleClearSelection();
+      return;
+    }
+    handleSelectVisible();
+  }, [areAllVisibleSelected, handleClearSelection, handleSelectVisible]);
 
   const handleToggleLike = useCallback(
     (mediaId: number) => {
@@ -458,17 +703,30 @@ function GalleryPageContent() {
     setDeleteTarget(null);
   }, [deleteMutation, deleteTarget]);
 
+  const confirmBulkDelete = useCallback(() => {
+    const mediaIds = Array.from(selectedIds);
+    if (mediaIds.length === 0) {
+      setBulkDeleteOpen(false);
+      return;
+    }
+
+    bulkDeleteMutation.mutate(mediaIds);
+    setBulkDeleteOpen(false);
+  }, [bulkDeleteMutation, selectedIds]);
+
   const cancelDelete = useCallback(() => {
     setDeleteTarget(null);
   }, []);
 
   const emptyGalleryCopy = useMemo(() => {
-    if (!data || data.items.length > 0) {
+    if (isLoading || allItems.length > 0) {
       return null;
     }
-
+    if (!data) {
+      return null;
+    }
     return getGalleryEmptyState(filter, likedOnly);
-  }, [data, filter, likedOnly]);
+  }, [isLoading, allItems, data, filter, likedOnly]);
 
   return (
     <div className="page-shell">
@@ -561,18 +819,88 @@ function GalleryPageContent() {
           </div>
         )}
 
-        {data && data.items.length > 0 && (
+        {allItems.length > 0 && (
           <>
+            {selectedCount > 0 && (
+              <div className="frost-panel mb-4 flex flex-col gap-3 rounded-2xl px-4 py-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleToggleVisibleSelection}
+                    aria-pressed={areAllVisibleSelected}
+                    className="frost-button inline-flex items-center gap-2 px-3 py-2 text-xs font-medium"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    {areAllVisibleSelected ? "Clear visible" : "Select visible"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="frost-button px-3 py-2 text-xs font-medium"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-xs text-[color:var(--silver)]">
+                    {selectedCount} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setBulkDeleteOpen(true)}
+                    disabled={
+                      deleteMutation.isPending || bulkDeleteMutation.isPending
+                    }
+                    className="inline-flex items-center gap-2 rounded-full border border-[var(--red-soft)] bg-[var(--red-soft)] px-4 py-2 text-xs font-semibold text-[#ff9bab] transition hover:bg-[#ff2047]/25 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete selected
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-              {data.items.map((item) => {
-                const imageSrc = resolveMediaUrl(item.url, item.minio_key);
-                const downloadUrl = imageSrc ?? item.url ?? "";
+              {allItems.map((item) => {
+                const imageSrc = resolveMediaUrl(
+                  item.thumbnail_url ?? item.url,
+                  item.minio_key,
+                  item.id,
+                  !item.thumbnail_url,
+                );
+                const originalUrl = resolveMediaUrl(item.url, item.minio_key);
+                const downloadUrl = originalUrl ?? item.url ?? "";
+                const isSelected = selectedIds.has(item.id);
 
                 return (
                   <article
                     key={item.id}
-                    className="frost-panel card-hover group relative overflow-hidden rounded-2xl"
+                    className={`frost-panel card-hover group relative overflow-hidden rounded-2xl ${
+                      isSelected ? "ring-2 ring-[color:var(--blue)]" : ""
+                    }`}
                   >
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSelection(item.id)}
+                      className={`absolute left-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-full border backdrop-blur-md transition ${
+                        isSelected
+                          ? "border-[color:var(--blue)] bg-[color:var(--blue)] text-white"
+                          : "border-white/30 bg-black/45 text-white hover:bg-black/65"
+                      }`}
+                      aria-label={
+                        isSelected
+                          ? `Deselect ${item.filename}`
+                          : `Select ${item.filename}`
+                      }
+                      aria-pressed={isSelected}
+                    >
+                      {isSelected ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <span className="h-3.5 w-3.5 rounded-full border border-current" />
+                      )}
+                    </button>
                     <button
                       type="button"
                       className="relative block aspect-square w-full overflow-hidden bg-[color:var(--surface-soft)] text-left focus:outline-none"
@@ -670,6 +998,26 @@ function GalleryPageContent() {
                             />
                           </button>
                         )}
+                        {isVaultUnlocked && vaultSessionToken && (
+                          <button
+                            type="button"
+                            onClick={() => moveToVaultMutation.mutate(item.id)}
+                            disabled={
+                              moveToVaultMutation.isPending &&
+                              moveToVaultMutation.variables === item.id
+                            }
+                            className={`icon-button h-8 w-8 text-[color:var(--silver)] ${
+                              moveToVaultMutation.isPending &&
+                              moveToVaultMutation.variables === item.id
+                                ? "cursor-not-allowed opacity-70"
+                                : ""
+                            }`}
+                            aria-label="Move to Vault"
+                            title="Move to Vault"
+                          >
+                            <Lock className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() =>
@@ -692,29 +1040,27 @@ function GalleryPageContent() {
               })}
             </div>
 
-            {data.total > limit && (
-              <div className="mt-12 flex items-center justify-center gap-6">
+            {/* Load More */}
+            {hasNextPage && (
+              <div className="mt-12 flex flex-col items-center gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    updatePage((current) => Math.max(1, current - 1))
-                  }
-                  disabled={page === 1}
-                  className="icon-button disabled:cursor-not-allowed disabled:opacity-30"
+                  onClick={() => void fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="frost-button inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <ChevronLeft className="h-5 w-5" />
+                  {isFetchingNextPage ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading…
+                    </>
+                  ) : (
+                    "Load more"
+                  )}
                 </button>
-                <span className="text-sm text-[color:var(--silver)]">
-                  Page {page} of {Math.ceil(data.total / limit)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => updatePage((current) => current + 1)}
-                  disabled={page >= Math.ceil(data.total / limit)}
-                  className="icon-button disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
+                <p className="text-xs text-[color:var(--silver)]">
+                  Showing {allItems.length} of {total}
+                </p>
               </div>
             )}
           </>
@@ -728,18 +1074,70 @@ function GalleryPageContent() {
           onPrevious={() => goToAdjacent(-1)}
           onNext={() => goToAdjacent(1)}
           hasPrevious={selectedIndex > 0}
-          hasNext={
-            data
-              ? selectedIndex >= 0 && selectedIndex < data.items.length - 1
-              : false
-          }
+          hasNext={selectedIndex >= 0 && selectedIndex < allItems.length - 1}
           onDeleted={(mediaId) => {
+            queryClient.setQueryData<InfiniteData<GalleryResponse>>(
+              galleryQueryKey,
+              (old) => removeMediaFromGalleryCache([mediaId], old),
+            );
+            setSelectedIds((current) => {
+              const next = new Set(current);
+              next.delete(mediaId);
+              return next;
+            });
             if (selectedMediaId === mediaId) {
               setSelectedMediaId(null);
               setQuerySelectedItem(null);
             }
           }}
         />
+      )}
+
+      {bulkDeleteOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 px-4 backdrop-blur-lg">
+          <div className="frost-panel page-enter w-full max-w-md rounded-3xl p-6">
+            <h2 className="text-lg font-semibold text-[color:var(--near-white)]">
+              Delete selected images?
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--silver)]">
+              {selectedCount} selected image{selectedCount === 1 ? "" : "s"}{" "}
+              will be permanently removed from the gallery, search results, and
+              clusters. This action cannot be undone.
+            </p>
+            {selectedItems.length > 0 && (
+              <div className="mt-4 max-h-32 overflow-y-auto rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-3">
+                <ul className="space-y-1 text-xs text-[color:var(--silver)]">
+                  {selectedItems.slice(0, 6).map((item) => (
+                    <li key={item.id} className="truncate">
+                      {item.filename}
+                    </li>
+                  ))}
+                  {selectedItems.length > 6 && (
+                    <li>+{selectedItems.length - 6} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setBulkDeleteOpen(false)}
+                className="frost-button px-4 py-2 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmBulkDelete}
+                disabled={bulkDeleteMutation.isPending}
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--red-soft)] bg-[var(--red-soft)] px-4 py-2 text-sm font-medium text-[#ff9bab] transition hover:bg-[#ff2047]/25 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <Trash2 className="h-4 w-4" />
+                {bulkDeleteMutation.isPending ? "Deleting" : "Delete selected"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {deleteTarget && (
@@ -792,6 +1190,10 @@ function GalleryPageContent() {
     </div>
   );
 }
+/**
+ * Main entry point for the Gallery route. Wraps the gallery content in a Suspense
+ * boundary to support useSearchParams() during server-side rendering.
+ */
 export default function GalleryPage() {
   return (
     <Suspense fallback={null}>
