@@ -41,7 +41,7 @@ def _get_public_minio_client() -> Minio | None:
         access_key=settings.MINIO_ACCESS_KEY,
         secret_key=settings.MINIO_SECRET_KEY,
         secure=parsed.scheme == "https",
-        region="us-east-1",
+        region=settings.MINIO_REGION,
     )
 
 

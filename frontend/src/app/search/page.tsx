@@ -100,8 +100,8 @@ export default function SearchPage() {
       setAllResults((prev) => [...prev, ...data.results]);
       setHasMore(data.has_more);
       setCurrentSkip(data.skip + data.results.length);
-    } catch (error) {
-      console.error("Failed to load more results:", error);
+    } catch {
+      // Silently ignore — user can retry via the Load More button.
     } finally {
       setIsLoadingMore(false);
     }
@@ -191,7 +191,7 @@ export default function SearchPage() {
             )}
           </div>
 
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
+          <div className="mt-5 flex flex-wrap justify-center gap-2" role="group" aria-label="Example search queries">
             {examples.map((example) => (
               <button
                 key={example}
@@ -211,6 +211,7 @@ export default function SearchPage() {
                   });
                 }}
                 className="frost-button px-3 py-1.5 text-xs text-[color:var(--silver)]"
+                aria-label={`Search for "${example}"`}
               >
                 {example}
               </button>

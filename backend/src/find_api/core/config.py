@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     # API
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ]
     # Database
     DATABASE_URL: str = "postgresql://find:find123@localhost:5432/find"
 
@@ -25,6 +31,7 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "images"
     MINIO_SECURE: bool = False
+    MINIO_REGION: str = "us-east-1"
     MINIO_PUBLIC_ENDPOINT: Optional[str] = None
     MINIO_PUBLIC_READ: bool = False
 

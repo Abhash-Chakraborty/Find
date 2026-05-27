@@ -2,10 +2,11 @@
 Upload endpoint for image ingestion
 """
 
+from contextlib import contextmanager
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from PIL import Image
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Iterator, List, Optional
 import hashlib
 import io
 import logging
@@ -193,6 +194,17 @@ async def upload_bulk_images(
     return {"results": results, "total": len(results)}
 
 
+@contextmanager
+def _temporary_max_image_pixels(limit: int) -> Iterator[None]:
+    """Temporarily override PIL's global decompression bomb safety limit."""
+    original = Image.MAX_IMAGE_PIXELS
+    try:
+        Image.MAX_IMAGE_PIXELS = limit
+        yield
+    finally:
+        Image.MAX_IMAGE_PIXELS = original
+
+
 def _get_zip_member_basename(member_name: str) -> str:
     """Return only the final filename from a ZIP member path."""
     return member_name.replace("\\", "/").split("/")[-1]
@@ -213,14 +225,13 @@ def _ingest_image(
 
     # Verify image content and protect against decompression bombs
     try:
-        # Set a reasonable limit for image pixels (e.g., 100MP)
-        Image.MAX_IMAGE_PIXELS = 100_000_000
-        with Image.open(io.BytesIO(file_data)) as img:
-            img.verify()
-            # Re-open to check dimensions (verify() consumes the file pointer)
-            # This is still lazy and doesn't decode pixels.
-            with Image.open(io.BytesIO(file_data)) as img2:
-                _ = img2.size
+        with _temporary_max_image_pixels(100_000_000):
+            with Image.open(io.BytesIO(file_data)) as img:
+                img.verify()
+                # Re-open to check dimensions (verify() consumes the file pointer)
+                # This is still lazy and doesn't decode pixels.
+                with Image.open(io.BytesIO(file_data)) as img2:
+                    _ = img2.size
     except Exception:
         raise HTTPException(400, f"File {filename} is corrupted or not a valid image")
 
