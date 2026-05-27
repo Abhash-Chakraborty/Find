@@ -168,8 +168,6 @@ def analyze_image(media_id: int):
         media.processed_at = datetime.utcnow()
 
         db.commit()
-        
-        db.commit()
 
         # near-duplicate detection
         try:

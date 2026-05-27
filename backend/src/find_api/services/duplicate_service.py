@@ -17,8 +17,8 @@ SIMILARITY_THRESHOLD = 0.97
 def find_near_duplicate(
     db: Session,
     media_id: int,
-    user_id: None,  # unused in Find
     embedding: list[float],
+    user_id: None = None,  
 ) -> Optional[int]:
     """Query pgvector for a near-duplicate of a newly indexed image."""
     result = db.execute(
