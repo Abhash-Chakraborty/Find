@@ -63,6 +63,8 @@ class Media(Base):
 
     # Clustering
     cluster_id = Column(Integer, index=True, nullable=True)
+    # Near-duplicate detection
+    duplicate_of = Column(Integer, nullable=True, index=True)
 
     # Vector embedding for semantic search
     vector = Column(Vector(settings.EMBEDDING_DIM))
