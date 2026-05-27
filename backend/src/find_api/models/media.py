@@ -70,7 +70,7 @@ class Media(Base):
     ForeignKey("media.id", ondelete="SET NULL"),
     nullable=True,
     index=True,
-)
+    )
 
     # Vector embedding for semantic search
     vector = Column(Vector(settings.EMBEDDING_DIM))
