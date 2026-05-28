@@ -205,3 +205,103 @@ This note is research only. A follow-up implementation issue should cover:
   - `backend/src/find_api/routers/gallery.py`
   - `docs/plans/partial/local-first-roadmap.md`
   - `docs/plans/not-started/storage-provider-neutrality-adr.md`
+
+## Tamper-Case Test Plan
+
+### 1. Happy Path
+
+**Setup**
+
+* Encrypt a valid vault blob using the correct passphrase.
+
+**Action**
+
+* Decrypt the blob using the same passphrase.
+
+**Expected Result**
+
+* Decryption succeeds and restores the original vault contents correctly.
+
+---
+
+### 2. Wrong Passphrase
+
+**Setup**
+
+* Encrypt a valid vault blob using a known passphrase.
+
+**Action**
+
+* Attempt decryption using an incorrect passphrase.
+
+**Expected Result**
+
+* Decryption fails with an authentication or invalid passphrase error.
+* No partial data should be exposed.
+
+---
+
+### 3. Tampered Ciphertext
+
+**Setup**
+
+* Encrypt a valid vault blob.
+* Modify one or more bytes in the ciphertext.
+
+**Action**
+
+* Attempt decryption of the modified blob.
+
+**Expected Result**
+
+* Integrity/authentication validation fails.
+* No decrypted data should be returned.
+
+---
+
+### 4. Tampered Metadata / AAD
+
+**Setup**
+
+* Encrypt a valid vault blob with associated metadata or AAD.
+* Modify metadata values after encryption.
+
+**Action**
+
+* Attempt decryption using the tampered metadata.
+
+**Expected Result**
+
+* Authentication should fail because metadata no longer matches the encrypted payload.
+* Vault contents should remain inaccessible.
+
+---
+
+### 5. Swapped Encrypted Blob
+
+**Setup**
+
+* Create two encrypted vault blobs from different users or vault states.
+
+**Action**
+
+* Replace one encrypted blob with another and attempt decryption.
+
+**Expected Result**
+
+* The vault should reject the swapped blob due to authentication or metadata mismatch.
+* No unrelated vault data should be exposed.
+
+---
+
+## Current vs Desired Hardened Behavior
+
+### Current Behavior
+
+* Current implementation behavior may vary depending on metadata and authentication enforcement.
+
+### Desired Hardened Behavior
+
+* All tampered or swapped blobs should fail authentication consistently.
+* No partial plaintext should ever be exposed.
+* Errors should avoid leaking sensitive implementation details.
