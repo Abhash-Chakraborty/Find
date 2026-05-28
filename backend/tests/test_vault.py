@@ -304,3 +304,23 @@ class TestVaultGalleryIntegration:
         ids = [item["id"] for item in response.json()["items"]]
         assert hidden_media.id not in ids
         assert visible_media.id in ids
+
+    def test_vault_list_does_not_expose_encryption_material(
+        self, client, db, vault_artifacts
+    ):
+        hidden_media = seed_media(db, filename="secret.png")
+        token = unlock_vault(client, db)
+        encrypted_path = hide_media(client, db, media=hidden_media, token=token)
+        vault_artifacts.append(encrypted_path)
+
+        response = client.get(
+            "/api/vault/list",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        item = response.json()[0]
+        assert "encrypted_path" not in item
+        assert "iv" not in item
+        assert "verifier_ciphertext" not in item
+        assert "salt" not in item

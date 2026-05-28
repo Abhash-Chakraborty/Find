@@ -50,6 +50,17 @@ def get_clusters(db: Session = Depends(get_db)):
     for cluster in clusters:
         # Get sample images from cluster
         sample_ids = (cluster.member_ids or [])[:5]
+        if not sample_ids:
+            continue
+
+        visible_member_count = (
+            db.query(Media.id)
+            .filter(Media.id.in_(cluster.member_ids or []), Media.is_hidden.is_(False))
+            .count()
+        )
+        if visible_member_count == 0:
+            continue
+
         sample_media = (
             db.query(Media)
             .filter(Media.id.in_(sample_ids), Media.is_hidden.is_(False))
@@ -73,6 +84,7 @@ def get_clusters(db: Session = Depends(get_db)):
             )
 
         cluster_info = _cluster_payload(cluster)
+        cluster_info["member_count"] = visible_member_count
         cluster_info["samples"] = samples
 
         result.append(cluster_info)
@@ -127,7 +139,12 @@ def get_cluster_detail(cluster_id: int, db: Session = Depends(get_db)):
             }
         )
 
-    return _cluster_payload(cluster, members=member_list)
+    if not member_list:
+        raise HTTPException(404, "Cluster not found")
+
+    payload = _cluster_payload(cluster, members=member_list)
+    payload["member_count"] = len(member_list)
+    return payload
 
 
 @router.patch("/cluster/{cluster_id}")
@@ -158,7 +175,11 @@ def trigger_clustering(db: Session = Depends(get_db)):
     """
     indexed_count = (
         db.query(Media)
-        .filter(Media.status == "indexed", Media.vector.isnot(None))
+        .filter(
+            Media.status == "indexed",
+            Media.vector.isnot(None),
+            Media.is_hidden.is_(False),
+        )
         .count()
     )
     if indexed_count < settings.MIN_CLUSTER_SIZE:
