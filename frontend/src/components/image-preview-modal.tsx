@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
+  Check,
+  Copy,
   Download,
   Heart,
   ImageOff,
@@ -216,6 +218,7 @@ export function ImagePreviewModal({
   const queryClient = useQueryClient();
   const [likedOverride, setLikedOverride] = useState<boolean | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [ocrCopied, setOcrCopied] = useState(false);
 
   const detailQuery = useQuery<MediaDetail, Error>({
     queryKey: ["image-detail", media.id],
@@ -642,9 +645,33 @@ export function ImagePreviewModal({
                   </div>
                 ) : ocrText ? (
                   <div className="border-t border-[var(--frost-soft)] pt-3">
-                    <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
-                      OCR text
-                    </p>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium uppercase text-[color:var(--muted)]">
+                        OCR text
+                      </p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(ocrText);
+                            setOcrCopied(true);
+                            toast.success("OCR text copied to clipboard");
+                            setTimeout(() => setOcrCopied(false), 2000);
+                          } catch {
+                            toast.error("Failed to copy OCR text");
+                          }
+                        }}
+                        className="frost-button px-2 py-1 text-xs text-[color:var(--silver)]"
+                        aria-label="Copy OCR text to clipboard"
+                      >
+                        {ocrCopied ? (
+                          <Check className="h-3 w-3 text-[color:var(--green)]" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                        {ocrCopied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
                     <p className="max-h-36 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-[color:var(--near-white)]">
                       {ocrText}
                     </p>
