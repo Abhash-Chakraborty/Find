@@ -260,7 +260,11 @@ def cluster_images():
         # Step 1: Read data — no DB mutations yet.
         media_rows = (
             db.query(Media.id, Media.vector)
-            .filter(Media.status == "indexed", Media.vector.isnot(None))
+            .filter(
+                Media.status == "indexed",
+                Media.vector.isnot(None),
+                Media.is_hidden.is_(False),
+            )
             .all()
         )
         # Step 2: Validate minimum size BEFORE touching anything.
@@ -385,7 +389,10 @@ def cluster_faces():
         # Step 1: Load all faces that have embeddings.
         # Check BEFORE changing assignments so names are not lost on no-op runs.
         face_rows = (
-            db.query(Face.id, Face.embedding).filter(Face.embedding.isnot(None)).all()
+            db.query(Face.id, Face.embedding)
+            .join(Media, Media.id == Face.media_id)
+            .filter(Face.embedding.isnot(None), Media.is_hidden.is_(False))
+            .all()
         )
 
         # Need at least 2 faces to cluster
