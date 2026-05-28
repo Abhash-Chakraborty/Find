@@ -1,9 +1,10 @@
 # Vault Encryption Design Note
 
-- **Status:** Proposed
+- **Status:** Partially complete
 - **Date:** 2026-05-21
+- **Last reviewed:** 2026-05-28
 - **Related:** Issue #183
-- **Out of scope:** Implementation. Do not add encryption code while this note is in Proposed state.
+- **Current implementation status:** Vault unlock, hide, list, lock, and stream flows exist with encrypted blob storage and tests. The implementation does not fully match this design note yet: it uses AES-GCM instead of the documented ChaCha20-Poly1305 decision, does not bind AEAD associated data to `media_id`/`file_hash`, and should be reviewed against the metadata/vector exclusion requirements before this plan is marked complete.
 
 ## Problem
 
@@ -202,5 +203,5 @@ This note is research only. A follow-up implementation issue should cover:
   - `backend/src/find_api/core/storage.py`
   - `backend/src/find_api/core/config.py`
   - `backend/src/find_api/routers/gallery.py`
-  - `docs/installable-local-first-architecture-roadmap.md`
-  - `docs/adr-storage-provider-neutrality.md`
+  - `docs/plans/partial/local-first-roadmap.md`
+  - `docs/plans/not-started/storage-provider-neutrality-adr.md`

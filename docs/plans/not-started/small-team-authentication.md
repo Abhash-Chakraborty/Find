@@ -1,5 +1,9 @@
 # Small-Team Authentication (Instance Sharing)
 
+**Status:** Not started  
+**Last reviewed:** 2026-05-28  
+**Current implementation status:** No user model, authentication middleware, invite flow, instance-management UI, or upload ownership/deletion-request workflow is implemented in the current codebase.
+
 ## Summary
 
 Find should support a lightweight single-admin + multi-user model for trusted small-team or household deployments while preserving the local-first philosophy. The machine hosting Find acts as the "admin" and controls storage, database, and shared access. The feature is an opt-in, self-hosted instance-sharing model rather than a cloud multi-tenant identity system.

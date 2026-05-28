@@ -169,6 +169,23 @@ def analyze_image(media_id: int):
 
         db.commit()
 
+        # near-duplicate detection
+        try:
+            from find_api.services.duplicate_service import (
+                find_near_duplicate,
+                flag_as_duplicate,
+            )
+
+            if media.vector is not None:
+                dup_id = find_near_duplicate(
+                    db=db, media_id=media.id, embedding=media.vector
+                )
+                if dup_id is not None:
+                    flag_as_duplicate(db=db, media_id=media.id, duplicate_of=dup_id)
+        except Exception as e:
+            db.rollback()
+            logger.warning("Near-duplicate check failed for media %s: %s", media_id, e)
+
         from find_api.workers.processors import (
             detect_and_store_faces,
             has_person_object,
@@ -240,20 +257,14 @@ def cluster_images():
     try:
         logger.info("Starting clustering job...")
 
-        db.query(Media).filter(Media.cluster_id.isnot(None)).update(
-            {Media.cluster_id: None}, synchronize_session=False
-        )
-        db.query(Cluster).delete(synchronize_session=False)
-        db.flush()
-
+        # Step 1: Read data — no DB mutations yet.
         media_rows = (
             db.query(Media.id, Media.vector)
             .filter(Media.status == "indexed", Media.vector.isnot(None))
             .all()
         )
-
+        # Step 2: Validate minimum size BEFORE touching anything.
         if len(media_rows) < settings.MIN_CLUSTER_SIZE:
-            db.commit()
             logger.warning(
                 "Not enough images for clustering (found %s, need %s)",
                 len(media_rows),
@@ -271,13 +282,14 @@ def cluster_images():
 
         logger.info(f"Clustering {len(media_rows)} images...")
 
+        # Step 3: Run clustering — pure computation, no DB.
+
         clusterer = get_image_clusterer()
         labels, info = clusterer.cluster(embeddings)
 
         cluster_labels = sorted({int(label) for label in labels if int(label) != -1})
-
+        # Step 4: Validate result BEFORE touching anything.
         if not cluster_labels:
-            db.commit()
             logger.info("Clustering completed with no stable clusters")
             return {
                 **info,
@@ -286,6 +298,12 @@ def cluster_images():
             }
 
         centroids = clusterer.compute_centroids(embeddings, labels)
+        # Step 5: Now safe to mutate — valid new state exists.
+        db.query(Media).filter(Media.cluster_id.isnot(None)).update(
+            {Media.cluster_id: None}, synchronize_session=False
+        )
+        db.query(Cluster).delete(synchronize_session=False)
+        db.flush()
 
         cluster_records = {}
         for cluster_label in cluster_labels:
@@ -317,7 +335,7 @@ def cluster_images():
             ],
         )
 
-        db.commit()
+        db.commit()  # ← single commit: delete old + insert new, atomically
 
         result = {
             **info,

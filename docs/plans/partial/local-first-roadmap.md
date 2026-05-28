@@ -1,8 +1,11 @@
 # Installable Local-First Architecture Roadmap for Find
 
-**Status:** Proposed  
+**Status:** Partially complete  
 **Date:** 2026-05-15  
+**Last reviewed:** 2026-05-28  
 **Related:** [Issue #41](https://github.com/Abhash-Chakraborty/Find/issues/41), [Discussion #36](https://github.com/Abhash-Chakraborty/Find/discussions/36), [Discussion #37](https://github.com/Abhash-Chakraborty/Find/discussions/37), [Discussion #38](https://github.com/Abhash-Chakraborty/Find/discussions/38), [Discussion #39](https://github.com/Abhash-Chakraborty/Find/discussions/39)
+
+**Current implementation status:** Phase 1 has a Tauri shell prototype. The full installable runtime is still incomplete because the backend, worker, database, object storage, queue, model cache, update path, and desktop process supervision are not packaged into a no-Docker user install.
 
 ## Why this roadmap exists
 
@@ -210,3 +213,70 @@ The roadmap should be broken into implementation issues after this architecture 
 **Desktop first, local by default, mobile as a companion.**
 
 Tauri is the best default desktop shell, Electron is the fallback if packaging friction gets in the way, and mobile should start as a PWA rather than a full native ML app. The Rust layer should supervise processes and system state; Python should keep the API and ML work. That combination preserves Find’s local-first identity while making it realistic to install.
+
+## Storage Modes and Future Backup Providers
+
+### Current Local Storage Model
+
+Find currently follows a local-first storage approach.
+
+When running through Docker, the stack stores application data on the user's machine through Docker volumes:
+- MinIO/S3-compatible object storage keeps uploaded image files and generated image artifacts.
+- PostgreSQL with pgvector keeps media records, processing status, captions, OCR text, detected objects, embeddings, and search metadata.
+- Redis/RQ keeps queue and worker job state for background processing.
+
+This means:
+- user data remains on the local device by default
+- internet access is not required for normal usage
+- users maintain direct ownership of their data
+
+The current implementation focuses on local storage before introducing optional backup or sync providers.
+
+---
+
+### File Storage vs Metadata Database Storage
+
+Find separates binary file storage from metadata database storage.
+
+#### File / Image Storage
+
+Stores actual image binaries and derived image files such as:
+- uploaded photos and screenshots
+- thumbnails or preview files
+- future generated image artifacts, if those features are added
+
+#### Metadata Database Storage
+
+Stores structured information related to files, including:
+- filenames
+- timestamps
+- processing status
+- captions, OCR text, and detected objects
+- vector embeddings used for semantic search
+- references to file locations
+
+This separation helps simplify indexing, searching, and future backup strategies.
+
+---
+
+### Planned Backup & Sync Providers
+
+Future versions of Find may support optional user-controlled backup and sync providers.
+
+Possible providers may include:
+- Google Drive
+- Amazon S3
+- Cloudflare R2
+- local filesystem exports
+
+These integrations are currently planned concepts and are not implemented yet.
+
+---
+
+### Local-First Philosophy
+
+Find is designed to remain local-first by default.
+
+Cloud sync and external backup providers should always remain optional.
+
+Users should be able to fully use the application without depending on third-party cloud services.

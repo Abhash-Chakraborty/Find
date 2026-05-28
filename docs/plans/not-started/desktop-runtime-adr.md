@@ -1,9 +1,12 @@
 # ADR: Local Desktop Runtime Design (No Docker Required)
 
-- **Status:** Proposed (design phase)
+- **Status:** Not started
 - **Date:** 2026-05-18
+- **Last reviewed:** 2026-05-28
 - **Owner:** Find maintainers
-- **Related:** Issue #43, Roadmap [installable-local-first-architecture-roadmap.md](./installable-local-first-architecture-roadmap.md), Framework choice [desktop-tauri-vs-electron-adr.md](./desktop-tauri-vs-electron-adr.md)
+- **Related:** Issue #43, Roadmap [local-first-roadmap.md](../partial/local-first-roadmap.md), Framework choice [desktop-tauri-vs-electron-adr.md](../partial/desktop-tauri-vs-electron-adr.md)
+
+**Current implementation status:** A Tauri UI prototype exists, but this no-Docker runtime design is not implemented. Find still depends on the Docker/PostgreSQL/Redis/MinIO runtime for the complete local stack.
 
 ---
 
@@ -491,7 +494,7 @@ This ADR is accepted when:
    - `desktop-queue`: Job queue refactor
    - `desktop-shell`: Tauri supervisor and process management
 
-2. **Parallel work:** Tauri shell architecture spike (see [desktop-tauri-vs-electron-adr.md](./desktop-tauri-vs-electron-adr.md))
+2. **Parallel work:** Tauri shell architecture spike (see [desktop-tauri-vs-electron-adr.md](../partial/desktop-tauri-vs-electron-adr.md))
 
 3. **PoC delivery:** Working prototype target after ADR acceptance and implementation epics are created
 
@@ -513,8 +516,8 @@ This ADR is accepted when:
 
 ## Appendix B: References
 
-- [Installable Local-First Architecture Roadmap](./installable-local-first-architecture-roadmap.md)
-- [Desktop Framework: Tauri vs Electron ADR](./desktop-tauri-vs-electron-adr.md)
+- [Installable Local-First Architecture Roadmap](../partial/local-first-roadmap.md)
+- [Desktop Framework: Tauri vs Electron ADR](../partial/desktop-tauri-vs-electron-adr.md)
 - [Mobile Strategy: PWA First](./mobile-strategy.md)
 - SQLite vector extension candidate: [`sqlite-vec`](https://github.com/asg017/sqlite-vec)
 - Tauri documentation: https://tauri.app/

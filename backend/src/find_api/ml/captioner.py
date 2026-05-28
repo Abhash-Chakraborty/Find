@@ -62,7 +62,10 @@ class ImageCaptioner:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
-            with self.manager.use_model("florence-2", self._load_model) as bundle:
+            config_key = f"model={settings.BLIP_MODEL}|gpu={settings.USE_GPU}"
+            with self.manager.use_model(
+                "florence-2", self._load_model, config_key=config_key
+            ) as bundle:
                 model = bundle["model"]
                 processor = bundle["processor"]
                 device = bundle["device"]
@@ -123,7 +126,10 @@ class ImageCaptioner:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
-            with self.manager.use_model("florence-2", self._load_model) as bundle:
+            config_key = f"model={settings.BLIP_MODEL}|gpu={settings.USE_GPU}"
+            with self.manager.use_model(
+                "florence-2", self._load_model, config_key=config_key
+            ) as bundle:
                 model = bundle["model"]
                 processor = bundle["processor"]
                 device = bundle["device"]

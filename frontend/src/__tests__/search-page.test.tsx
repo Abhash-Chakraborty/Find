@@ -93,6 +93,10 @@ describe("Search page", () => {
       results: QUERY_RESULTS,
       total: QUERY_RESULTS.length,
       query: "sunset",
+      page: 1,
+      limit: 24,
+      skip: 0,
+      has_more: false,
     });
 
     renderWithQueryClient();
@@ -107,11 +111,19 @@ describe("Search page", () => {
       expect(apiMocks.searchImages).toHaveBeenCalledWith({
         query: "sunset",
         limit: 24,
+        skip: 0,
       });
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/2 results for sunset/i)).toBeInTheDocument();
+      expect(
+        screen.getByText((_, element) => {
+          return (
+            element?.tagName.toLowerCase() === "p" &&
+            element.textContent === "2 results for sunset"
+          );
+        }),
+      ).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: /preview sunset\.jpg/i }),
       ).toBeInTheDocument();
@@ -134,6 +146,10 @@ describe("Search page", () => {
       results: [],
       total: 0,
       query: "nothing",
+      page: 1,
+      limit: 24,
+      skip: 0,
+      has_more: false,
     });
 
     renderWithQueryClient();

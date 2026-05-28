@@ -1,9 +1,12 @@
 # ADR: Desktop Framework Evaluation (Tauri vs Electron)
 
-- **Status:** Proposed (under evaluation)
+- **Status:** Partially complete
 - **Date:** 2026-05-16
+- **Last reviewed:** 2026-05-28
 - **Owner:** Find maintainers
 - **Related:** Discussion #37, Issue #49
+
+**Current implementation status:** The Tauri prototype exists and validates the first shell direction. The production framework decision is not fully closed because backend sidecar packaging, process lifecycle, updater/signing, and cross-platform release validation are still unresolved.
 
 ## Context
 

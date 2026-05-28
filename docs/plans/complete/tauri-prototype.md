@@ -1,8 +1,12 @@
 # Tauri Desktop Prototype
 
+**Status:** Complete for the prototype scope  
+**Last reviewed:** 2026-05-28  
+**Completion evidence:** `frontend/src-tauri/` and the desktop npm scripts are present. This does not mean the full no-Docker desktop runtime is complete.
+
 Proof-of-direction for wrapping the Find Next.js frontend in a Tauri desktop shell.
 Implements **Phase 1** of the installable local-first architecture described in
-[`installable-local-first-architecture-roadmap.md`](installable-local-first-architecture-roadmap.md).
+[`local-first-roadmap.md`](../partial/local-first-roadmap.md).
 Relates to issue #42 and discussion #37.
 
 ---

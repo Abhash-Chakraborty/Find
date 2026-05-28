@@ -140,4 +140,26 @@ describe("Gallery empty states", () => {
       scroll: false,
     });
   });
+
+  it("requests gallery data with status and liked filters from the URL", async () => {
+    mockSearchParams.set("status", "failed");
+    mockSearchParams.set("liked", "true");
+    apiMocks.getGallery.mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 24,
+    });
+
+    renderWithQueryClient();
+
+    await waitFor(() => {
+      expect(apiMocks.getGallery).toHaveBeenCalledWith({
+        page: 1,
+        limit: 24,
+        status: "failed",
+        liked: true,
+      });
+    });
+  });
 });

@@ -49,6 +49,7 @@ export type PreviewMedia = Pick<MediaItem, "id" | "filename"> &
       | "height"
       | "file_size"
       | "cluster_id"
+      | "cluster_label"
       | "liked"
       | "caption"
       | "objects"
@@ -292,6 +293,7 @@ export function ImagePreviewModal({
       setLikedOverride(liked);
       onLikedChange?.(id, liked);
       queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", id] });
     },
   });
@@ -300,7 +302,9 @@ export function ImagePreviewModal({
     mutationFn: (mediaId: number) => deleteImage(mediaId),
     onSuccess: ({ id }) => {
       queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["clusters"] });
+      queryClient.invalidateQueries({ queryKey: ["people"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", id] });
       onDeleted?.(id);
       onClose();
@@ -311,6 +315,7 @@ export function ImagePreviewModal({
     mutationFn: (mediaId: number) => reprocessImage(mediaId),
     onSuccess: ({ media_id }) => {
       queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", media_id] });
       toast.success("Retry queued — analysis will restart shortly.");
     },
@@ -478,7 +483,8 @@ export function ImagePreviewModal({
                       href="/clusters"
                       className="text-[color:var(--blue)] underline"
                     >
-                      Cluster {clusterId}
+                      {(detailData?.cluster_label ?? media.cluster_label) ||
+                        `Cluster ${clusterId}`}
                     </Link>
                   </DetailRow>
                 )}

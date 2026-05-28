@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import axios from "axios";
 import {
+  Check,
   Download,
   Eye,
   Heart,
@@ -31,6 +32,7 @@ import { StatusIndicator } from "@/components/status-indicator";
 import {
   api,
   deleteImage,
+  deleteImagesBulk,
   type GalleryResponse,
   getGallery,
   getImageDetail,
@@ -169,10 +171,12 @@ const getStatusParamFromFilter = (filter: GalleryFilter): string | null => {
  */
 function GalleryPageContent() {
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState<{
     id: number;
     filename?: string;
   } | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [deletionError, setDeletionError] = useState<string | null>(null);
   const [hasOpenedFromQuery, setHasOpenedFromQuery] = useState(false);
   const [querySelectedItem, setQuerySelectedItem] =
@@ -231,6 +235,64 @@ function GalleryPageContent() {
   );
 
   const total = data?.pages[0]?.total ?? 0;
+  const selectedItems = useMemo(
+    () => allItems.filter((item) => selectedIds.has(item.id)),
+    [allItems, selectedIds],
+  );
+  const selectedCount = selectedIds.size;
+  const areAllVisibleSelected =
+    allItems.length > 0 && allItems.every((item) => selectedIds.has(item.id));
+
+  const removeMediaFromGalleryCache = useCallback(
+    (
+      mediaIds: Iterable<number>,
+      previousData?: InfiniteData<GalleryResponse>,
+    ) => {
+      const idsToRemove = new Set(mediaIds);
+      if (idsToRemove.size === 0) {
+        return previousData;
+      }
+
+      const source = previousData ?? data;
+      if (!source) {
+        return previousData;
+      }
+
+      return {
+        ...source,
+        pages: source.pages.map((page) => {
+          const removedFromPage = page.items.filter((item) =>
+            idsToRemove.has(item.id),
+          ).length;
+
+          return {
+            ...page,
+            items: page.items.filter((item) => !idsToRemove.has(item.id)),
+            total: Math.max(0, page.total - removedFromPage),
+          };
+        }),
+      };
+    },
+    [data],
+  );
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) {
+        return current;
+      }
+
+      const visibleIds = new Set(allItems.map((item) => item.id));
+      const next = new Set<number>();
+      for (const mediaId of current) {
+        if (visibleIds.has(mediaId)) {
+          next.add(mediaId);
+        }
+      }
+
+      return next.size === current.size ? current : next;
+    });
+  }, [allItems]);
 
   const buildGalleryHref = useCallback(
     (nextState: { filter?: GalleryFilter; likedOnly?: boolean }) => {
@@ -331,26 +393,21 @@ function GalleryPageContent() {
       setDeletionError(null);
       await queryClient.cancelQueries({ queryKey: galleryQueryKey });
       const previousData =
-        queryClient.getQueryData<InfiniteData<GalleryResponse, number>>(
+        queryClient.getQueryData<InfiniteData<GalleryResponse>>(
           galleryQueryKey,
         );
 
-      queryClient.setQueryData<InfiniteData<GalleryResponse, number>>(
+      queryClient.setQueryData<InfiniteData<GalleryResponse>>(
         galleryQueryKey,
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.filter((item) => item.id !== mediaId),
-              total: Math.max(0, page.total - 1),
-            })),
-          };
-        },
+        (old) => removeMediaFromGalleryCache([mediaId], old),
       );
 
       setSelectedMediaId((current) => (current === mediaId ? null : current));
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
       return { previousData };
     },
     onError: (mutationError, _variables, context) => {
@@ -369,6 +426,70 @@ function GalleryPageContent() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["clusters"] });
+      queryClient.invalidateQueries({ queryKey: ["people"] });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (mediaIds: number[]) => deleteImagesBulk(mediaIds),
+    onMutate: async (mediaIds: number[]) => {
+      setDeletionError(null);
+      await queryClient.cancelQueries({ queryKey: galleryQueryKey });
+      const previousData =
+        queryClient.getQueryData<InfiniteData<GalleryResponse>>(
+          galleryQueryKey,
+        );
+
+      queryClient.setQueryData<InfiniteData<GalleryResponse>>(
+        galleryQueryKey,
+        (old) => removeMediaFromGalleryCache(mediaIds, old),
+      );
+
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        for (const mediaId of mediaIds) {
+          next.delete(mediaId);
+        }
+        return next;
+      });
+      setSelectedMediaId((current) =>
+        current !== null && mediaIds.includes(current) ? null : current,
+      );
+
+      return { previousData };
+    },
+    onError: (mutationError, _variables, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(galleryQueryKey, context.previousData);
+      }
+
+      const message =
+        mutationError instanceof Error
+          ? mutationError.message
+          : "Failed to delete selected images. Please try again.";
+      setDeletionError(message);
+    },
+    onSuccess: (result) => {
+      if (result.failed_count > 0) {
+        toast.error(
+          `Deleted ${result.deleted_count} image${result.deleted_count === 1 ? "" : "s"}, but ${result.failed_count} failed.`,
+        );
+        return;
+      }
+
+      const missingNote =
+        result.missing_count > 0
+          ? ` (${result.missing_count} already gone)`
+          : "";
+      toast.success(
+        `Deleted ${result.deleted_count} image${result.deleted_count === 1 ? "" : "s"}${missingNote}.`,
+      );
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["clusters"] });
+      queryClient.invalidateQueries({ queryKey: ["people"] });
     },
   });
 
@@ -408,32 +529,24 @@ function GalleryPageContent() {
       await queryClient.cancelQueries({ queryKey: galleryQueryKey });
 
       const previousData =
-        queryClient.getQueryData<InfiniteData<GalleryResponse, number>>(
+        queryClient.getQueryData<InfiniteData<GalleryResponse>>(
           galleryQueryKey,
         );
 
-      queryClient.setQueryData<InfiniteData<GalleryResponse, number>>(
+      queryClient.setQueryData<InfiniteData<GalleryResponse>>(
         galleryQueryKey,
-        (old) => {
-          if (!old) {
-            return old;
-          }
-
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.filter((item) => item.id !== mediaId),
-              total: Math.max(0, page.total - 1),
-            })),
-          };
-        },
+        (old) => removeMediaFromGalleryCache([mediaId], old),
       );
 
       if (selectedMediaId === mediaId) {
         setSelectedMediaId(null);
         setQuerySelectedItem(null);
       }
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
 
       return { previousData };
     },
@@ -534,6 +647,40 @@ function GalleryPageContent() {
     updateGalleryParams({ likedOnly: false });
   }, [updateGalleryParams]);
 
+  const handleToggleSelection = useCallback((mediaId: number) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(mediaId)) {
+        next.delete(mediaId);
+      } else {
+        next.add(mediaId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectVisible = useCallback(() => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const item of allItems) {
+        next.add(item.id);
+      }
+      return next;
+    });
+  }, [allItems]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleToggleVisibleSelection = useCallback(() => {
+    if (areAllVisibleSelected) {
+      handleClearSelection();
+      return;
+    }
+    handleSelectVisible();
+  }, [areAllVisibleSelected, handleClearSelection, handleSelectVisible]);
+
   const handleToggleLike = useCallback(
     (mediaId: number) => {
       likeMutation.mutate(mediaId);
@@ -555,6 +702,17 @@ function GalleryPageContent() {
     deleteMutation.mutate(deleteTarget.id);
     setDeleteTarget(null);
   }, [deleteMutation, deleteTarget]);
+
+  const confirmBulkDelete = useCallback(() => {
+    const mediaIds = Array.from(selectedIds);
+    if (mediaIds.length === 0) {
+      setBulkDeleteOpen(false);
+      return;
+    }
+
+    bulkDeleteMutation.mutate(mediaIds);
+    setBulkDeleteOpen(false);
+  }, [bulkDeleteMutation, selectedIds]);
 
   const cancelDelete = useCallback(() => {
     setDeleteTarget(null);
@@ -663,6 +821,46 @@ function GalleryPageContent() {
 
         {allItems.length > 0 && (
           <>
+            {selectedCount > 0 && (
+              <div className="frost-panel mb-4 flex flex-col gap-3 rounded-2xl px-4 py-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleToggleVisibleSelection}
+                    aria-pressed={areAllVisibleSelected}
+                    className="frost-button inline-flex items-center gap-2 px-3 py-2 text-xs font-medium"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    {areAllVisibleSelected ? "Clear visible" : "Select visible"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="frost-button px-3 py-2 text-xs font-medium"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-xs text-[color:var(--silver)]">
+                    {selectedCount} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setBulkDeleteOpen(true)}
+                    disabled={
+                      deleteMutation.isPending || bulkDeleteMutation.isPending
+                    }
+                    className="inline-flex items-center gap-2 rounded-full border border-[var(--red-soft)] bg-[var(--red-soft)] px-4 py-2 text-xs font-semibold text-[#ff9bab] transition hover:bg-[#ff2047]/25 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete selected
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
               {allItems.map((item) => {
                 const imageSrc = resolveMediaUrl(
@@ -673,12 +871,36 @@ function GalleryPageContent() {
                 );
                 const originalUrl = resolveMediaUrl(item.url, item.minio_key);
                 const downloadUrl = originalUrl ?? item.url ?? "";
+                const isSelected = selectedIds.has(item.id);
 
                 return (
                   <article
                     key={item.id}
-                    className="frost-panel card-hover group relative overflow-hidden rounded-2xl"
+                    className={`frost-panel card-hover group relative overflow-hidden rounded-2xl ${
+                      isSelected ? "ring-2 ring-[color:var(--blue)]" : ""
+                    }`}
                   >
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSelection(item.id)}
+                      className={`absolute left-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-full border backdrop-blur-md transition ${
+                        isSelected
+                          ? "border-[color:var(--blue)] bg-[color:var(--blue)] text-white"
+                          : "border-white/30 bg-black/45 text-white hover:bg-black/65"
+                      }`}
+                      aria-label={
+                        isSelected
+                          ? `Deselect ${item.filename}`
+                          : `Select ${item.filename}`
+                      }
+                      aria-pressed={isSelected}
+                    >
+                      {isSelected ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <span className="h-3.5 w-3.5 rounded-full border border-current" />
+                      )}
+                    </button>
                     <button
                       type="button"
                       className="relative block aspect-square w-full overflow-hidden bg-[color:var(--surface-soft)] text-left focus:outline-none"
@@ -854,12 +1076,68 @@ function GalleryPageContent() {
           hasPrevious={selectedIndex > 0}
           hasNext={selectedIndex >= 0 && selectedIndex < allItems.length - 1}
           onDeleted={(mediaId) => {
+            queryClient.setQueryData<InfiniteData<GalleryResponse>>(
+              galleryQueryKey,
+              (old) => removeMediaFromGalleryCache([mediaId], old),
+            );
+            setSelectedIds((current) => {
+              const next = new Set(current);
+              next.delete(mediaId);
+              return next;
+            });
             if (selectedMediaId === mediaId) {
               setSelectedMediaId(null);
               setQuerySelectedItem(null);
             }
           }}
         />
+      )}
+
+      {bulkDeleteOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 px-4 backdrop-blur-lg">
+          <div className="frost-panel page-enter w-full max-w-md rounded-3xl p-6">
+            <h2 className="text-lg font-semibold text-[color:var(--near-white)]">
+              Delete selected images?
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--silver)]">
+              {selectedCount} selected image{selectedCount === 1 ? "" : "s"}{" "}
+              will be permanently removed from the gallery, search results, and
+              clusters. This action cannot be undone.
+            </p>
+            {selectedItems.length > 0 && (
+              <div className="mt-4 max-h-32 overflow-y-auto rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-3">
+                <ul className="space-y-1 text-xs text-[color:var(--silver)]">
+                  {selectedItems.slice(0, 6).map((item) => (
+                    <li key={item.id} className="truncate">
+                      {item.filename}
+                    </li>
+                  ))}
+                  {selectedItems.length > 6 && (
+                    <li>+{selectedItems.length - 6} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setBulkDeleteOpen(false)}
+                className="frost-button px-4 py-2 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmBulkDelete}
+                disabled={bulkDeleteMutation.isPending}
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--red-soft)] bg-[var(--red-soft)] px-4 py-2 text-sm font-medium text-[#ff9bab] transition hover:bg-[#ff2047]/25 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <Trash2 className="h-4 w-4" />
+                {bulkDeleteMutation.isPending ? "Deleting" : "Delete selected"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {deleteTarget && (

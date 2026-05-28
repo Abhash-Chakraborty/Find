@@ -1,8 +1,12 @@
 # Mobile Strategy ADR: PWA First
 
-**Status:** Proposed
+**Status:** Not started
 
 **Date:** 2026-05-14
+
+**Last reviewed:** 2026-05-28
+
+**Current implementation status:** The main web UI exists, but the PWA install shell, mobile pairing/auth flow, offline upload queue, and mobile-specific connection model are not implemented.
 
 **Discussion:** #37
 
@@ -175,4 +179,4 @@ In short: prove the mobile experience with the web stack first, then earn the ri
 ## 9. Related
 
 - Discussion: issue #37
-- Current architecture: [`../README.md`](../README.md)
+- Current architecture: [`README.md`](../../../README.md)

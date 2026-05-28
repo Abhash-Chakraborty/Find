@@ -1,6 +1,7 @@
 """Clusters endpoints for retrieving cluster information."""
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,26 @@ from find_api.models.cluster import Cluster
 from find_api.models.media import Media
 
 router = APIRouter()
+
+
+class ClusterUpdateRequest(BaseModel):
+    """Editable cluster metadata."""
+
+    label: str | None = Field(default=None, max_length=255)
+
+
+def _cluster_payload(cluster: Cluster, *, members: list | None = None):
+    payload = {
+        "id": cluster.id,
+        "type": cluster.cluster_type,
+        "label": cluster.label,
+        "description": cluster.description,
+        "member_count": cluster.member_count,
+        "created_at": cluster.created_at.isoformat() if cluster.created_at else None,
+    }
+    if members is not None:
+        payload["members"] = members
+    return payload
 
 
 @router.get("/clusters")
@@ -51,17 +72,8 @@ def get_clusters(db: Session = Depends(get_db)):
                 }
             )
 
-        cluster_info = {
-            "id": cluster.id,
-            "type": cluster.cluster_type,
-            "label": cluster.label,
-            "description": cluster.description,
-            "member_count": cluster.member_count,
-            "created_at": cluster.created_at.isoformat()
-            if cluster.created_at
-            else None,
-            "samples": samples,
-        }
+        cluster_info = _cluster_payload(cluster)
+        cluster_info["samples"] = samples
 
         result.append(cluster_info)
 
@@ -115,15 +127,25 @@ def get_cluster_detail(cluster_id: int, db: Session = Depends(get_db)):
             }
         )
 
-    return {
-        "id": cluster.id,
-        "type": cluster.cluster_type,
-        "label": cluster.label,
-        "description": cluster.description,
-        "member_count": cluster.member_count,
-        "created_at": cluster.created_at.isoformat() if cluster.created_at else None,
-        "members": member_list,
-    }
+    return _cluster_payload(cluster, members=member_list)
+
+
+@router.patch("/cluster/{cluster_id}")
+def update_cluster(
+    cluster_id: int, payload: ClusterUpdateRequest, db: Session = Depends(get_db)
+):
+    """Update editable cluster metadata."""
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+
+    if not cluster:
+        raise HTTPException(404, "Cluster not found")
+
+    label = payload.label.strip() if payload.label else None
+    cluster.label = label or None
+    db.commit()
+    db.refresh(cluster)
+
+    return _cluster_payload(cluster)
 
 
 @router.post("/cluster/run")

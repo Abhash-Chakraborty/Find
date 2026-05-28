@@ -1,8 +1,10 @@
 # Design: Optional Self-Hosted Remote Acceleration
 
-**Status:** Proposed  
+**Status:** Not started  
 **Issue:** [#47](https://github.com/Abhash-Chakraborty/Find/issues/47)  
 **Author:** @Sanjaykumar-2005  
+**Last reviewed:** 2026-05-28  
+**Current implementation status:** No `ML_MODE=remote`, `REMOTE_ML_*` configuration, remote ML router, remote client, consent UI, or active remote-mode indicators are present in the current codebase.
 
 ---
 

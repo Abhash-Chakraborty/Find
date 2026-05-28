@@ -38,8 +38,8 @@ def init_db():
     Initialize database - create tables and pgvector extension
     """
     try:
-        # Import models to register them
-        from find_api.models import cluster, media  # noqa: F401
+        # Import all models to register them for metadata creation
+        from find_api.models import media, cluster, face, person, feedback  # noqa: F401
 
         # pgvector must exist before SQLAlchemy creates vector columns.
         if engine.dialect.name == "postgresql":
@@ -102,8 +102,41 @@ def init_db():
                 )
                 conn.execute(
                     text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS duplicate_of INTEGER"
+                    )
+                )
+                conn.execute(
+                    text(
                         "CREATE INDEX IF NOT EXISTS ix_media_analysis_job_id "
                         "ON media (analysis_job_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_duplicate_of "
+                        "ON media (duplicate_of)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        """
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1
+                                FROM pg_constraint
+                                WHERE conname = 'fk_media_duplicate_of'
+                            ) THEN
+                                ALTER TABLE media
+                                ADD CONSTRAINT fk_media_duplicate_of
+                                FOREIGN KEY (duplicate_of)
+                                REFERENCES media(id)
+                                ON DELETE SET NULL;
+                            END IF;
+                        END
+                        $$;
+                        """
                     )
                 )
                 conn.execute(

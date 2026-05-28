@@ -1,5 +1,9 @@
 # Vector Search Benchmark Evaluation
 
+**Status:** Research plan / not implemented  
+**Last reviewed:** 2026-05-28  
+**Current implementation status:** The app still uses the existing pgvector search path. No ANN migration or benchmark harness from this document has landed.
+
 ## Goal
 
 This document defines how Find should evaluate exact pgvector search against

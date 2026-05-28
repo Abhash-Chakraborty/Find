@@ -1,6 +1,10 @@
 # ADR: Provider-Neutral Object Storage Direction for Find
 
-Status: Proposed
+**Status:** Not started
+
+**Last reviewed:** 2026-05-28
+
+**Current implementation status:** The backend still imports and constructs the MinIO SDK client directly in `backend/src/find_api/core/storage.py`, and configuration remains `MINIO_*`-based. No provider-neutral storage abstraction has landed yet.
 
 Related issue: [#64](https://github.com/Abhash-Chakraborty/Find/issues/64)
 
