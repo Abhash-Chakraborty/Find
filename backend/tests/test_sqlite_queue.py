@@ -12,6 +12,8 @@ import tempfile
 import time
 from typing import Generator
 
+import sqlite3
+
 import pytest
 from sqlite3 import connect
 
@@ -49,22 +51,24 @@ def db_path() -> Generator[str, None, None]:
 
 
 @pytest.fixture()
-def conn(db_path: str) -> Generator:
-    """Provide a clean SQLite connection with tables for each test."""
-    # Patch the db path for the duration of the test
+def set_db_path(db_path: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Patch SQLITE_QUEUE_PATH to a temp path, auto-restores after test."""
     import find_api.core.queue_sqlite as qs
 
-    original_db_path = qs.settings.SQLITE_QUEUE_PATH
-    qs.settings.SQLITE_QUEUE_PATH = db_path
+    monkeypatch.setattr(qs.settings, "SQLITE_QUEUE_PATH", db_path)
+    return db_path
 
+
+@pytest.fixture()
+def conn(db_path: str, set_db_path: str) -> Generator:
+    """Provide a clean SQLite connection with tables for each test."""
     c = connect(db_path, check_same_thread=False)
-    c.row_factory = __import__("sqlite3").Row
+    c.row_factory = sqlite3.Row
     ensure_queue_tables(c)
     try:
         yield c
     finally:
         c.close()
-        qs.settings.SQLITE_QUEUE_PATH = original_db_path
 
 
 @pytest.fixture()
@@ -214,12 +218,12 @@ class TestDequeue:
         """Dequeue only returns jobs from its own queue."""
         q1 = SQLiteQueue("high", connection=conn)
         q2 = SQLiteQueue("low", connection=conn)
-        q1.enqueue(_dummy_success, 1)
-        q2.enqueue(_dummy_success, 2)
+        j1 = q1.enqueue(_dummy_success, 1)
+        j2 = q2.enqueue(_dummy_success, 2)
         d1 = q1.dequeue()
         d2 = q2.dequeue()
-        assert d1 is not None
-        assert d2 is not None
+        assert d1 is not None and d1.id == j1.id
+        assert d2 is not None and d2.id == j2.id
 
 
 # ── Completion and Failure ────────────────────────────────────────────────────
@@ -365,7 +369,7 @@ class TestPersistence:
 
         # Re-open with a new connection
         new_conn = connect(db_path, check_same_thread=False)
-        new_conn.row_factory = __import__("sqlite3").Row
+        new_conn.row_factory = sqlite3.Row
         new_queue = SQLiteQueue("default", connection=new_conn)
         try:
             fetched = new_queue.fetch_job(job.id)
@@ -381,7 +385,7 @@ class TestPersistence:
         conn.close()
 
         new_conn = connect(db_path, check_same_thread=False)
-        new_conn.row_factory = __import__("sqlite3").Row
+        new_conn.row_factory = sqlite3.Row
         try:
             fetched = SQLiteQueue("default", connection=new_conn).fetch_job(job.id)
             assert fetched.is_finished
@@ -396,7 +400,7 @@ class TestPersistence:
         conn.close()
 
         new_conn = connect(db_path, check_same_thread=False)
-        new_conn.row_factory = __import__("sqlite3").Row
+        new_conn.row_factory = sqlite3.Row
         try:
             fetched = SQLiteQueue("default", connection=new_conn).fetch_job(job.id)
             assert fetched.is_failed
@@ -409,34 +413,22 @@ class TestPersistence:
 
 
 class TestClusteringCoalescing:
-    def test_first_enqueue_returns_queued(self, db_path):
+    def test_first_enqueue_returns_queued(self, set_db_path):
         """First call to enqueue_clustering_job_sqlite queues the job."""
-        import find_api.core.queue_sqlite as qs
-
-        qs.settings.SQLITE_QUEUE_PATH = db_path
-
         result = enqueue_clustering_job_sqlite(reason="test")
         assert result["enqueued"] is True
         assert result["status"] == "queued"
         assert result["job_id"] is not None
 
-    def test_second_enqueue_returns_already_queued(self, db_path):
+    def test_second_enqueue_returns_already_queued(self, set_db_path):
         """Second call returns the existing job as already queued."""
-        import find_api.core.queue_sqlite as qs
-
-        qs.settings.SQLITE_QUEUE_PATH = db_path
-
         first = enqueue_clustering_job_sqlite(reason="first")
         second = enqueue_clustering_job_sqlite(reason="second")
         assert second["enqueued"] is False
         assert second["job_id"] == first["job_id"]
 
-    def test_clear_clustering_state(self, db_path):
+    def test_clear_clustering_state(self, set_db_path):
         """clear_clustering_job_state removes lock keys."""
-        import find_api.core.queue_sqlite as qs
-
-        qs.settings.SQLITE_QUEUE_PATH = db_path
-
         enqueue_clustering_job_sqlite(reason="test")
         clear_clustering_job_state()
         after = enqueue_clustering_job_sqlite(reason="after-clear")
@@ -502,13 +494,9 @@ class TestCurrentJob:
 
 
 class TestWorkerExecution:
-    def test_worker_runs_successful_job(self, db_path):
+    def test_worker_runs_successful_job(self, set_db_path):
         """Worker executes a successful job and marks it finished."""
         from find_api.workers.sqlite_worker import execute_job
-
-        import find_api.core.queue_sqlite as qs
-
-        qs.settings.SQLITE_QUEUE_PATH = db_path
 
         queue = get_task_queue_sqlite()
         job = queue.enqueue(_dummy_success, 1, tag="worker-test")
@@ -520,13 +508,9 @@ class TestWorkerExecution:
         result = fetched.get_result()
         assert result["media_id"] == 1
 
-    def test_worker_runs_failed_job(self, db_path):
+    def test_worker_runs_failed_job(self, set_db_path):
         """Worker executes a job that fails and marks it failed."""
         from find_api.workers.sqlite_worker import execute_job
-
-        import find_api.core.queue_sqlite as qs
-
-        qs.settings.SQLITE_QUEUE_PATH = db_path
 
         queue = get_task_queue_sqlite()
         job = queue.enqueue(_dummy_fail, 99)
@@ -537,38 +521,26 @@ class TestWorkerExecution:
         assert fetched.is_failed
         assert fetched.error is not None
 
-    def test_worker_run_once_returns_true_for_processed(self, db_path):
+    def test_worker_run_once_returns_true_for_processed(self, set_db_path):
         """run_worker_once returns True when it processes a job."""
         from find_api.workers.sqlite_worker import run_worker_once
-
-        import find_api.core.queue_sqlite as qs
-
-        qs.settings.SQLITE_QUEUE_PATH = db_path
 
         queue = get_task_queue_sqlite()
         queue.enqueue(_dummy_success, 1)
         processed = run_worker_once(queue)
         assert processed is True
 
-    def test_worker_run_once_returns_false_for_empty(self, db_path):
+    def test_worker_run_once_returns_false_for_empty(self, set_db_path):
         """run_worker_once returns False for empty queue."""
         from find_api.workers.sqlite_worker import run_worker_once
-
-        import find_api.core.queue_sqlite as qs
-
-        qs.settings.SQLITE_QUEUE_PATH = db_path
 
         queue = get_task_queue_sqlite()
         processed = run_worker_once(queue)
         assert processed is False
 
-    def test_worker_blocking_processes_max_jobs(self, db_path):
+    def test_worker_blocking_processes_max_jobs(self, set_db_path):
         """run_worker_blocking processes up to max_jobs jobs."""
         from find_api.workers.sqlite_worker import run_worker_blocking
-
-        import find_api.core.queue_sqlite as qs
-
-        qs.settings.SQLITE_QUEUE_PATH = db_path
 
         queue = get_task_queue_sqlite()
         queue.enqueue(_dummy_success, 1)
@@ -585,12 +557,8 @@ class TestWorkerExecution:
 
 
 class TestStatusEndpoint:
-    def test_get_job_status_returns_info(self, db_path, queue, conn):
+    def test_get_job_status_returns_info(self, set_db_path, queue, conn):
         """get_job_status returns correct status for queued job."""
-        import find_api.core.queue_sqlite as qs
-
-        qs.settings.SQLITE_QUEUE_PATH = db_path
-
         job = queue.enqueue(_dummy_success, 1)
         status = get_job_status(job.id)
         assert status == JOB_STATUS_QUEUED
@@ -599,6 +567,70 @@ class TestStatusEndpoint:
         """get_job_status returns None for missing job."""
         status = get_job_status("nonexistent-id")
         assert status is None
+
+    def test_fetch_job_status_payload_shape_finished(self, set_db_path, monkeypatch):
+        """fetch_job_status returns correct ISO timestamps and ended_at for a finished job."""
+        monkeypatch.setattr(
+            "find_api.routers.status.get_queue_backend", lambda: "sqlite"
+        )
+        from find_api.routers.status import get_job_status
+
+        queue = get_task_queue_sqlite()
+        job = queue.enqueue(_dummy_success, 42, tag="status-test")
+        from find_api.workers.sqlite_worker import execute_job
+
+        execute_job(job)
+
+        status = get_job_status(job.id)
+        assert status["job_id"] == job.id
+        assert status["status"] == "finished"
+        assert status["stage"] == "finished"
+        assert status["created_at"] is None or isinstance(status["created_at"], str)
+        assert status["started_at"] is None or isinstance(status["started_at"], str)
+        assert status["ended_at"] is None or isinstance(status["ended_at"], str)
+        assert "completed_at" not in status
+        assert "result" in status
+        assert status["result"] == {
+            "media_id": 42,
+            "status": "success",
+            "tag": "status-test",
+        }
+
+    def test_fetch_job_status_payload_shape_queued(self, set_db_path, monkeypatch):
+        """fetch_job_status returns correct shape for a queued job."""
+        monkeypatch.setattr(
+            "find_api.routers.status.get_queue_backend", lambda: "sqlite"
+        )
+        from find_api.routers.status import get_job_status
+
+        queue = get_task_queue_sqlite()
+        job = queue.enqueue(_dummy_success, 1)
+        status = get_job_status(job.id)
+        assert status["status"] == "queued"
+        assert status["job_id"] == job.id
+        assert status["created_at"] is None or isinstance(status["created_at"], str)
+        assert status["started_at"] is None
+        assert status["ended_at"] is None
+        assert "completed_at" not in status
+        assert "result" not in status
+
+    def test_fetch_job_status_payload_shape_failed(self, set_db_path, monkeypatch):
+        """fetch_job_status returns error info for a failed job."""
+        monkeypatch.setattr(
+            "find_api.routers.status.get_queue_backend", lambda: "sqlite"
+        )
+        from find_api.routers.status import get_job_status
+
+        queue = get_task_queue_sqlite()
+        job = queue.enqueue(_dummy_fail, 99)
+        from find_api.workers.sqlite_worker import execute_job
+
+        execute_job(job)
+
+        status = get_job_status(job.id)
+        assert status["status"] == "failed"
+        assert status["error"] is not None
+        assert "completed_at" not in status
 
 
 # ── Edge Cases ────────────────────────────────────────────────────────────────

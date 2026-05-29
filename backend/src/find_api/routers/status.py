@@ -4,6 +4,8 @@ Status endpoint for checking job progress
 
 import json
 
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException
 from redis import Redis
 from rq.job import Job
@@ -82,13 +84,18 @@ def get_job_status(job_id: str):
                         status_code=404, detail=f"Job not found: {job_id}"
                     )
 
+                def _to_iso(val: float | None) -> str | None:
+                    if val is None:
+                        return None
+                    return datetime.fromtimestamp(val).isoformat()
+
                 status_info = {
                     "job_id": job_id,
                     "status": row["status"],
                     "stage": "queued",
-                    "created_at": row["created_at"],
-                    "started_at": row["started_at"],
-                    "completed_at": row["completed_at"],
+                    "created_at": _to_iso(row["created_at"]),
+                    "started_at": _to_iso(row["started_at"]),
+                    "ended_at": _to_iso(row["completed_at"]),
                 }
 
                 meta = {}
@@ -101,7 +108,14 @@ def get_job_status(job_id: str):
                 status_info["stage"] = meta.get("stage", row["status"])
 
                 if row["status"] == "finished":
-                    status_info["result"] = row["result"]
+                    raw_result = row["result"]
+                    if raw_result is not None and isinstance(raw_result, str):
+                        try:
+                            status_info["result"] = json.loads(raw_result)
+                        except (json.JSONDecodeError, TypeError):
+                            status_info["result"] = raw_result
+                    else:
+                        status_info["result"] = raw_result
 
                 if row["status"] == "failed":
                     status_info["error"] = meta.get(
@@ -115,8 +129,10 @@ def get_job_status(job_id: str):
                 conn.close()
         except HTTPException:
             raise
-        except Exception:
-            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+        except Exception as exc:
+            raise HTTPException(
+                status_code=404, detail=f"Job not found: {job_id}"
+            ) from exc
 
     try:
         job = Job.fetch(job_id, connection=redis_conn)

@@ -360,7 +360,7 @@ class SQLiteQueue:
             if should_close:
                 conn.close()
 
-    def dequeue(self, timeout: int | None = None) -> SQLiteJob | None:
+    def dequeue(self) -> SQLiteJob | None:
         """Claim the oldest queued job atomically.
 
         Returns None when no job is available.
@@ -587,77 +587,75 @@ def enqueue_clustering_job_sqlite(*, reason: str) -> dict[str, Any]:
         now = time.time()
         expiry = now + ttl
 
-        existing_lock = conn.execute(
-            "SELECT * FROM job_queue WHERE id = ?", (CLUSTERING_LOCK_KEY,)
-        ).fetchone()
+        cur = conn.execute(
+            """INSERT INTO job_queue (id, func_name, status, meta, created_at, job_timeout)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO NOTHING""",
+            (
+                CLUSTERING_LOCK_KEY,
+                "__lock__",
+                "locked",
+                json.dumps({"reason": reason, "expires_at": expiry}),
+                now,
+                ttl,
+            ),
+        )
 
-        if existing_lock is None:
-            from find_api.workers.jobs import cluster_images
+        if cur.rowcount == 0:
+            ref_row = conn.execute(
+                "SELECT * FROM job_queue WHERE id = ?", (CLUSTERING_JOB_ID_KEY,)
+            ).fetchone()
 
-            queue = SQLiteQueue("default", connection=conn)
-            job = queue.enqueue(
-                cluster_images,
-                job_timeout=settings.WORKER_TIMEOUT,
-                result_ttl=300,
-            )
+            if ref_row:
+                meta = json.loads(ref_row["meta"]) if ref_row["meta"] else {}
+                job_id = meta.get("job_id")
+                if job_id:
+                    job_row = conn.execute(
+                        "SELECT * FROM job_queue WHERE id = ?", (job_id,)
+                    ).fetchone()
+                    if job_row:
+                        job_status = job_row["status"]
+                        if job_status in ACTIVE_JOB_STATUSES:
+                            return {
+                                "job_id": job_id,
+                                "message": "Clustering job already queued",
+                                "enqueued": False,
+                                "status": job_status,
+                            }
 
-            conn.execute(
-                """INSERT INTO job_queue (id, func_name, status, meta, created_at, job_timeout)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    CLUSTERING_LOCK_KEY,
-                    "__lock__",
-                    "locked",
-                    json.dumps({"reason": reason, "expires_at": expiry}),
-                    now,
-                    ttl,
-                ),
-            )
-            conn.execute(
-                """INSERT INTO job_queue (id, func_name, status, meta, created_at, job_timeout)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    CLUSTERING_JOB_ID_KEY,
-                    "__ref__",
-                    "active",
-                    json.dumps({"job_id": job.id, "expires_at": expiry}),
-                    now,
-                    ttl,
-                ),
-            )
-            conn.commit()
+            clear_clustering_job_state()
+            return enqueue_clustering_job_sqlite(reason=reason)
 
-            logger.info("Queued clustering job %s (%s)", job.id, reason)
-            return {
-                "job_id": job.id,
-                "message": "Clustering job queued",
-                "enqueued": True,
-                "status": "queued",
-            }
+        from find_api.workers.jobs import cluster_images
 
-        ref_row = conn.execute(
-            "SELECT * FROM job_queue WHERE id = ?", (CLUSTERING_JOB_ID_KEY,)
-        ).fetchone()
+        queue = SQLiteQueue("default", connection=conn)
+        job = queue.enqueue(
+            cluster_images,
+            job_timeout=settings.WORKER_TIMEOUT,
+            result_ttl=300,
+        )
 
-        if ref_row:
-            meta = json.loads(ref_row["meta"]) if ref_row["meta"] else {}
-            job_id = meta.get("job_id")
-            if job_id:
-                job_row = conn.execute(
-                    "SELECT * FROM job_queue WHERE id = ?", (job_id,)
-                ).fetchone()
-                if job_row:
-                    job_status = job_row["status"]
-                    if job_status in ACTIVE_JOB_STATUSES:
-                        return {
-                            "job_id": job_id,
-                            "message": "Clustering job already queued",
-                            "enqueued": False,
-                            "status": job_status,
-                        }
+        conn.execute(
+            """INSERT INTO job_queue (id, func_name, status, meta, created_at, job_timeout)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                CLUSTERING_JOB_ID_KEY,
+                "__ref__",
+                "active",
+                json.dumps({"job_id": job.id, "expires_at": expiry}),
+                now,
+                ttl,
+            ),
+        )
+        conn.commit()
 
-        clear_clustering_job_state()
-        return enqueue_clustering_job_sqlite(reason=reason)
+        logger.info("Queued clustering job %s (%s)", job.id, reason)
+        return {
+            "job_id": job.id,
+            "message": "Clustering job queued",
+            "enqueued": True,
+            "status": "queued",
+        }
 
     finally:
         conn.close()

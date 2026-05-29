@@ -101,11 +101,13 @@ def run_worker_loop(
             break
 
         try:
-            run_worker_once(queue)
+            processed = run_worker_once(queue)
         except Exception:  # noqa: BLE001
             logger.exception("Worker loop error, continuing")
+            processed = False
 
-        time.sleep(POLL_INTERVAL_SECONDS)
+        if not processed:
+            time.sleep(POLL_INTERVAL_SECONDS)
 
     logger.info("SQLite worker stopped")
 
