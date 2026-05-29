@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from find_api.core.config import settings
 from find_api.core.database import SessionLocal
-from find_api.core.queue import get_redis_connection
+from find_api.core.queue import get_queue_backend, get_redis_connection
 from find_api.models.media import Media
 
 logger = logging.getLogger(__name__)
@@ -33,16 +33,13 @@ RECOVERY_INTERVAL_SECONDS = 60
 def reconcile_abandoned_analysis_jobs(
     db: Session, *, redis_conn: Redis | None = None
 ) -> int:
-    """Reconcile pending/processing media with their active RQ jobs.
+    """Reconcile pending/processing media with their active jobs.
 
-    Media rows keep the current analysis job id so healthy queued/started work can
-    remain active while failed jobs, completed-without-result jobs, and missing stale
-    jobs move back to a truthful failed state.
+    Works with both RQ/Redis and SQLite backends.
     """
     timeout_at = datetime.now(timezone.utc) - timedelta(
         seconds=settings.WORKER_TIMEOUT * 2
     )
-    redis_conn = redis_conn or get_redis_connection()
 
     active_media = (
         db.query(Media).filter(Media.status.in_(["pending", "processing"])).all()
@@ -50,7 +47,9 @@ def reconcile_abandoned_analysis_jobs(
 
     reconciled = 0
     for media in active_media:
-        job_status = _get_job_status(media.analysis_job_id, redis_conn)
+        job_status = _get_job_status(media.analysis_job_id)
+        if job_status is None:
+            job_status = "unknown"
 
         if job_status in ACTIVE_JOB_STATUSES:
             continue
@@ -89,10 +88,19 @@ async def run_analysis_recovery_loop() -> None:
             db.close()
 
 
-def _get_job_status(job_id: str | None, redis_conn: Redis) -> str | None:
+def _get_job_status(job_id: str | None) -> str | None:
+    """Return the job status for the given job_id, backend-agnostic."""
     if not job_id:
         return None
+
+    backend = get_queue_backend()
+    if backend == "sqlite":
+        from find_api.core.queue_sqlite import get_job_status
+
+        return get_job_status(job_id)
+
     try:
+        redis_conn = get_redis_connection()
         return Job.fetch(job_id, connection=redis_conn).get_status()
     except Exception:  # noqa: BLE001
         return None

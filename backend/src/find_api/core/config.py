@@ -28,8 +28,10 @@ class Settings(BaseSettings):
     MINIO_PUBLIC_ENDPOINT: Optional[str] = None
     MINIO_PUBLIC_READ: bool = False
 
-    # Redis
+    # Queue
+    QUEUE_BACKEND: Literal["redis", "sqlite"] = "redis"
     REDIS_URL: str = "redis://localhost:6379"
+    SQLITE_QUEUE_PATH: Optional[str] = None
 
     # ML Models
     ML_MODE: Literal["full", "mock"] = "full"
