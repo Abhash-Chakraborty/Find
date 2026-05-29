@@ -12,6 +12,7 @@ This directory is organized by document purpose and implementation status.
 ### Partially Complete
 
 - [Installable Local-First Architecture Roadmap](plans/partial/local-first-roadmap.md) - Tauri prototype exists, but packaged backend/worker/storage/queue runtime is not done.
+- [Local Search Quality Roadmap](plans/partial/local-search-quality-roadmap.md) - semantic search exists; measurable evaluation, diagnostics, reranking, and scaling work remain planned.
 - [Desktop Framework Evaluation](plans/partial/desktop-tauri-vs-electron-adr.md) - Tauri spike exists, but release-grade packaging and updater decisions remain open.
 - [Personalization Research](plans/partial/personalization-research.md) - feedback collection exists; adaptive personalization is still planned.
 - [Vault Encryption Design](plans/partial/vault-encryption-design.md) - vault feature exists, but implementation still needs alignment with the full design note.
@@ -29,6 +30,7 @@ This directory is organized by document purpose and implementation status.
 ## Guides
 
 - [Common Setup Errors](guides/common-setup-errors.md)
+- [Image Loading Behavior](guides/image-loading.md)
 - [Real ML Troubleshooting](guides/real-ml-troubleshooting.md)
 - [PR Triage Automation Dry Run](guides/pr-triage-dry-run.md)
 - [TestSprite PR Testing](guides/testsprite-ci.md)
