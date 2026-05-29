@@ -146,7 +146,6 @@ def enqueue_clustering_job(*, reason: str) -> dict[str, Any]:
         return _enqueue_clustering_sqlite(reason=reason)
 
     redis_conn = get_redis_connection()
-    existing_job_id = redis_conn.get(CLUSTERING_JOB_ID_KEY)
 
     if redis_conn.set(CLUSTERING_LOCK_KEY, reason, nx=True, ex=_cluster_lock_ttl()):
         from find_api.workers.jobs import cluster_images
@@ -165,6 +164,7 @@ def enqueue_clustering_job(*, reason: str) -> dict[str, Any]:
             "status": "queued",
         }
 
+    existing_job_id = redis_conn.get(CLUSTERING_JOB_ID_KEY)
     if existing_job_id:
         job_id = existing_job_id.decode("utf-8")
         try:

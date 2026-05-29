@@ -47,7 +47,7 @@ def reconcile_abandoned_analysis_jobs(
 
     reconciled = 0
     for media in active_media:
-        job_status = _get_job_status(media.analysis_job_id)
+        job_status = _get_job_status(media.analysis_job_id, redis_conn=redis_conn)
         if job_status is None:
             job_status = "unknown"
 
@@ -88,7 +88,9 @@ async def run_analysis_recovery_loop() -> None:
             db.close()
 
 
-def _get_job_status(job_id: str | None) -> str | None:
+def _get_job_status(
+    job_id: str | None, *, redis_conn: Redis | None = None
+) -> str | None:
     """Return the job status for the given job_id, backend-agnostic."""
     if not job_id:
         return None
@@ -99,9 +101,9 @@ def _get_job_status(job_id: str | None) -> str | None:
 
         return get_job_status(job_id)
 
+    conn = redis_conn or get_redis_connection()
     try:
-        redis_conn = get_redis_connection()
-        return Job.fetch(job_id, connection=redis_conn).get_status()
+        return Job.fetch(job_id, connection=conn).get_status()
     except Exception:  # noqa: BLE001
         return None
 

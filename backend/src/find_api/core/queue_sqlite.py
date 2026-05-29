@@ -102,7 +102,9 @@ def _get_db_path() -> str:
 def _get_connection() -> sqlite3.Connection:
     """Create a new SQLite connection with WAL mode for concurrency."""
     db_path = _get_db_path()
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    parent = os.path.dirname(db_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -381,13 +383,13 @@ class SQLiteQueue:
                 now = time.time()
                 job_id = row["id"]
 
-                conn.execute(
+                cur = conn.execute(
                     "UPDATE job_queue SET status = ?, started_at = ? WHERE id = ? AND status = ?",
                     (JOB_STATUS_STARTED, now, job_id, JOB_STATUS_QUEUED),
                 )
                 conn.commit()
 
-                if conn.total_changes > 0:
+                if cur.rowcount > 0:
                     updated = conn.execute(
                         "SELECT * FROM job_queue WHERE id = ?", (job_id,)
                     ).fetchone()

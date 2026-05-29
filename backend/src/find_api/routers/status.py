@@ -105,7 +105,8 @@ def get_job_status(job_id: str):
 
                 if row["status"] == "failed":
                     status_info["error"] = meta.get(
-                        "error", row.get("error", "Job failed")
+                        "error",
+                        row["error"] if row["error"] is not None else "Job failed",
                     )
                     status_info["stage"] = meta.get("stage", "failed")
 
