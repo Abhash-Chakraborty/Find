@@ -310,8 +310,7 @@ Alias timeline: introduce `STORAGE_BACKEND`, `STORAGE_ENDPOINT`, `STORAGE_ACCESS
 ## Configuration Alias Migration Table
 
 The table below maps current `MINIO_*` variables to the proposed
-provider-neutral `STORAGE_*` aliases. Both names are accepted during
-the transition period.
+provider-neutral `STORAGE_*` aliases. Both names will be accepted during the transition period once the migration is implemented.
 
 | Current Variable (`MINIO_*`) | New Alias (`STORAGE_*`)    | Description                                  | Status                  |
 |------------------------------|----------------------------|----------------------------------------------|-------------------------|
@@ -325,9 +324,11 @@ the transition period.
 | *(not present)*              | `STORAGE_BACKEND`          | Storage provider type (e.g. `s3`)            | New — no alias needed   |
 | *(not present)*              | `STORAGE_AUTO_CREATE_BUCKET` | Auto-create bucket on startup              | New — no alias needed   |
 
-> **Backward compatibility:** `MINIO_*` variables are compatibility aliases and
-> remain fully supported during the transition period. If both a `MINIO_*` and
-> its `STORAGE_*` counterpart are set, `STORAGE_*` takes precedence.
+> **Planned backward compatibility:** Once implemented, `MINIO_*` variables will
+> be supported as compatibility aliases during the transition period. When both a
+> `MINIO_*` and its `STORAGE_*` counterpart are set, `STORAGE_*` will take
+> precedence. Until then, only `MINIO_*` variables are active in the current
+> runtime.
 > `MINIO_*` aliases will be removed after 2–3 releases or once RustFS
 > validation completes, whichever comes first. No runtime behavior is
 > changed by this document.
