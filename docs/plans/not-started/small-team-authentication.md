@@ -38,6 +38,17 @@ Join an Instance (user flows)
 - The backend creates a join request which the admin reviews and approves or denies (or if invite is pre-approved, account is created automatically).
 - Once approved, the user can sign in and interact with the shared instance.
 
+### Instance Tab UI State Checklist
+
+- [ ] **Single-user default**: local installs show the Instance tab but must not force shared-instance setup.
+- [ ] **Admin setup**: admin sees "Create an Instance" form; no instance exists yet.
+- [ ] **Invite/join**: joining user sees "Join an Instance" with token or link input.
+- [ ] **Pending approvals**: admin sees a list of pending join requests to approve or reject.
+- [ ] **Active users**: admin sees current users and roles after instance is running.
+- [ ] **Loading**: show a spinner or skeleton while instance state is being fetched.
+- [ ] **Unauthorized**: non-admin users see a read-only view or a clear "not permitted" message.
+- [ ] **Error**: display a user-friendly message when the backend is unreachable or returns an error.
+
 ## Authentication & Accounts
 
 Minimal user model (example fields):
