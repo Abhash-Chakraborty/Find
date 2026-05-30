@@ -47,6 +47,12 @@ import { vaultStore } from "@/store/vaultStore";
 
 const GALLERY_LIMIT = 24;
 const GALLERY_SKELETON_COUNT = GALLERY_LIMIT;
+const GALLERY_CARD_ACTION_SKELETON_KEYS = [
+  "like",
+  "download",
+  "retry",
+  "delete",
+];
 
 type GalleryFilter = "all" | "indexed" | "processing" | "failed";
 
@@ -175,6 +181,10 @@ type GallerySkeletonGridProps = {
   label?: string;
 };
 
+function buildSkeletonKeys(prefix: string, count: number) {
+  return Array.from({ length: count }, (_, index) => `${prefix}-${index + 1}`);
+}
+
 /**
  * Keeps the thumbnail area stable when no preview URL exists or an image fails to load.
  */
@@ -197,11 +207,6 @@ function GalleryImageFallback() {
 function GalleryThumbnail({ src, alt }: GalleryThumbnailProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
-
-  useEffect(() => {
-    setIsLoaded(false);
-    setHasError(false);
-  }, [src]);
 
   if (hasError) {
     return <GalleryImageFallback />;
@@ -252,9 +257,9 @@ function GalleryCardSkeleton() {
       <div className="space-y-3 p-3">
         <div className="h-3 w-3/4 animate-pulse rounded-full bg-[color:var(--frost-soft)]" />
         <div className="flex items-center gap-2">
-          {Array.from({ length: 4 }, (_, index) => (
+          {GALLERY_CARD_ACTION_SKELETON_KEYS.map((action) => (
             <div
-              key={index}
+              key={action}
               className="h-8 w-8 animate-pulse rounded-full bg-[color:var(--frost-soft)]"
             />
           ))}
@@ -279,8 +284,8 @@ function GallerySkeletonGrid({
       aria-label={label}
     >
       <span className="sr-only">{label}</span>
-      {Array.from({ length: count }, (_, index) => (
-        <GalleryCardSkeleton key={`gallery-skeleton-${index}`} />
+      {buildSkeletonKeys("gallery-skeleton", count).map((skeletonKey) => (
+        <GalleryCardSkeleton key={skeletonKey} />
       ))}
     </div>
   );
@@ -1042,7 +1047,11 @@ function GalleryPageContent() {
                       aria-label={`View ${item.filename}`}
                     >
                       {imageSrc ? (
-                        <GalleryThumbnail src={imageSrc} alt={item.filename} />
+                        <GalleryThumbnail
+                          key={imageSrc}
+                          src={imageSrc}
+                          alt={item.filename}
+                        />
                       ) : (
                         <GalleryImageFallback />
                       )}
@@ -1164,12 +1173,12 @@ function GalleryPageContent() {
                   </article>
                 );
               })}
-              {Array.from(
-                { length: loadingMoreSkeletonCount },
-                (_, index) => (
-                  <GalleryCardSkeleton key={`gallery-loading-more-${index}`} />
-                ),
-              )}
+              {buildSkeletonKeys(
+                "gallery-loading-more",
+                loadingMoreSkeletonCount,
+              ).map((skeletonKey) => (
+                <GalleryCardSkeleton key={skeletonKey} />
+              ))}
             </div>
 
             {/* Load More */}
