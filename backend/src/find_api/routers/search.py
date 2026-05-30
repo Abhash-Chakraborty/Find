@@ -2,20 +2,19 @@
 Search endpoint for semantic image search
 """
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import text
 import json
-from find_api.services.query_cache import (
-    get_cached_query,
-    set_cached_query,
-)
-from typing import Dict
+import time
+from typing import Any
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.storage import get_file_url
 from find_api.routers.gallery import build_thumbnail_url
+from find_api.services.query_cache import get_cached_query, set_cached_query
 
 router = APIRouter()
 
@@ -25,6 +24,7 @@ def search_images(
     q: str = Query(..., min_length=1, description="Search query"),
     limit: int = Query(24, ge=1, le=100, description="Maximum results to return"),
     skip: int = Query(0, ge=0, description="Number of results to skip"),
+    debug: bool = Query(False, description="Include retrieval diagnostics in response"),
     db: Session = Depends(get_db),
 ):
     """
@@ -38,6 +38,14 @@ def search_images(
     Returns:
         Paginated list of matching images with metadata for frontend navigation.
     """
+    t_total_start = time.perf_counter()
+
+    # Keep debug requests uncached so timing diagnostics describe the actual path.
+    if not debug:
+        cached = get_cached_query(q, limit, skip)
+        if cached is not None:
+            return cached["response"]
+
     # Generate query embedding
     if settings.ML_MODE.lower() == "mock":
         from find_api.ml.mock_embedder import get_mock_embedder
@@ -48,14 +56,9 @@ def search_images(
 
         embedder = get_clip_embedder()
 
-    cached = get_cached_query(q, limit, skip)
-    if cached and cached.get("results"):
-        return cached["results"]
-
-    if cached:
-        query_embedding = cached["embedding"]
-    else:
-        query_embedding = embedder.embed_text(q)
+    t_embed_start = time.perf_counter()
+    query_embedding = embedder.embed_text(q)
+    embedding_ms = (time.perf_counter() - t_embed_start) * 1000
 
     # Convert to string format for pgvector
     embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
@@ -84,7 +87,7 @@ def search_images(
     query_sql = text(
         """
         WITH ranked_results AS (
-            SELECT 
+            SELECT
                 id,
                 filename,
                 minio_key,
@@ -112,6 +115,7 @@ def search_images(
     """
     )
 
+    t_retrieval_start = time.perf_counter()
     result = db.execute(
         query_sql,
         {
@@ -121,11 +125,12 @@ def search_images(
             "threshold": threshold,
         },
     )
+    retrieval_ms = (time.perf_counter() - t_retrieval_start) * 1000
 
     # Build response
     results = []
     for row in result:
-        metadata_payload: Dict[str, object] = {}
+        metadata_payload: dict[str, object] = {}
 
         # Safely coerce metadata_json into dict
         raw_metadata = row.metadata_json
@@ -176,11 +181,12 @@ def search_images(
         )
 
     # Calculate pagination metadata
-    # Calculate pagination metadata
     page = (skip // limit) + 1 if limit > 0 else 1
     has_more = (skip + len(results)) < total_count
 
-    response_payload = {
+    total_ms = (time.perf_counter() - t_total_start) * 1000
+
+    response: dict[str, Any] = {
         "query": q,
         "results": results,
         "total": total_count,
@@ -190,7 +196,18 @@ def search_images(
         "has_more": has_more,
     }
 
-    if not cached:
-        set_cached_query(q, limit, skip, query_embedding, response_payload)
+    debug_enabled = debug and settings.ENVIRONMENT.lower() in {"local", "development"}
+    if debug_enabled:
+        response["diagnostics"] = {
+            "embedding_ms": round(embedding_ms, 2),
+            "retrieval_ms": round(retrieval_ms, 2),
+            "total_ms": round(total_ms, 2),
+            "results_returned": len(results),
+            "similarity_threshold": threshold,
+            "ml_mode": settings.ML_MODE,
+        }
 
-    return response_payload
+    if not debug:
+        set_cached_query(q, limit, skip, query_embedding, response)
+
+    return response

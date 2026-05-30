@@ -15,6 +15,7 @@ from find_api.core.storage import get_file, upload_thumbnail
 from find_api.core.model_manager import get_model_manager
 from find_api.core.config import settings
 from find_api.models.media import Media
+from find_api.services.query_cache import invalidate_query_cache
 from find_api.utils.exif import extract_exif_data
 from find_api.utils.errors import sanitize_error
 
@@ -80,6 +81,7 @@ def generate_thumbnail_for_media(media_id: int):
         for key, value in thumbnail_metadata.items():
             setattr(media, key, value)
         db.commit()
+        invalidate_query_cache()
         return {"status": "success", "media_id": media_id}
     except Exception as exc:  # noqa: BLE001
         db.rollback()
@@ -172,6 +174,7 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
         media.processed_at = datetime.utcnow()
 
         db.commit()
+        invalidate_query_cache()
 
         # near-duplicate detection
         try:
@@ -340,6 +343,7 @@ def cluster_images():
         )
 
         db.commit()  # ← single commit: delete old + insert new, atomically
+        invalidate_query_cache()
 
         result = {
             **info,
