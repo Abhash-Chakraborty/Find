@@ -2,8 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
   Heart,
   ImageOff,
@@ -216,6 +218,20 @@ export function ImagePreviewModal({
   const queryClient = useQueryClient();
   const [likedOverride, setLikedOverride] = useState<boolean | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [captionCopied, setCaptionCopied] = useState(false);
+  const [ocrCopied, setOcrCopied] = useState(false);
+
+  useEffect(() => {
+    if (!captionCopied) return;
+    const id = setTimeout(() => setCaptionCopied(false), 2000);
+    return () => clearTimeout(id);
+  }, [captionCopied]);
+
+  useEffect(() => {
+    if (!ocrCopied) return;
+    const id = setTimeout(() => setOcrCopied(false), 2000);
+    return () => clearTimeout(id);
+  }, [ocrCopied]);
 
   const detailQuery = useQuery<MediaDetail, Error>({
     queryKey: ["image-detail", media.id],
@@ -500,17 +516,46 @@ export function ImagePreviewModal({
             </section>
 
             <section className="mb-6">
-              <h3 className="mb-2 text-xs font-semibold uppercase text-[color:var(--muted)]">
-                Caption
-              </h3>
-              <div className="space-y-3 rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase text-[color:var(--muted)]">
+                  Caption
+                </h3>
+                {caption ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(caption);
+                        setCaptionCopied(true);
+                        toast.success("Caption copied to clipboard");
+                      } catch {
+                        toast.error("Failed to copy caption");
+                      }
+                    }}
+                    className="frost-button px-2 py-1 text-xs text-[color:var(--silver)]"
+                    aria-label={
+                      captionCopied
+                        ? "Caption copied to clipboard"
+                        : "Copy caption to clipboard"
+                    }
+                  >
+                    {captionCopied ? (
+                      <Check className="h-3 w-3 text-[color:var(--green)]" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                    {captionCopied ? "Copied" : "Copy"}
+                  </button>
+                ) : null}
+              </div>
+              <div className="min-w-0 space-y-3 overflow-hidden rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
                 {status === "pending" || status === "processing" ? (
                   <p className="text-sm text-[color:var(--silver)] flex items-center gap-2">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
                     Generating caption...
                   </p>
                 ) : captionStage?.status === "failed" ? (
-                  <p className="text-sm text-[#ff9bab] font-medium leading-6">
+                  <p className="min-w-0 break-words text-sm font-medium leading-6 text-[#ff9bab] [overflow-wrap:anywhere]">
                     Captioning failed: {captionStage.error || "Unknown error"}
                   </p>
                 ) : caption ? (
@@ -543,7 +588,7 @@ export function ImagePreviewModal({
               <h3 className="mb-2 text-xs font-semibold uppercase text-[color:var(--muted)]">
                 Metadata
               </h3>
-              <div className="space-y-3 rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
+              <div className="min-w-0 space-y-3 overflow-hidden rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
                 {status === "pending" || status === "processing" ? (
                   <div>
                     <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
@@ -559,7 +604,7 @@ export function ImagePreviewModal({
                     <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
                       Detected objects
                     </p>
-                    <p className="text-sm text-[#ff9bab] font-medium">
+                    <p className="min-w-0 break-words text-sm font-medium text-[#ff9bab] [overflow-wrap:anywhere]">
                       Object detection failed:{" "}
                       {objectDetectionStage.error || "Unknown error"}
                     </p>
@@ -636,15 +681,42 @@ export function ImagePreviewModal({
                     <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
                       OCR text
                     </p>
-                    <p className="text-sm text-[#ff9bab] font-medium">
+                    <p className="min-w-0 break-words text-sm font-medium text-[#ff9bab] [overflow-wrap:anywhere]">
                       OCR failed: {ocrStage.error || "Unknown error"}
                     </p>
                   </div>
                 ) : ocrText ? (
                   <div className="border-t border-[var(--frost-soft)] pt-3">
-                    <p className="mb-2 text-xs font-medium uppercase text-[color:var(--muted)]">
-                      OCR text
-                    </p>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium uppercase text-[color:var(--muted)]">
+                        OCR text
+                      </p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(ocrText);
+                            setOcrCopied(true);
+                            toast.success("OCR text copied to clipboard");
+                          } catch {
+                            toast.error("Failed to copy OCR text");
+                          }
+                        }}
+                        className="frost-button px-2 py-1 text-xs text-[color:var(--silver)]"
+                        aria-label={
+                          ocrCopied
+                            ? "OCR text copied to clipboard"
+                            : "Copy OCR text to clipboard"
+                        }
+                      >
+                        {ocrCopied ? (
+                          <Check className="h-3 w-3 text-[color:var(--green)]" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                        {ocrCopied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
                     <p className="max-h-36 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-[color:var(--near-white)]">
                       {ocrText}
                     </p>
@@ -667,7 +739,7 @@ export function ImagePreviewModal({
                 <h3 className="mb-2 text-xs font-semibold uppercase text-[color:var(--muted)]">
                   Analysis Stages
                 </h3>
-                <div className="rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4 space-y-3">
+                <div className="space-y-3 overflow-hidden rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
                   {ANALYSIS_STAGE_ORDER.filter(
                     (stage) => displayStageStatus[stage],
                   ).map((stage) => {
@@ -690,20 +762,20 @@ export function ImagePreviewModal({
                     return (
                       <div
                         key={stage}
-                        className="flex flex-col gap-1 text-sm border-b border-[var(--frost-soft)] pb-3 last:border-b-0 last:pb-0"
+                        className="flex min-w-0 flex-col gap-1 border-b border-[var(--frost-soft)] pb-3 text-sm last:border-b-0 last:pb-0"
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-[color:var(--near-white)]">
+                        <div className="flex min-w-0 items-center justify-between gap-3">
+                          <span className="min-w-0 break-words font-medium text-[color:var(--near-white)]">
                             {prettyName}
                           </span>
                           <span
-                            className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full border ${statusClass}`}
+                            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${statusClass}`}
                           >
                             {info.status}
                           </span>
                         </div>
                         {info.status === "failed" && info.error && (
-                          <p className="text-xs text-[#ff9bab] mt-1 pl-1 leading-normal">
+                          <p className="mt-1 min-w-0 break-words pl-1 text-xs leading-normal text-[#ff9bab] [overflow-wrap:anywhere]">
                             Error: {info.error}
                           </p>
                         )}
@@ -715,7 +787,7 @@ export function ImagePreviewModal({
             )}
 
             {detailData?.error && (
-              <p className="rounded-2xl border border-[var(--red-soft)] bg-[var(--red-soft)] p-3 text-sm text-[#ff9bab]">
+              <p className="min-w-0 break-words rounded-2xl border border-[var(--red-soft)] bg-[var(--red-soft)] p-3 text-sm text-[#ff9bab] [overflow-wrap:anywhere]">
                 {detailData.error}
               </p>
             )}

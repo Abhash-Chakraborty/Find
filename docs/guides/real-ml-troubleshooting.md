@@ -173,6 +173,22 @@ If unrelated images dominate results:
 * verify captions are non-empty
 * check worker logs for failed ML stages
 
+## Search Diagnostics
+
+For local tuning, call the search endpoint with `debug=true`:
+
+```bash
+curl "http://localhost:8000/api/search?q=sunset&debug=true"
+```
+
+When `ENVIRONMENT` is `local` or `development`, the response includes a
+`diagnostics` object with query embedding time, vector retrieval time, total
+request time, returned result count, the active similarity threshold, and
+`ML_MODE`.
+
+Diagnostics are intentionally omitted in `staging` and `production`, even when
+`debug=true`, so local timing data is not exposed from shared deployments.
+
 ---
 
 # Common GPU / Model Issues
