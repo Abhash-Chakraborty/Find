@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import secrets
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
@@ -194,6 +195,9 @@ def _rollback_hidden_state_after_delete_failure(
             {"media_id": media.id},
         )
         media.is_hidden = False
+        media.vault_state = "visible"
+        media.hidden_at = None
+        media.encrypted_at = None
         db.commit()
     except Exception:  # noqa: BLE001
         db.rollback()
@@ -285,16 +289,24 @@ def hide_media(
 
             db.execute(
                 text(
-                    "INSERT INTO vault_metadata (media_id, encrypted_path, iv) "
-                    "VALUES (:media_id, :encrypted_path, :iv)"
+                    "INSERT INTO vault_metadata "
+                    "(media_id, encrypted_path, iv, encryption_algorithm, key_derivation, ciphertext_size) "
+                    "VALUES (:media_id, :encrypted_path, :iv, :encryption_algorithm, :key_derivation, :ciphertext_size)"
                 ),
                 {
                     "media_id": media.id,
                     "encrypted_path": str(encrypted_path),
                     "iv": iv,
+                    "encryption_algorithm": "AES-256-GCM",
+                    "key_derivation": "PBKDF2-HMAC-SHA256",
+                    "ciphertext_size": encrypted_path.stat().st_size,
                 },
             )
             media.is_hidden = True
+            media.vault_state = "hidden_encrypted"
+            hidden_timestamp = datetime.now(timezone.utc)
+            media.hidden_at = hidden_timestamp
+            media.encrypted_at = hidden_timestamp
             db.commit()
         except Exception as exc:  # noqa: BLE001
             db.rollback()

@@ -93,6 +93,9 @@ def list_people(db: Session = Depends(get_db)):
             .all()
         )
         sample_media_ids = [f.media_id for f in sample_faces]
+        if face_count == 0 or not sample_media_ids:
+            continue
+
         thumbnail_url = (
             build_thumbnail_url(sample_media_ids[0]) if sample_media_ids else None
         )
