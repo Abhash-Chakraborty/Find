@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   title: "Find - Local AI Image Intelligence",
   description:
     "AI-powered image search and organization that runs entirely on your device",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
