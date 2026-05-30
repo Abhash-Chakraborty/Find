@@ -703,7 +703,7 @@ export function ImagePreviewModal({
                 <h3 className="mb-2 text-xs font-semibold uppercase text-[color:var(--muted)]">
                   Analysis Stages
                 </h3>
-                <div className="rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4 space-y-3">
+                <div className="space-y-3 overflow-hidden rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
                   {ANALYSIS_STAGE_ORDER.filter(
                     (stage) => displayStageStatus[stage],
                   ).map((stage) => {
@@ -726,20 +726,20 @@ export function ImagePreviewModal({
                     return (
                       <div
                         key={stage}
-                        className="flex flex-col gap-1 text-sm border-b border-[var(--frost-soft)] pb-3 last:border-b-0 last:pb-0"
+                        className="flex min-w-0 flex-col gap-1 border-b border-[var(--frost-soft)] pb-3 text-sm last:border-b-0 last:pb-0"
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-[color:var(--near-white)]">
+                        <div className="flex min-w-0 items-center justify-between gap-3">
+                          <span className="min-w-0 break-words font-medium text-[color:var(--near-white)]">
                             {prettyName}
                           </span>
                           <span
-                            className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full border ${statusClass}`}
+                            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${statusClass}`}
                           >
                             {info.status}
                           </span>
                         </div>
                         {info.status === "failed" && info.error && (
-                          <p className="text-xs text-[#ff9bab] mt-1 pl-1 leading-normal">
+                          <p className="mt-1 min-w-0 break-words pl-1 text-xs leading-normal text-[#ff9bab] [overflow-wrap:anywhere]">
                             Error: {info.error}
                           </p>
                         )}
