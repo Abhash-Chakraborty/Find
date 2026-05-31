@@ -20,6 +20,7 @@ This directory is organized by document purpose and implementation status.
 ### Not Started
 
 - [Provider-Neutral Object Storage ADR](plans/not-started/storage-provider-neutrality-adr.md)
+- [Bulk Rename and Metadata Editing Design](plans/not-started/bulk-rename-metadata-design.md)
 - [Desktop Runtime Design ADR](plans/not-started/desktop-runtime-adr.md)
 - [Desktop Runtime Detailed Comparison](plans/not-started/desktop-runtime-comparison.md)
 - [Desktop Runtime Quick Reference](plans/not-started/desktop-runtime-quick-reference.md)

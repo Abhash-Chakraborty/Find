@@ -20,7 +20,7 @@ Find is a local-first AI image intelligence platform for uploading, indexing, se
 
 All image processing, vector generation, and search stay inside your local stack.
 
-See the documentation index in [`docs/index.md`](./docs/index.md), the mobile direction in [`docs/plans/not-started/mobile-strategy.md`](./docs/plans/not-started/mobile-strategy.md), the desktop framework tradeoff analysis in [`docs/plans/partial/desktop-tauri-vs-electron-adr.md`](./docs/plans/partial/desktop-tauri-vs-electron-adr.md), and the broader installable local-first roadmap in [`docs/plans/partial/local-first-roadmap.md`](./docs/plans/partial/local-first-roadmap.md).
+See the documentation index in [`docs/index.md`](./docs/index.md), the mobile direction in [`docs/plans/not-started/mobile-strategy.md`](./docs/plans/not-started/mobile-strategy.md), the bulk rename and metadata editing design in [`docs/plans/not-started/bulk-rename-metadata-design.md`](./docs/plans/not-started/bulk-rename-metadata-design.md), and the broader installable local-first roadmap in [`docs/plans/partial/local-first-roadmap.md`](./docs/plans/partial/local-first-roadmap.md).
 
 ## What it does
 
