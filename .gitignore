@@ -35,12 +35,13 @@ Thumbs.db
 .env.*.local
 
 # Docker
-*.dockerignore
+!**/.dockerignore
 
 # Data
 uploads/
 *.db
 *.sqlite
+backend/vault_storage/
 
 # ML weights/checkpoints (download locally, don't commit)
 *.pt
@@ -62,6 +63,11 @@ coverage/
 dist/
 build/
 *.egg-info/
+
+# Tauri
+frontend/src-tauri/target/
+frontend/out/
+frontend/src-tauri/gen/
 
 # MinIO data
 minio_data/

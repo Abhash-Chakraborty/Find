@@ -1,0 +1,22 @@
+[
+  {
+    "id": "TS-BE-001",
+    "title": "health endpoint responds",
+    "description": "Call GET /health and verify the API reports a healthy status."
+  },
+  {
+    "id": "TS-BE-002",
+    "title": "bulk upload accepts valid zip archive",
+    "description": "Upload a ZIP archive containing valid image files to POST /api/upload/bulk and verify the response includes uploaded member statuses."
+  },
+  {
+    "id": "TS-BE-003",
+    "title": "bulk upload rejects unsafe zip archives",
+    "description": "Upload ZIP archives with nested archive members or suspicious compression ratios to POST /api/upload/bulk and verify clear 400-level safety errors."
+  },
+  {
+    "id": "TS-BE-004",
+    "title": "gallery endpoint returns paginated media response",
+    "description": "Call GET /api/gallery and verify the response includes items, total, page, and limit fields."
+  }
+]

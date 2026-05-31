@@ -6,6 +6,7 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
+    ForeignKey,
     DateTime,
     Text,
     JSON,
@@ -26,16 +27,25 @@ class Media(Base):
     id = Column(Integer, primary_key=True, index=True)
     file_hash = Column(String(64), unique=True, index=True, nullable=False)
     minio_key = Column(String(255), nullable=False)
+    thumbnail_key = Column(String(255), nullable=True)
+    thumbnail_content_type = Column(String(100), nullable=True)
+    thumbnail_size = Column(Integer, nullable=True)
+    thumbnail_width = Column(Integer, nullable=True)
+    thumbnail_height = Column(Integer, nullable=True)
     filename = Column(String(255), nullable=False)
     content_type = Column(String(100))
     file_size = Column(Integer)
     liked = Column(
         Boolean, nullable=False, default=False, server_default=sa_text("false")
     )
+    is_hidden = Column(
+        Boolean, nullable=False, default=False, server_default=sa_text("false")
+    )
 
     # Status tracking
     status = Column(String(50), default="pending", index=True)
     # Status values: pending, processing, indexed, failed
+    analysis_job_id = Column(String(64), nullable=True, index=True)
 
     error_message = Column(Text, nullable=True)
 
@@ -54,6 +64,13 @@ class Media(Base):
 
     # Clustering
     cluster_id = Column(Integer, index=True, nullable=True)
+    # Near-duplicate detection
+    duplicate_of = Column(
+        Integer,
+        ForeignKey("media.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     # Vector embedding for semantic search
     vector = Column(Vector(settings.EMBEDDING_DIM))

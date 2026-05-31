@@ -5,11 +5,29 @@ Main FastAPI application entry point
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import asyncio
 import logging
-
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from find_api.routers.duplicates import router as duplicates_router
 from find_api.core.database import init_db
+from find_api.core.recovery import run_analysis_recovery_loop
 from find_api.core.storage import init_storage
-from find_api.routers import upload, gallery, search, clusters, status, cluster
+from find_api.core.config import settings
+from find_api.core.model_manager import get_model_manager
+from find_api.routers import (
+    cluster,
+    clusters,
+    config,
+    feedback,
+    gallery,
+    people,
+    search,
+    status,
+    upload,
+    vault,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -26,6 +44,7 @@ class HealthCheckFilter(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 
 logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -41,9 +60,22 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing MinIO storage...")
     init_storage()
 
+    # Start ML model cleanup
+    logger.info("Starting ML model cleanup thread...")
+    get_model_manager().start_autocleanup(
+        ttl_seconds=settings.ML_MODEL_IDLE_TTL_SECONDS,
+        process_name="api",
+    )
+
+    recovery_task = asyncio.create_task(run_analysis_recovery_loop())
+
     logger.info("Find API started successfully!")
 
-    yield
+    try:
+        yield
+    finally:
+        recovery_task.cancel()
+        await asyncio.gather(recovery_task, return_exceptions=True)
 
     logger.info("Shutting down Find API...")
 
@@ -55,6 +87,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware
 app.add_middleware(
@@ -77,6 +111,11 @@ app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(clusters.router, prefix="/api", tags=["clusters"])
 app.include_router(cluster.router, prefix="/api", tags=["cluster-ops"])
 app.include_router(status.router, prefix="/api", tags=["status"])
+app.include_router(config.router, prefix="/api", tags=["config"])
+app.include_router(people.router, prefix="/api", tags=["people"])
+app.include_router(vault.router, prefix="/api", tags=["vault"])
+app.include_router(feedback.router, tags=["feedback"])
+app.include_router(duplicates_router)
 
 
 @app.get("/")

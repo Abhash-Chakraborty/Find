@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   CheckCircle,
@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import {
+  extractErrorMessage,
   getJobStatus,
   type JobStatus,
   type UploadResponse,
@@ -29,6 +30,7 @@ type ProcessingState = "queued" | "processing" | "indexed" | "failed";
 type UploadListItem = UploadResult & {
   jobStatus?: JobStatus["status"];
   processingState?: ProcessingState;
+  processingStage?: string;
 };
 
 function hydrateResults(response: UploadResponse) {
@@ -71,6 +73,63 @@ function getDisplayStatus(item: UploadListItem) {
   return "queued";
 }
 
+function getDisplayStage(item: UploadListItem) {
+  if (item.status !== "uploaded") {
+    return null;
+  }
+  if (item.processingState === "indexed") {
+    return "indexed";
+  }
+  if (item.processingState === "failed") {
+    return item.processingStage ?? "failed";
+  }
+  return item.processingStage ?? item.processingState ?? "queued";
+}
+
+const STAGE_PROGRESS: Record<string, number> = {
+  queued: 8,
+  started: 16,
+  processing: 20,
+  "loading image": 22,
+  "extracting exif": 34,
+  "generating mock metadata": 48,
+  "detecting objects": 48,
+  "generating caption": 62,
+  "running ocr": 74,
+  "generating embedding": 88,
+  "indexing complete": 96,
+  "detecting faces": 96,
+  "clustering queued": 98,
+  indexed: 100,
+  failed: 100,
+};
+
+function normalizeStage(stage?: string) {
+  return stage?.trim().toLowerCase();
+}
+
+function getItemProgress(item: UploadListItem): number {
+  if (item.status === "failed" || item.processingState === "failed") {
+    return 100;
+  }
+  if (item.processingState === "indexed") {
+    return 100;
+  }
+
+  const stage = normalizeStage(item.processingStage);
+  const stageProgress = stage ? STAGE_PROGRESS[stage] : undefined;
+  if (stageProgress !== undefined) {
+    return stageProgress;
+  }
+  if (item.processingState === "processing" || item.jobStatus === "started") {
+    return STAGE_PROGRESS.processing ?? 20;
+  }
+  if (item.processingState === "queued" || item.jobStatus === "queued") {
+    return STAGE_PROGRESS.queued ?? 8;
+  }
+  return 0;
+}
+
 function getStatusClasses(item: UploadListItem) {
   if (item.status === "duplicate") {
     return "accent-badge status-pending";
@@ -90,6 +149,15 @@ function getStatusClasses(item: UploadListItem) {
 export default function UploadPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadListItem[]>([]);
   const [mode, setMode] = useState<UploadMode>("single");
+  const queryClient = useQueryClient();
+
+  const parsedUploadLimit = Number(
+    process.env.NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB ?? "50",
+  );
+  const maxUploadSizeMb =
+    Number.isFinite(parsedUploadLimit) && parsedUploadLimit > 0
+      ? Math.floor(parsedUploadLimit)
+      : 50;
 
   const parsedBulkLimit = Number(
     process.env.NEXT_PUBLIC_MAX_BULK_FILES ?? "200",
@@ -103,12 +171,13 @@ export default function UploadPage() {
     mutationFn: uploadImages,
     onSuccess: (data) => {
       setUploadedFiles((prev) => [...hydrateResults(data), ...prev]);
+      void queryClient.invalidateQueries({ queryKey: ["gallery"] });
       toast.success(
         `Queued ${data.total} file${data.total === 1 ? "" : "s"} for analysis`,
       );
     },
-    onError: () => {
-      toast.error("Upload failed");
+    onError: (error) => {
+      toast.error(extractErrorMessage(error, "Upload failed"));
     },
   });
 
@@ -116,17 +185,28 @@ export default function UploadPage() {
     mutationFn: uploadImagesBulk,
     onSuccess: (data) => {
       setUploadedFiles((prev) => [...hydrateResults(data), ...prev]);
+      void queryClient.invalidateQueries({ queryKey: ["gallery"] });
       const uploadedCount = data.results.filter(
         (item) => item.status === "uploaded",
       ).length;
+      const failedResults = data.results.filter(
+        (item) => item.status === "failed" && item.error,
+      );
       toast.success(
         `Archive accepted (${uploadedCount} new upload${
           uploadedCount === 1 ? "" : "s"
         })`,
       );
+      if (failedResults.length > 0) {
+        toast.error(
+          failedResults.length === 1
+            ? failedResults[0]?.error
+            : `${failedResults.length} files failed. ${failedResults[0]?.error}`,
+        );
+      }
     },
-    onError: () => {
-      toast.error("Bulk upload failed");
+    onError: (error) => {
+      toast.error(extractErrorMessage(error, "Bulk upload failed"));
     },
   });
 
@@ -174,6 +254,14 @@ export default function UploadPage() {
         return;
       }
 
+      if (
+        jobStatuses.some(
+          (job) => job?.status === "finished" || job?.status === "failed",
+        )
+      ) {
+        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      }
+
       setUploadedFiles((current) =>
         current.map((item) => {
           if (!item.job_id) {
@@ -192,6 +280,7 @@ export default function UploadPage() {
             ...item,
             jobStatus: job.status,
             processingState,
+            processingStage: job.stage,
             error:
               processingState === "failed"
                 ? (job.error ?? item.error)
@@ -210,7 +299,7 @@ export default function UploadPage() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeJobs]);
+  }, [activeJobs, queryClient]);
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
@@ -255,7 +344,7 @@ export default function UploadPage() {
       "image/webp": [".webp"],
       "image/gif": [".gif"],
     },
-    maxSize: 50 * 1024 * 1024,
+    maxSize: maxUploadSizeMb * 1024 * 1024,
     multiple: true,
     disabled: mode !== "single" || isUploading,
   });
@@ -286,11 +375,11 @@ export default function UploadPage() {
 
   const helperText = useMemo(() => {
     if (mode === "single") {
-      return "JPEG, PNG, WebP, GIF. Max 50MB each";
+      return `JPEG, PNG, WebP, GIF. Max ${maxUploadSizeMb}MB each`;
     }
 
     return `ZIP archive up to ${maxBulkFiles} images`;
-  }, [mode, maxBulkFiles]);
+  }, [mode, maxUploadSizeMb, maxBulkFiles]);
 
   const stats = useMemo(
     () => ({
@@ -311,6 +400,29 @@ export default function UploadPage() {
     [uploadedFiles],
   );
 
+  const trackedUploads = useMemo(
+    () => uploadedFiles.filter((item) => item.status === "uploaded"),
+    [uploadedFiles],
+  );
+
+  const progressPercent =
+    trackedUploads.length > 0
+      ? Math.round(
+          trackedUploads.reduce((total, item) => {
+            return total + getItemProgress(item);
+          }, 0) / trackedUploads.length,
+        )
+      : isUploading
+        ? (STAGE_PROGRESS.queued ?? 8)
+        : 0;
+
+  const progressLabel = isUploading
+    ? "Uploading"
+    : `Analyzing ${activeJobs.length} image${activeJobs.length === 1 ? "" : "s"}`;
+  const progressDetail =
+    activeJobs.find((item) => item.processingStage)?.processingStage ??
+    "Indexing updates live";
+
   const showActions = stats.indexed > 0 || stats.duplicates > 0;
 
   return (
@@ -329,22 +441,24 @@ export default function UploadPage() {
           <div className="frost-panel flex rounded-full p-1">
             <button
               type="button"
+              aria-pressed={mode === "single"}
               onClick={() => setMode("single")}
               className={`rounded-full px-5 py-2 text-sm font-medium transition ${
                 mode === "single"
                   ? "bg-white text-black"
-                  : "text-[#a1a4a5] hover:bg-white/[0.08] hover:text-[#f0f0f0]"
+                  : "text-[color:var(--silver)] hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)]"
               }`}
             >
               Files
             </button>
             <button
               type="button"
+              aria-pressed={mode === "bulk"}
               onClick={() => setMode("bulk")}
               className={`rounded-full px-5 py-2 text-sm font-medium transition ${
                 mode === "bulk"
                   ? "bg-white text-black"
-                  : "text-[#a1a4a5] hover:bg-white/[0.08] hover:text-[#f0f0f0]"
+                  : "text-[color:var(--silver)] hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)]"
               }`}
             >
               ZIP
@@ -356,29 +470,30 @@ export default function UploadPage() {
           {...activeRootProps()}
           className={`frost-panel scan-line cursor-pointer rounded-3xl p-10 text-center transition md:p-14 ${
             isDragActive
-              ? "scale-[1.01] border-[#3b9eff] bg-[var(--blue-soft)]"
-              : "hover:border-[var(--frost-strong)] hover:bg-white/[0.045]"
+              ? "scale-[1.01] border-[color:var(--blue)] bg-[var(--blue-soft)]"
+              : "hover:border-[var(--frost-strong)] hover:bg-[color:var(--frost-soft)]"
           } ${isUploading ? "pointer-events-none opacity-50" : ""}`}
         >
           <input {...activeInputProps()} />
-          <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full border border-[var(--frost)] bg-white/[0.04]">
+
+          <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)]">
             {mode === "single" ? (
-              <Upload className="h-6 w-6 text-[#3b9eff]" />
+              <Upload className="h-6 w-6 text-[color:var(--blue)]" />
             ) : (
-              <Package className="h-6 w-6 text-[#ff801f]" />
+              <Package className="h-6 w-6 text-[color:var(--orange)]" />
             )}
           </div>
 
-          <p className="mb-2 text-base font-medium text-[#f0f0f0]">
+          <p className="mb-2 text-base font-medium text-[color:var(--near-white)]">
             {isDragActive
               ? "Drop to upload"
               : mode === "single"
                 ? "Drop images here"
                 : "Drop a ZIP archive here"}
           </p>
-          <p className="text-sm text-[#a1a4a5]">{helperText}</p>
-        </div>
 
+          <p className="text-sm text-[color:var(--silver)]">{helperText}</p>
+        </div>
         {fileRejections.length > 0 && (
           <div className="mt-6 rounded-3xl border border-[var(--red-soft)] bg-[var(--red-soft)] p-4">
             <p className="mb-2 text-sm font-medium text-[#ff9bab]">
@@ -395,17 +510,36 @@ export default function UploadPage() {
         )}
 
         {(isUploading || activeJobs.length > 0) && (
-          <div className="frost-panel mt-8 flex items-center gap-4 rounded-3xl p-4">
-            <Loader2 className="h-5 w-5 animate-spin text-[#3b9eff]" />
-            <div>
-              <p className="text-sm font-medium text-[#f0f0f0]">
-                {isUploading
-                  ? "Uploading"
-                  : `Analyzing ${activeJobs.length} image${
-                      activeJobs.length === 1 ? "" : "s"
-                    }`}
-              </p>
-              <p className="text-xs text-[#a1a4a5]">Indexing updates live.</p>
+          <div className="frost-panel mt-8 rounded-2xl px-4 py-3">
+            <div className="mb-2 flex items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[color:var(--silver)]" />
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--near-white)]">
+                    {progressLabel}
+                  </p>
+                  <p className="truncate text-xs text-[color:var(--silver)]">
+                    {progressDetail}
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 text-xs tabular-nums text-[color:var(--silver)]">
+                {progressPercent}%
+              </span>
+            </div>
+
+            <div
+              aria-label={`${progressLabel} progress`}
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={progressPercent}
+              className="h-1 w-full overflow-hidden rounded-full bg-[color:var(--surface-hover)]"
+              role="progressbar"
+            >
+              <div
+                className="h-full rounded-full bg-[color:var(--near-white)] transition-[width] duration-500 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              />
             </div>
           </div>
         )}
@@ -431,16 +565,17 @@ export default function UploadPage() {
         {uploadedFiles.length > 0 && (
           <div className="page-enter mt-12">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-[#f0f0f0]">
+              <h3 className="text-sm font-medium text-[color:var(--near-white)]">
                 Recent uploads
               </h3>
-              <span className="text-xs text-[#a1a4a5]">
+              <span className="text-xs text-[color:var(--silver)]">
                 {uploadedFiles.length} total
               </span>
             </div>
             <div className="space-y-2">
               {uploadedFiles.map((result) => {
                 const displayStatus = getDisplayStatus(result);
+                const displayStage = getDisplayStage(result);
 
                 return (
                   <div
@@ -456,17 +591,42 @@ export default function UploadPage() {
                       ) : result.processingState === "indexed" ? (
                         <CheckCircle className="h-4 w-4 shrink-0 text-[#7dffc7]" />
                       ) : (
-                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#3b9eff]" />
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[color:var(--blue)]" />
                       )}
 
-                      <p className="min-w-0 truncate text-sm font-medium text-[#f0f0f0]">
-                        {result.filename}
-                      </p>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-[color:var(--near-white)]">
+                          {result.filename}
+                        </p>
+                        {displayStage && (
+                          <p className="truncate text-xs text-[color:var(--silver)]">
+                            {displayStage}
+                          </p>
+                        )}
+                        {result.processingState === "failed" &&
+                          result.error && (
+                            <p className="truncate text-xs text-[#ff9bab]">
+                              {result.error}
+                            </p>
+                          )}
+                      </div>
                     </div>
 
-                    <span className={getStatusClasses(result)}>
-                      {displayStatus}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className={getStatusClasses(result)}>
+                        {displayStatus}
+                      </span>
+
+                      {result.status === "duplicate" &&
+                        result.media_id != null && (
+                          <Link
+                            href={`/gallery?media=${result.media_id}`}
+                            className="text-xs text-[color:var(--blue)] hover:underline"
+                          >
+                            View existing
+                          </Link>
+                        )}
+                    </div>
                   </div>
                 );
               })}
