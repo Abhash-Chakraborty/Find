@@ -62,6 +62,9 @@ jobs:
       if: steps.changes.outputs.backend == 'true'
       run: |
         uv sync --group dev
+    - name: Run Pytest suite
+      if: steps.changes.outputs.backend == 'true'
+      run: uv run pytest tests/ -v
     - name: Lint with Ruff
       if: steps.changes.outputs.backend == 'true'
       run: uv run ruff check .
