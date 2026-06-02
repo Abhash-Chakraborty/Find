@@ -4,6 +4,7 @@ import {
   type InfiniteData,
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import axios from "axios";
@@ -32,8 +33,10 @@ import {
   api,
   deleteImage,
   deleteImagesBulk,
+  type GalleryCounts,
   type GalleryResponse,
   getGallery,
+  getGalleryCounts,
   getImageDetail,
   reprocessImage,
   toggleLike,
@@ -321,6 +324,18 @@ function GalleryPageContent() {
   // automatically resets the infinite query back to page 1.
   const galleryQueryKey = ["gallery-infinite", filter, likedOnly] as const;
 
+  const { data: counts } = useQuery<GalleryCounts>({
+    queryKey: ["gallery-counts", likedOnly],
+    queryFn: () => getGalleryCounts({ liked: likedOnly ? true : undefined }),
+    placeholderData: (previousData) => previousData,
+    refetchInterval: (query) => {
+      const currentCounts = query.state.data;
+      return currentCounts && currentCounts.processing > 0
+        ? 5000
+        : MINIO_URL_REFRESH_INTERVAL_MS;
+    },
+  });
+
   const {
     data,
     isLoading,
@@ -521,6 +536,7 @@ function GalleryPageContent() {
     mutationFn: (mediaId: number) => toggleLike(mediaId),
     onSuccess: ({ id }) => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", id] });
     },
   });
@@ -564,6 +580,7 @@ function GalleryPageContent() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
       queryClient.invalidateQueries({ queryKey: ["clusters"] });
       queryClient.invalidateQueries({ queryKey: ["people"] });
     },
@@ -626,6 +643,7 @@ function GalleryPageContent() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
       queryClient.invalidateQueries({ queryKey: ["clusters"] });
       queryClient.invalidateQueries({ queryKey: ["people"] });
     },
@@ -635,6 +653,7 @@ function GalleryPageContent() {
     mutationFn: (mediaId: number) => reprocessImage(mediaId),
     onSuccess: ({ media_id }) => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", media_id] });
       toast.success("Retry queued — analysis will restart shortly.");
     },
@@ -703,6 +722,7 @@ function GalleryPageContent() {
     },
     onSuccess: (mediaId) => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", mediaId] });
     },
   });
@@ -886,13 +906,24 @@ function GalleryPageContent() {
                 href={buildGalleryHref({ filter: value })}
                 scroll={false}
                 aria-current={filter === value ? "page" : undefined}
-                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                   filter === value
                     ? "bg-white text-black"
                     : "text-[color:var(--silver)] hover:bg-[color:var(--frost-soft)] hover:text-[color:var(--near-white)]"
                 }`}
               >
                 {label}
+                {counts ? (
+                  <span
+                    className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-xs ${
+                      filter === value
+                        ? "bg-black/15 text-black"
+                        : "bg-[color:var(--frost-soft)] text-[color:var(--silver)]"
+                    }`}
+                  >
+                    {counts[value]}
+                  </span>
+                ) : null}
               </Link>
             ))}
           </div>
@@ -1214,6 +1245,7 @@ function GalleryPageContent() {
               galleryQueryKey,
               (old) => removeMediaFromGalleryCache([mediaId], old),
             );
+            queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
             setSelectedIds((current) => {
               const next = new Set(current);
               next.delete(mediaId);

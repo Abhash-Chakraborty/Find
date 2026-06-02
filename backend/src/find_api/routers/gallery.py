@@ -46,6 +46,15 @@ class BulkDeleteResponse(BaseModel):
     failed_count: int
 
 
+class GalleryCountsResponse(BaseModel):
+    """Status counts for the visible gallery tabs."""
+
+    all: int
+    indexed: int
+    processing: int
+    failed: int
+
+
 def build_thumbnail_url(media_id: int) -> str:
     """Return the API route that serves the best available thumbnail."""
     return f"/api/image/{media_id}/thumbnail"
@@ -61,6 +70,23 @@ def normalize_metadata(value):
             return {}
         return parsed if isinstance(parsed, dict) else {}
     return {}
+
+
+@router.get("/gallery/counts", response_model=GalleryCountsResponse)
+def get_gallery_counts(
+    liked: Optional[bool] = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Media).filter(Media.is_hidden.is_(False))
+    if liked is not None:
+        query = query.filter(Media.liked == liked)
+
+    return GalleryCountsResponse(
+        all=query.count(),
+        indexed=query.filter(Media.status == "indexed").count(),
+        processing=query.filter(Media.status == "processing").count(),
+        failed=query.filter(Media.status == "failed").count(),
+    )
 
 
 @router.get("/gallery")

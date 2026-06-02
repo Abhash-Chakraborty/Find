@@ -97,6 +97,13 @@ export interface GalleryResponse {
   limit: number;
 }
 
+export interface GalleryCounts {
+  all: number;
+  indexed: number;
+  processing: number;
+  failed: number;
+}
+
 export interface BulkDeleteResponse {
   message: string;
   deleted_ids: number[];
@@ -270,6 +277,17 @@ export const getGallery = async (
 
   const response = await api.get<GalleryResponse>("/api/gallery", {
     params: queryParams,
+  });
+  return response.data;
+};
+
+export const getGalleryCounts = async (
+  params: { liked?: boolean } = {},
+): Promise<GalleryCounts> => {
+  const response = await api.get<GalleryCounts>("/api/gallery/counts", {
+    params: {
+      liked: params.liked,
+    },
   });
   return response.data;
 };
