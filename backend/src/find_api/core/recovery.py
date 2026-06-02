@@ -99,7 +99,10 @@ def _get_job_status(
     if backend == "sqlite":
         from find_api.core.queue_sqlite import get_job_status
 
-        return get_job_status(job_id)
+        try:
+            return get_job_status(job_id)
+        except Exception:  # noqa: BLE001
+            return None
 
     conn = redis_conn or get_redis_connection()
     try:
