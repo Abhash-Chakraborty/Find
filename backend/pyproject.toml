@@ -57,8 +57,8 @@ where = ["src"]
 
 [dependency-groups]
 dev = [
-  "pytest==8.0.0",
-  "pytest-asyncio==0.23.3",
+  "pytest>=8.2,<9",
+  "pytest-asyncio>=0.24,<1",
   "black==24.1.1",
   "ruff==0.1.14",
 ]
@@ -71,3 +71,7 @@ torchvision = { index = "pytorch-cu121" }
 name = "pytorch-cu121"
 url = "https://download.pytorch.org/whl/cu121"
 explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
