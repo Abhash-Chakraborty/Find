@@ -1,7 +1,6 @@
 import logging
 import os
 import sys
-from typing import Optional 
 
 from alembic import command
 from alembic.config import Config
@@ -16,7 +15,8 @@ from find_api.core.config import settings  # noqa: E402
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def get_vector_dimension(conn: Connection, table: str, column: str) -> Optional[int]:
+
+def get_vector_dimension(conn: Connection, table: str, column: str) -> int | None:
     row = conn.execute(
         text(
             """
@@ -40,10 +40,11 @@ def get_vector_dimension(conn: Connection, table: str, column: str) -> Optional[
     return atttypmod if atttypmod > 0 else None
 
 
-def should_clear_vectors(current_dim: Optional[int], target_dim: int) -> bool:
+def should_clear_vectors(current_dim: int | None, target_dim: int) -> bool:
     if current_dim is None:
         return True
     return current_dim != target_dim
+
 
 def migrate_db() -> None:
     logger.info("Starting database migration...")
@@ -73,7 +74,8 @@ def migrate_db() -> None:
             if should_clear_vectors(media_dim, target_dim):
                 logger.warning(
                     "Clearing media.vector (current=%s, target=%d).",
-                    media_dim, target_dim,
+                    media_dim,
+                    target_dim,
                 )
                 conn.execute(text("UPDATE media SET vector = NULL;"))
             else:
@@ -82,20 +84,24 @@ def migrate_db() -> None:
                 )
 
             conn.execute(
-                text(f"ALTER TABLE media ALTER COLUMN vector TYPE vector({target_dim});")
+                text(
+                    f"ALTER TABLE media ALTER COLUMN vector TYPE vector({target_dim});"
+                )
             )
 
             # 3. clusters.centroid_vector
             cluster_dim = get_vector_dimension(conn, "clusters", "centroid_vector")
             logger.info(
                 "clusters.centroid_vector current=%s  target=%d",
-                cluster_dim, target_dim,
+                cluster_dim,
+                target_dim,
             )
 
             if should_clear_vectors(cluster_dim, target_dim):
                 logger.warning(
                     "Clearing clusters.centroid_vector (current=%s, target=%d).",
-                    cluster_dim, target_dim,
+                    cluster_dim,
+                    target_dim,
                 )
                 conn.execute(text("UPDATE clusters SET centroid_vector = NULL;"))
             else:
@@ -119,11 +125,6 @@ def migrate_db() -> None:
         )
         command.upgrade(cfg, "head")
         logger.info("Alembic migrations applied.")
-
-        cfg = Config(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic.ini")
-        )
-        command.upgrade(cfg, "head")
 
     except Exception as e:
         logger.error(f"Migration failed: {e}")

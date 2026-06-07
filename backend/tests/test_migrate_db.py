@@ -1,13 +1,13 @@
 """Tests for the dimension-check decision logic in migrate_db.
 
-Isolated from PostgreSQL — uses lightweight mocks.
+Isolated from PostgreSQL by using lightweight mocks.
 """
 
+import importlib.util
+import os
+import sys
+import types
 from unittest.mock import MagicMock
-import importlib, sys, os, types
-
-import pytest
-
 
 
 def _load_migrate_db():
@@ -26,6 +26,8 @@ def _load_migrate_db():
         "migrate_db",
         os.path.join(os.path.dirname(__file__), "..", "migrate_db.py"),
     )
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -36,7 +38,6 @@ should_clear_vectors = _mod.should_clear_vectors
 get_vector_dimension = _mod.get_vector_dimension
 
 TARGET = 768
-
 
 
 class TestShouldClearVectors:
@@ -57,7 +58,6 @@ class TestShouldClearVectors:
 
     def test_zero_treated_as_mismatch(self):
         assert should_clear_vectors(0, TARGET) is True
-
 
 
 def _conn(atttypmod):
@@ -100,8 +100,6 @@ class TestGetVectorDimension:
 
     def test_non_default_dim(self):
         assert get_vector_dimension(_conn(1536), "media", "vector") == 1536
-
-
 
 
 class TestIntegration:
