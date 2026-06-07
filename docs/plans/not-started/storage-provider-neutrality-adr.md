@@ -309,29 +309,29 @@ Alias timeline: introduce `STORAGE_BACKEND`, `STORAGE_ENDPOINT`, `STORAGE_ACCESS
 
 ## Configuration Alias Migration Table
 
-The table below maps current `MINIO_*` variables to the proposed
-provider-neutral `STORAGE_*` aliases. Both names will be accepted during the transition period once the migration is implemented.
+The table below maps the current backend storage settings to the proposed
+provider-neutral names. In the implementation follow-up, `STORAGE_*` should be
+the preferred spelling and `MINIO_*` should remain as compatibility aliases
+during the transition.
 
-| Current Variable (`MINIO_*`) | New Alias (`STORAGE_*`)    | Description                                  | Status                  |
-|------------------------------|----------------------------|----------------------------------------------|-------------------------|
-| `MINIO_ENDPOINT`             | `STORAGE_ENDPOINT`         | Hostname / URL of the object storage service | `STORAGE_*` preferred   |
-| `MINIO_ACCESS_KEY`           | `STORAGE_ACCESS_KEY`       | Access key ID / username                     | `STORAGE_*` preferred   |
-| `MINIO_SECRET_KEY`           | `STORAGE_SECRET_KEY`       | Secret access key / password                 | `STORAGE_*` preferred   |
-| `MINIO_BUCKET`               | `STORAGE_BUCKET`           | Default bucket name                          | `STORAGE_*` preferred   |
-| `MINIO_SECURE`               | `STORAGE_SECURE`           | Enforce TLS (`true` / `false`)               | `STORAGE_*` preferred   |
-| `MINIO_PUBLIC_ENDPOINT`      | `STORAGE_PUBLIC_ENDPOINT`  | Publicly accessible base URL for assets      | `STORAGE_*` preferred   |
-| `MINIO_PUBLIC_READ`          | `STORAGE_PUBLIC_READ`      | Whether bucket allows public reads           | `STORAGE_*` preferred   |
-| *(not present)*              | `STORAGE_BACKEND`          | Storage provider type (e.g. `s3`)            | New — no alias needed   |
-| *(not present)*              | `STORAGE_AUTO_CREATE_BUCKET` | Auto-create bucket on startup              | New — no alias needed   |
+| Current backend setting | Preferred provider-neutral setting | Description                                  | Migration note             |
+|-------------------------|------------------------------------|----------------------------------------------|----------------------------|
+| `MINIO_ENDPOINT`        | `STORAGE_ENDPOINT`                 | Hostname / URL of the object storage service | `STORAGE_*` preferred      |
+| `MINIO_ACCESS_KEY`      | `STORAGE_ACCESS_KEY`               | Access key ID / username                     | `STORAGE_*` preferred      |
+| `MINIO_SECRET_KEY`      | `STORAGE_SECRET_KEY`               | Secret access key / password                 | `STORAGE_*` preferred      |
+| `MINIO_BUCKET`          | `STORAGE_BUCKET`                   | Default bucket name                          | `STORAGE_*` preferred      |
+| `MINIO_SECURE`          | `STORAGE_SECURE`                   | Enforce TLS (`true` / `false`)               | `STORAGE_*` preferred      |
+| `MINIO_PUBLIC_ENDPOINT` | `STORAGE_PUBLIC_ENDPOINT`          | Publicly accessible base URL for assets      | `STORAGE_*` preferred      |
+| `MINIO_PUBLIC_READ`     | `STORAGE_PUBLIC_READ`              | Whether bucket allows public reads           | `STORAGE_*` preferred      |
+| *(not present)*         | `STORAGE_BACKEND`                  | Storage provider type (e.g. `s3`)            | New setting; no legacy key |
+| *(not present)*         | `STORAGE_AUTO_CREATE_BUCKET`       | Auto-create bucket on startup                | New setting; no legacy key |
 
-> **Planned backward compatibility:** Once implemented, `MINIO_*` variables will
-> be supported as compatibility aliases during the transition period. When both a
-> `MINIO_*` and its `STORAGE_*` counterpart are set, `STORAGE_*` will take
-> precedence. Until then, only `MINIO_*` variables are active in the current
-> runtime.
-> `MINIO_*` aliases will be removed after 2–3 releases or once RustFS
-> validation completes, whichever comes first. No runtime behavior is
-> changed by this document.
+> **Planned backward compatibility:** This ADR does not change runtime
+> behavior. Until the config migration is implemented, the current backend still
+> reads `MINIO_*` settings. Once implemented, `MINIO_*` names should remain
+> compatibility aliases during the transition period. If both a legacy name and
+> its `STORAGE_*` counterpart are set, `STORAGE_*` should take precedence.
+> Follow the alias timeline above before removing legacy names.
 
 ## Tradeoff Analysis For The Recommended Path
 

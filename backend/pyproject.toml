@@ -36,7 +36,7 @@ dependencies = [
 ml = [
   "torch==2.8.0",
   "torchvision==0.23.0",
-  "transformers>=5.0.0rc3,<6",
+  "transformers>=4.40,<5",
   "open-clip-torch>=2.24.0",
   "opencv-python-headless==4.9.0.80",
   "ultralytics>=8.2.0",

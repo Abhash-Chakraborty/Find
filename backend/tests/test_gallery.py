@@ -8,7 +8,15 @@ from find_api.models.cluster import Cluster
 from find_api.models.media import Media
 
 
-def _seed(db, *, filename, status, liked=False, metadata_json=None):
+def _seed(
+    db,
+    *,
+    filename,
+    status,
+    liked=False,
+    metadata_json=None,
+    is_hidden=False,
+):
     """Insert a Media row into the test database."""
     media = Media(
         file_hash=hashlib.sha256(filename.encode()).hexdigest(),
@@ -18,6 +26,7 @@ def _seed(db, *, filename, status, liked=False, metadata_json=None):
         file_size=1024,
         status=status,
         liked=liked,
+        is_hidden=is_hidden,
         width=800,
         height=600,
         thumbnail_key=f"thumbnails/test/{filename}.webp",
@@ -254,6 +263,38 @@ class TestGalleryResponseShape:
 
 class TestGalleryFiltering:
     """Status and liked filtering."""
+
+    def test_gallery_counts_excludes_hidden_media(self, client, db):
+        _seed(db, filename="indexed.jpg", status="indexed")
+        _seed(db, filename="processing.jpg", status="processing")
+        _seed(db, filename="failed.jpg", status="failed")
+        _seed(db, filename="pending.jpg", status="pending")
+        _seed(db, filename="hidden.jpg", status="indexed", is_hidden=True)
+
+        response = client.get("/api/gallery/counts")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "all": 4,
+            "indexed": 1,
+            "processing": 1,
+            "failed": 1,
+        }
+
+    def test_gallery_counts_respects_liked_filter(self, client, db):
+        _seed(db, filename="liked-indexed.jpg", status="indexed", liked=True)
+        _seed(db, filename="liked-failed.jpg", status="failed", liked=True)
+        _seed(db, filename="unliked-indexed.jpg", status="indexed", liked=False)
+
+        response = client.get("/api/gallery/counts", params={"liked": "true"})
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "all": 2,
+            "indexed": 1,
+            "processing": 0,
+            "failed": 1,
+        }
 
     def test_filter_by_status(self, client, db):
         _seed(db, filename="a.jpg", status="pending")

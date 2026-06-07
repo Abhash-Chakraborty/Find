@@ -18,6 +18,8 @@ import {
   type PreviewMedia,
 } from "@/components/image-preview-modal";
 import {
+  type ClusterDetail,
+  type ClustersResponse,
   extractErrorMessage,
   getClusterDetail,
   getClusters,
@@ -151,8 +153,40 @@ export default function ClustersPage() {
   const updateClusterMutation = useMutation({
     mutationFn: ({ clusterId, label }: { clusterId: number; label: string }) =>
       updateCluster(clusterId, { label }),
-    onSuccess: (_cluster, variables) => {
+    onSuccess: (cluster, variables) => {
+      const nextLabel = cluster.label?.trim() || null;
+
       toast.success("Cluster name updated");
+      setClusterLabelDraft(nextLabel ?? "");
+      queryClient.setQueryData<ClustersResponse>(["clusters"], (current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          clusters: current.clusters.map((item) =>
+            item.id === variables.clusterId
+              ? {
+                  ...item,
+                  label: nextLabel,
+                  description: cluster.description,
+                }
+              : item,
+          ),
+        };
+      });
+      queryClient.setQueryData<ClusterDetail>(
+        ["cluster-detail", variables.clusterId],
+        (current) =>
+          current
+            ? {
+                ...current,
+                label: nextLabel,
+                description: cluster.description,
+              }
+            : current,
+      );
       queryClient.invalidateQueries({ queryKey: ["clusters"] });
       queryClient.invalidateQueries({
         queryKey: ["cluster-detail", variables.clusterId],
@@ -484,8 +518,14 @@ export default function ClustersPage() {
 
             <div className="border-b border-[var(--frost)] px-6 py-5">
               <h2 className="text-xl font-medium text-[color:var(--near-white)]">
-                Cluster {selectedClusterId}
+                {selectedClusterQuery.data?.label?.trim() ||
+                  `Cluster ${selectedClusterId}`}
               </h2>
+              {selectedClusterQuery.data?.label?.trim() && (
+                <p className="mt-1 text-xs uppercase text-[color:var(--muted)]">
+                  Cluster {selectedClusterId}
+                </p>
+              )}
               <p className="mt-1 text-sm text-[color:var(--silver)]">
                 Images grouped by visual and semantic similarity.
               </p>

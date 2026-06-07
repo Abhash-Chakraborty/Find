@@ -15,6 +15,7 @@ from find_api.core.storage import get_file, upload_thumbnail
 from find_api.core.model_manager import get_model_manager
 from find_api.core.config import settings
 from find_api.models.media import Media
+from find_api.services.query_cache import invalidate_query_cache
 from find_api.utils.exif import extract_exif_data
 from find_api.utils.errors import sanitize_error
 
@@ -30,6 +31,7 @@ except Exception as e:
     logger.error(f"Failed to start model cleanup thread in worker: {e}")
 
 FACE_CLUSTER_NAME_MATCH_THRESHOLD = 0.72
+ANALYSIS_MODEL_NAMES = ("yolo", "florence-2", "paddleocr", "siglip", "insightface")
 
 
 def cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
@@ -79,6 +81,7 @@ def generate_thumbnail_for_media(media_id: int):
         for key, value in thumbnail_metadata.items():
             setattr(media, key, value)
         db.commit()
+        invalidate_query_cache()
         return {"status": "success", "media_id": media_id}
     except Exception as exc:  # noqa: BLE001
         db.rollback()
@@ -88,7 +91,7 @@ def generate_thumbnail_for_media(media_id: int):
         db.close()
 
 
-def analyze_image(media_id: int):
+def analyze_image(media_id: int, clear_model_failures: bool = False):
     """
     Main worker job to analyze an uploaded image
     """
@@ -105,6 +108,9 @@ def analyze_image(media_id: int):
     metadata = None
 
     try:
+        if clear_model_failures:
+            get_model_manager().clear_model_failures(ANALYSIS_MODEL_NAMES)
+
         set_stage(job, "loading image")
 
         media = db.query(Media).filter(Media.id == media_id).first()
@@ -168,6 +174,7 @@ def analyze_image(media_id: int):
         media.processed_at = datetime.utcnow()
 
         db.commit()
+        invalidate_query_cache()
 
         # near-duplicate detection
         try:
@@ -336,6 +343,7 @@ def cluster_images():
         )
 
         db.commit()  # ← single commit: delete old + insert new, atomically
+        invalidate_query_cache()
 
         result = {
             **info,

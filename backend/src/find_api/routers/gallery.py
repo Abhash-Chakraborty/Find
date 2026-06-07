@@ -18,6 +18,7 @@ from find_api.core.queue import get_task_queue
 from find_api.core.storage import get_file_url, delete_file
 from find_api.models.media import Media
 from find_api.models.cluster import Cluster
+from find_api.services.query_cache import invalidate_query_cache
 from find_api.workers.jobs import analyze_image, generate_thumbnail_for_media
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,15 @@ class BulkDeleteResponse(BaseModel):
     failed_count: int
 
 
+class GalleryCountsResponse(BaseModel):
+    """Status counts for the visible gallery tabs."""
+
+    all: int
+    indexed: int
+    processing: int
+    failed: int
+
+
 def build_thumbnail_url(media_id: int) -> str:
     """Return the API route that serves the best available thumbnail."""
     return f"/api/image/{media_id}/thumbnail"
@@ -60,6 +70,23 @@ def normalize_metadata(value):
             return {}
         return parsed if isinstance(parsed, dict) else {}
     return {}
+
+
+@router.get("/gallery/counts", response_model=GalleryCountsResponse)
+def get_gallery_counts(
+    liked: Optional[bool] = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Media).filter(Media.is_hidden.is_(False))
+    if liked is not None:
+        query = query.filter(Media.liked == liked)
+
+    return GalleryCountsResponse(
+        all=query.count(),
+        indexed=query.filter(Media.status == "indexed").count(),
+        processing=query.filter(Media.status == "processing").count(),
+        failed=query.filter(Media.status == "failed").count(),
+    )
 
 
 @router.get("/gallery")
@@ -294,6 +321,7 @@ def toggle_like(media_id: int, db: Session = Depends(get_db)):
 
     media.liked = not media.liked
     db.commit()
+    invalidate_query_cache()
     db.refresh(media)
 
     return {"id": media.id, "liked": media.liked}
@@ -334,10 +362,14 @@ def reprocess_image(media_id: int, db: Session = Depends(get_db)):
 
     try:
         job = get_task_queue().enqueue(
-            analyze_image, media.id, job_timeout=settings.WORKER_TIMEOUT
+            analyze_image,
+            media.id,
+            True,
+            job_timeout=settings.WORKER_TIMEOUT,
         )
         media.analysis_job_id = job.id
         db.commit()
+        invalidate_query_cache()
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         raise HTTPException(
@@ -403,6 +435,7 @@ def delete_image(media_id: int, db: Session = Depends(get_db)):
     _remove_media_ids_from_clusters(db, {media_id})
 
     db.commit()
+    invalidate_query_cache()
 
     return {"message": "Image deleted", "id": media_id}
 
@@ -443,6 +476,8 @@ def bulk_delete_images(
         _remove_media_ids_from_clusters(db, set(deleted_ids))
 
     db.commit()
+    if deleted_ids:
+        invalidate_query_cache()
 
     return {
         "message": "Bulk delete completed",

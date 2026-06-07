@@ -73,6 +73,22 @@ def test_clearing_model_failure_allows_retry(manager):
     assert calls["count"] == 2
 
 
+def test_clearing_multiple_model_failures_allows_retry(manager):
+    def broken_loader():
+        raise RuntimeError("load failed")
+
+    with pytest.raises(ModelUnavailableError):
+        manager.get_model("caption-model", broken_loader)
+    with pytest.raises(ModelUnavailableError):
+        manager.get_model("embedding-model", broken_loader)
+
+    manager.clear_model_failures(("caption-model", "embedding-model"))
+
+    assert "caption-model" not in manager.unavailable_models
+    assert "embedding-model" not in manager.unavailable_models
+    assert manager.failed_loads == {}
+
+
 def test_config_key_change_allows_retry(manager):
     calls = {"count": 0}
 

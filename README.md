@@ -9,14 +9,18 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/gssoc-2026-banner.svg" alt="Find x GSSoC 2026">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/gssoc-2026-banner-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/gssoc-2026-banner-light.svg">
+    <img alt="Find x GSSoC 2026" src="docs/assets/gssoc-2026-banner-dark.svg">
+  </picture>
 </p>
 
 Find is a local-first AI image intelligence platform for uploading, indexing, searching, and clustering images on your own machine.
 
 All image processing, vector generation, and search stay inside your local stack.
 
-See the documentation index in [`docs/index.md`](./docs/index.md), the mobile direction in [`docs/plans/not-started/mobile-strategy.md`](./docs/plans/not-started/mobile-strategy.md), the desktop framework tradeoff analysis in [`docs/plans/partial/desktop-tauri-vs-electron-adr.md`](./docs/plans/partial/desktop-tauri-vs-electron-adr.md), and the broader installable local-first roadmap in [`docs/plans/partial/local-first-roadmap.md`](./docs/plans/partial/local-first-roadmap.md).
+See the documentation index in [`docs/index.md`](./docs/index.md), the mobile direction in [`docs/plans/not-started/mobile-strategy.md`](./docs/plans/not-started/mobile-strategy.md), the bulk rename and metadata editing design in [`docs/plans/not-started/bulk-rename-metadata-design.md`](./docs/plans/not-started/bulk-rename-metadata-design.md), and the broader installable local-first roadmap in [`docs/plans/partial/local-first-roadmap.md`](./docs/plans/partial/local-first-roadmap.md).
 
 ## What it does
 
@@ -34,7 +38,11 @@ See the documentation index in [`docs/index.md`](./docs/index.md), the mobile di
 
 ## Architecture
 
-![Architecture](docs/assets/architecture.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/architecture-light.png">
+  <img alt="Architecture" src="docs/assets/architecture-dark.png">
+</picture>
 
 ## Screenshots
 
@@ -121,13 +129,13 @@ docker compose -f docker-compose.light.yml up --build
 
 `ML_MODE=mock` is set automatically. The worker skips all model loading and instead records:
 
-| Field | What you get |
-|---|---|
-| Caption | A fixed placeholder string (e.g. `"mock caption"`) |
-| Detected objects | An empty list or a static stub |
-| OCR text | An empty string |
-| Embedding vector | A zero-filled or seeded deterministic vector of the correct dimension |
-| EXIF / dimensions | **Real values** extracted from the actual image file |
+| Field             | What you get                                                          |
+| ----------------- | --------------------------------------------------------------------- |
+| Caption           | A fixed placeholder string (e.g. `"mock caption"`)                    |
+| Detected objects  | An empty list or a static stub                                        |
+| OCR text          | An empty string                                                       |
+| Embedding vector  | A zero-filled or seeded deterministic vector of the correct dimension |
+| EXIF / dimensions | **Real values** extracted from the actual image file                  |
 
 Because mock vectors have no semantic content, search results are meaningless — results may appear but their ranking is arbitrary and does not reflect real image similarity.
 
@@ -160,19 +168,18 @@ The worker loads Florence-2 (captioning), YOLOv10 (object detection), PaddleOCR 
 
 ### Quick reference
 
-| Task | Use light stack? | Use full stack? |
-|---|---|---|
-| UI fix or new component | ✅ Yes | Not needed |
-| API endpoint change | ✅ Yes | Not needed |
-| Upload / gallery / clusters flow | ✅ Yes | Not needed |
-| Docs / CI / tooling | ✅ Yes | Not needed |
-| Caption looks wrong | ❌ No | ✅ Required |
-| Search returns bad results | ❌ No | ✅ Required |
-| OCR missed text | ❌ No | ✅ Required |
-| ML pipeline performance | ❌ No | ✅ Required |
+| Task                             | Use light stack? | Use full stack? |
+| -------------------------------- | ---------------- | --------------- |
+| UI fix or new component          | ✅ Yes           | Not needed      |
+| API endpoint change              | ✅ Yes           | Not needed      |
+| Upload / gallery / clusters flow | ✅ Yes           | Not needed      |
+| Docs / CI / tooling              | ✅ Yes           | Not needed      |
+| Caption looks wrong              | ❌ No            | ✅ Required     |
+| Search returns bad results       | ❌ No            | ✅ Required     |
+| OCR missed text                  | ❌ No            | ✅ Required     |
+| ML pipeline performance          | ❌ No            | ✅ Required     |
 
 First run of the full stack downloads Florence-2, SigLIP, PaddleOCR, and YOLO weights (several GB). Models are cached in the `model_cache` Docker volume and reused on subsequent runs.
-
 
 ### Option C: local development without Docker
 
@@ -294,12 +301,12 @@ Repeated clustering attempts without adding or reindexing images are unlikely to
 
 ### Worker and clustering variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `WORKER_TIMEOUT` | `600` | Seconds before RQ kills a stalled job. Raise this when processing large batches or running real ML inference; the default is sufficient for mock mode. |
-| `MIN_CLUSTER_SIZE` | `2` | Minimum number of images HDBSCAN needs to form a cluster. Lower values produce more, smaller clusters; higher values produce fewer, broader ones. Tune after indexing a representative sample. |
-| `MIN_SAMPLES` | `1` | Controls how conservative HDBSCAN is about noise. Higher values cause more images to be labelled unclustered (`-1`). Keep at `1` for small libraries. |
-| `CLUSTERING_BACKEND` | `auto` | Clustering algorithm to use. `hdbscan` is the default and works well for variable-density image sets. Switch only if you are experimenting with an alternative backend. |
+| Variable             | Default | Description                                                                                                                                                                                    |
+| -------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WORKER_TIMEOUT`     | `600`   | Seconds before RQ kills a stalled job. Raise this when processing large batches or running real ML inference; the default is sufficient for mock mode.                                         |
+| `MIN_CLUSTER_SIZE`   | `2`     | Minimum number of images HDBSCAN needs to form a cluster. Lower values produce more, smaller clusters; higher values produce fewer, broader ones. Tune after indexing a representative sample. |
+| `MIN_SAMPLES`        | `1`     | Controls how conservative HDBSCAN is about noise. Higher values cause more images to be labelled unclustered (`-1`). Keep at `1` for small libraries.                                          |
+| `CLUSTERING_BACKEND` | `auto`  | Clustering algorithm to use. `hdbscan` is the default and works well for variable-density image sets. Switch only if you are experimenting with an alternative backend.                        |
 
 These only affect the worker and the `/api/cluster/run` path. Frontend and API behaviour is unchanged by them.
 
@@ -375,7 +382,11 @@ docker compose -f docker-compose.light.yml up --build
 
 ## Contribution Workflow
 
-![Contribution Workflow](docs/assets/contribution.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/contribution-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/contribution-light.png">
+  <img alt="Contribution Workflow" src="docs/assets/contribution-dark.png">
+</picture>
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for full details.
 Labels: [`good first issue`](https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue) · [`level:beginner`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Abeginner%22) · [`level:intermediate`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Aintermediate%22) · [`level:advanced`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Aadvanced%22) · [`level:critical`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Acritical%22) · [`help wanted`](https://github.com/Abhash-Chakraborty/Find/labels/help%20wanted)
