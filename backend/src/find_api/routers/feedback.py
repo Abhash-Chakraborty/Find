@@ -11,6 +11,7 @@ from find_api.models.feedback import PersonFeedback, GeneralFeedback
 from find_api.models.person import Person
 from find_api.models.face import Face
 from find_api.models.media import Media
+from find_api.core.queue import enqueue_feedback_ranking_job
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["feedback"])
@@ -369,6 +370,16 @@ def rate_search_result(
         db.add(feedback)
         db.commit()
         db.refresh(feedback)
+
+        try:
+            enqueue_feedback_ranking_job(
+                reason=f"feedback:{body.media_id}"
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to queue feedback ranking update: %s",
+                exc,
+            )
 
         logger.info(
             f"Search rating recorded for media {body.media_id}: {body.rating} stars"
