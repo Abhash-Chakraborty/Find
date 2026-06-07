@@ -62,7 +62,11 @@ jobs:
       if: steps.changes.outputs.backend == 'true'
       run: |
         uv sync --group dev
-    - name: Run Pytest suite
+    - name: Backend import smoke check
+      if: steps.changes.outputs.backend == 'true'
+      run: ML_MODE=mock uv run python -c "from find_api.main import app; print('smoke OK:', app.title)"
+
+    - name: Run backend pytest suite
       if: steps.changes.outputs.backend == 'true'
       run: uv run pytest tests/ -v
     - name: Lint with Ruff
