@@ -37,8 +37,8 @@ body:
     attributes:
       label: Suggested level
       options:
-        - level 1
-        - level 2
-        - level 3
+        - level:beginner
+        - level:intermediate
+        - level:advanced
     validations:
       required: true
