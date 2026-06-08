@@ -1,33 +1,132 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import {
+  createTeamInstance,
+  joinTeamInstance,
+  getPendingInstanceRequests,
+  getInstanceDirectory,
+  processInstanceRequest,
+  extractErrorMessage,
+  type JoinRequest,
+  type DirectoryMember
+} from "@/lib/api";
 
+/**
+ * Defines valid structural UI perspectives available within the sharing dashboard.
+ */
 type AccountViewMode = "loading" | "no-instance-view" | "request-submitted" | "admin-dashboard" | "error";
 
+/**
+ * InstanceManagementPage Component
+ * Provides an administrative hub for users to establish a small-team shared space
+ * or request entry into an existing instance via API.
+ */
 export default function InstanceManagementPage() {
   const [currentView, setCurrentView] = useState<AccountViewMode>("no-instance-view");
   const [activeFormTab, setActiveFormTab] = useState<"join" | "create">("join");
+  const [errorMessage, setErrorMessage] = useState("");
 
+  // Form states
   const [inviteToken, setInviteToken] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [instanceTitle, setInstanceTitle] = useState("");
 
-  const [pendingRequests, setPendingRequests] = useState([
-    { id: "1", user: "dev_alpha", contact: "alpha@team.local" },
-    { id: "2", user: "engineer_beta", contact: "beta@team.local" },
-  ]);
-  const [activeDirectory, setActiveDirectory] = useState([
-    { id: "admin", user: "System Administrator (You)", assignment: "Owner" },
-  ]);
+  // Live Backend lists
+  const [pendingRequests, setPendingRequests] = useState<JoinRequest[]>([]);
+  const [activeDirectory, setActiveDirectory] = useState<DirectoryMember[]>([]);
 
-  const triggerApproval = (id: string, user: string) => {
-    setPendingRequests(current => current.filter(item => item.id !== id));
-    setActiveDirectory(current => [...current, { id, user, assignment: "Member" }]);
+  // Periodically fetch queue details if user enters administration dashboard view
+  useEffect(() => {
+    if (currentView === "admin-dashboard") {
+      let isCancelled = false;
+
+      const syncDashboardData = async () => {
+        try {
+          const [requests, directory] = await Promise.all([
+            getPendingInstanceRequests(),
+            getInstanceDirectory(),
+          ]);
+          if (!isCancelled) {
+            setPendingRequests(requests);
+            setActiveDirectory(directory);
+          }
+        } catch (err) {
+          if (!isCancelled) {
+            setErrorMessage(extractErrorMessage(err, "Failed to load dashboard sync directories."));
+            setCurrentView("error");
+          }
+        }
+      };
+
+      syncDashboardData();
+      const interval = setInterval(syncDashboardData, 10000); // poll every 10s
+
+      return () => {
+        isCancelled = true;
+        clearInterval(interval);
+      };
+    }
+  }, [currentView]);
+
+  /**
+   * Dispatches an instance host creation request to the API configuration architecture.
+   */
+  const handleCreateInstance = async () => {
+    if (!instanceTitle.trim()) return;
+    setCurrentView("loading");
+    try {
+      await createTeamInstance(instanceTitle);
+      setCurrentView("admin-dashboard");
+    } catch (err) {
+      setErrorMessage(extractErrorMessage(err, "Could not provision an operational host configuration registry."));
+      setCurrentView("error");
+    }
   };
 
-  const triggerRejection = (id: string) => {
-    setPendingRequests(current => current.filter(item => item.id !== id));
+  /**
+   * Dispatches a connect verification handshake to join an external active sharing space.
+   */
+  const handleJoinInstance = async () => {
+    if (!inviteToken.trim() || !username.trim() || !password.trim()) return;
+    setCurrentView("loading");
+    try {
+      await joinTeamInstance({ token: inviteToken, user: username, pass: password });
+      setCurrentView("request-submitted");
+    } catch (err) {
+      setErrorMessage(extractErrorMessage(err, "The remote system rejected the client access parameters."));
+      setCurrentView("error");
+    }
+  };
+
+  /**
+   * Approves a pending entry request through live API and updates local view data.
+   * @param id - Unique identifier for the pending application record.
+   */
+  const triggerApproval = async (id: string) => {
+    try {
+      await processInstanceRequest(id, "approve");
+      setPendingRequests(current => current.filter(item => item.id !== id));
+      // Trigger refresh to update directories safely
+      const freshDirectory = await getInstanceDirectory();
+      setActiveDirectory(freshDirectory);
+    } catch (err) {
+      alert(extractErrorMessage(err, "Unable to authorize item selection adjustments."));
+    }
+  };
+
+  /**
+   * Rejects and discards an entry request on the active service instance.
+   * @param id - Unique identifier for the pending application record.
+   */
+  const triggerRejection = async (id: string) => {
+    try {
+      await processInstanceRequest(id, "reject");
+      setPendingRequests(current => current.filter(item => item.id !== id));
+    } catch (err) {
+      alert(extractErrorMessage(err, "Unable to reject specified connection index ticket."));
+    }
   };
 
   return (
@@ -51,14 +150,14 @@ export default function InstanceManagementPage() {
       {currentView === "loading" && (
         <div className="flex items-center justify-center py-12 gap-3">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-          <span className="text-sm text-zinc-400">Querying platform cluster instance records...</span>
+          <span className="text-sm text-zinc-400">Querying platform active instance records...</span>
         </div>
       )}
 
       {currentView === "error" && (
-        <div className="p-4 border rounded-xl border-red-200 bg-red-50 text-red-900 dark:border-red-950/20 dark:text-red-200 dark:border-red-900/50 text-sm">
+        <div className="p-4 border rounded-xl border-red-200 bg-red-50 text-red-900 dark:bg-red-950/20 dark:text-red-200 dark:border-red-900/50 text-sm">
           <p className="font-semibold">Contextual Authorization Error</p>
-          <p className="text-xs mt-1">An illegal session boundary handshake was encountered. Please log back into the client gateway.</p>
+          <p className="text-xs mt-1 text-red-700 dark:text-red-300">{errorMessage}</p>
           <button onClick={() => setCurrentView("no-instance-view")} className="mt-3 px-3 py-1 bg-red-600 text-white rounded text-xs">Return to Panel</button>
         </div>
       )}
@@ -110,7 +209,7 @@ export default function InstanceManagementPage() {
                 />
               </div>
               <button 
-                onClick={() => setCurrentView("request-submitted")}
+                onClick={handleJoinInstance}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-sm w-full transition-colors"
               >
                 Dispatch Connect Request
@@ -119,7 +218,7 @@ export default function InstanceManagementPage() {
           ) : (
             <div className="space-y-4 max-w-md p-6 border rounded-2xl border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/20">
               <div>
-                <h3 className="text-lg font-medium">Deploy Cluster Master</h3>
+                <h3 className="text-lg font-medium">Deploy Instance Host</h3>
                 <p className="text-xs text-zinc-400">Configure decentralized sharing boundaries explicitly.</p>
               </div>
               <input 
@@ -130,7 +229,7 @@ export default function InstanceManagementPage() {
                 className="w-full p-2 text-sm border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700" 
               />
               <button 
-                onClick={() => setCurrentView("admin-dashboard")}
+                onClick={handleCreateInstance}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-medium text-sm w-full transition-colors"
               >
                 Provision Instance
@@ -145,9 +244,9 @@ export default function InstanceManagementPage() {
           <div className="text-3xl mb-3 animate-pulse">📡</div>
           <h3 className="text-xl font-bold">Registration Broadcasted</h3>
           <p className="text-sm mt-2 text-zinc-500 dark:text-zinc-400 leading-relaxed">
-            Your secure request token has been buffered. Standby until the designated instance admin processes your access application pipeline.
+            Your secure request token has been buffered. Standby until the designated instance admin processes your access application setup.
           </p>
-          <button onClick={() => setCurrentView("no-instance-view")} className="mt-5 text-xs text-blue-500 hover:underline">Cancel Gateway Request</button>
+          <button onClick={() => setCurrentView("no-instance-view")} className="mt-5 text-xs text-blue-500 hover:underline">Cancel Request</button>
         </div>
       )}
 
@@ -170,7 +269,7 @@ export default function InstanceManagementPage() {
                     </div>
                     <div className="flex gap-2">
                       <button 
-                        onClick={() => triggerApproval(item.id, item.user)}
+                        onClick={() => triggerApproval(item.id)}
                         className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md transition-colors"
                       >
                         Approve
@@ -200,7 +299,7 @@ export default function InstanceManagementPage() {
                 </div>
               ))}
             </div>
-            <button onClick={() => setCurrentView("no-instance-view")} className="mt-8 text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition-colors">
+            <button onClick={() => setCurrentView("no-instance-view")} className="mt-8 text-xs text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 flex items-center gap-1 transition-colors">
               ← Disconnect Dashboard Session
             </button>
           </div>

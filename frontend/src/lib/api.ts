@@ -668,3 +668,62 @@ export const getPersonFeedback = async (personId?: number) => {
   const response = await api.get("/api/people/feedback", { params });
   return response.data;
 };
+// ─── Shared Instance API Definitions ─────────────────────────────────────────
+
+export interface InstanceInfo {
+  id: string;
+  title: string;
+  owner: string;
+  created_at: string;
+}
+
+export interface JoinRequest {
+  id: string;
+  user: string;
+  contact: string;
+  status: "pending" | "approved" | "rejected";
+}
+
+export interface DirectoryMember {
+  id: string;
+  user: string;
+  assignment: "Owner" | "Member";
+}
+
+export const createTeamInstance = async (title: string): Promise<InstanceInfo> => {
+  const response = await api.post<InstanceInfo>("/api/instance/create", { title });
+  return response.data;
+};
+
+export const joinTeamInstance = async (payload: {
+  token: string;
+  user: string;
+  pass: string;
+}): Promise<{ message: string; status: string }> => {
+  const response = await api.post<{ message: string; status: string }>("/api/instance/join", {
+    invite_token: payload.token,
+    username: payload.user,
+    security_key: payload.pass,
+  });
+  return response.data;
+};
+
+export const getPendingInstanceRequests = async (): Promise<JoinRequest[]> => {
+  const response = await api.get<JoinRequest[]>("/api/instance/requests");
+  return response.data;
+};
+
+export const getInstanceDirectory = async (): Promise<DirectoryMember[]> => {
+  const response = await api.get<DirectoryMember[]>("/api/instance/directory");
+  return response.data;
+};
+
+export const processInstanceRequest = async (
+  requestId: string,
+  action: "approve" | "reject"
+): Promise<{ success: boolean }> => {
+  const response = await api.post<{ success: boolean }>(`/api/instance/requests/${requestId}/process`, {
+    action,
+  });
+  return response.data;
+};
