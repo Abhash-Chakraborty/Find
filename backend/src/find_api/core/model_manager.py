@@ -372,6 +372,13 @@ class ModelManager:
             self._clear_model_failure_locked(name)
             self.publish_status()
 
+    def clear_model_failures(self, names: list[str] | tuple[str, ...]) -> None:
+        """Allow multiple known-unavailable models to be retried."""
+        with self._lock:
+            for name in names:
+                self._clear_model_failure_locked(name)
+            self.publish_status()
+
     def clear(self) -> None:
         """Clear cached models and failures for tests or controlled reloads."""
         self.reset_for_tests()

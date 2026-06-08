@@ -4,6 +4,7 @@ import {
   type InfiniteData,
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import axios from "axios";
@@ -13,7 +14,6 @@ import {
   Eye,
   Heart,
   ImageOff,
-  Loader2,
   Lock,
   RotateCcw,
   Trash2,
@@ -33,8 +33,10 @@ import {
   api,
   deleteImage,
   deleteImagesBulk,
+  type GalleryCounts,
   type GalleryResponse,
   getGallery,
+  getGalleryCounts,
   getImageDetail,
   reprocessImage,
   toggleLike,
@@ -47,6 +49,13 @@ import {
 import { vaultStore } from "@/store/vaultStore";
 
 const GALLERY_LIMIT = 24;
+const GALLERY_SKELETON_COUNT = GALLERY_LIMIT;
+const GALLERY_CARD_ACTION_SKELETON_KEYS = [
+  "like",
+  "download",
+  "retry",
+  "delete",
+];
 
 type GalleryFilter = "all" | "indexed" | "processing" | "failed";
 
@@ -165,6 +174,126 @@ const getStatusParamFromFilter = (filter: GalleryFilter): string | null => {
   return filter === "indexed" ? "completed" : filter;
 };
 
+type GalleryThumbnailProps = {
+  src: string;
+  alt: string;
+};
+
+type GallerySkeletonGridProps = {
+  count: number;
+  label?: string;
+};
+
+function buildSkeletonKeys(prefix: string, count: number) {
+  return Array.from({ length: count }, (_, index) => `${prefix}-${index + 1}`);
+}
+
+/**
+ * Keeps the thumbnail area stable when no preview URL exists or an image fails to load.
+ */
+function GalleryImageFallback() {
+  return (
+    <div
+      className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[color:var(--surface-soft)] text-[color:var(--near-white)]"
+      role="img"
+      aria-label="No preview available"
+    >
+      <ImageOff className="h-7 w-7" />
+      <span className="text-xs">No preview</span>
+    </div>
+  );
+}
+
+/**
+ * Shows a lightweight, theme-aware skeleton while each thumbnail image loads.
+ */
+function GalleryThumbnail({ src, alt }: GalleryThumbnailProps) {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError) {
+    return <GalleryImageFallback />;
+  }
+
+  return (
+    <>
+      {!isLoaded && (
+        <div
+          className="absolute inset-0 animate-pulse bg-[color:var(--surface-soft)]"
+          aria-hidden="true"
+        />
+      )}
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        className={`object-cover transition duration-500 group-hover:scale-[1.035] ${
+          isLoaded ? "opacity-100" : "opacity-0"
+        }`}
+        sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 16vw"
+        unoptimized
+        onLoad={() => setIsLoaded(true)}
+        onError={() => {
+          setIsLoaded(true);
+          setHasError(true);
+        }}
+      />
+    </>
+  );
+}
+
+/**
+ * Matches the real gallery card dimensions so content does not jump when data arrives.
+ */
+function GalleryCardSkeleton() {
+  return (
+    <article
+      className="frost-panel overflow-hidden rounded-2xl"
+      aria-hidden="true"
+    >
+      <div className="relative aspect-square w-full overflow-hidden bg-[color:var(--surface-soft)]">
+        <div className="absolute inset-0 animate-pulse bg-[color:var(--surface-soft)]" />
+        <div className="absolute inset-x-6 top-1/2 h-2 -translate-y-1/2 rounded-full bg-[color:var(--frost-soft)]" />
+        <div className="absolute bottom-3 right-3 h-5 w-16 rounded-full bg-[color:var(--frost-soft)]" />
+      </div>
+
+      <div className="space-y-3 p-3">
+        <div className="h-3 w-3/4 animate-pulse rounded-full bg-[color:var(--frost-soft)]" />
+        <div className="flex items-center gap-2">
+          {GALLERY_CARD_ACTION_SKELETON_KEYS.map((action) => (
+            <div
+              key={action}
+              className="h-8 w-8 animate-pulse rounded-full bg-[color:var(--frost-soft)]"
+            />
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+/**
+ * Renders lightweight loading placeholders for the gallery grid.
+ */
+function GallerySkeletonGrid({
+  count,
+  label = "Loading gallery images…",
+}: GallerySkeletonGridProps) {
+  return (
+    <div
+      className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
+      role="status"
+      aria-live="polite"
+      aria-label={label}
+    >
+      <span className="sr-only">{label}</span>
+      {buildSkeletonKeys("gallery-skeleton", count).map((skeletonKey) => (
+        <GalleryCardSkeleton key={skeletonKey} />
+      ))}
+    </div>
+  );
+}
+
 /**
  * Core gallery component managing infinite scrolling, filtering, and media interactions.
  * Uses React Query's useInfiniteQuery for paginated data fetching and client-side caching.
@@ -194,6 +323,18 @@ function GalleryPageContent() {
   // The query key includes filter + likedOnly so any URL filter change
   // automatically resets the infinite query back to page 1.
   const galleryQueryKey = ["gallery-infinite", filter, likedOnly] as const;
+
+  const { data: counts } = useQuery<GalleryCounts>({
+    queryKey: ["gallery-counts", likedOnly],
+    queryFn: () => getGalleryCounts({ liked: likedOnly ? true : undefined }),
+    placeholderData: (previousData) => previousData,
+    refetchInterval: (query) => {
+      const currentCounts = query.state.data;
+      return currentCounts && currentCounts.processing > 0
+        ? 5000
+        : MINIO_URL_REFRESH_INTERVAL_MS;
+    },
+  });
 
   const {
     data,
@@ -235,6 +376,18 @@ function GalleryPageContent() {
   );
 
   const total = data?.pages[0]?.total ?? 0;
+  const isInitialGalleryLoading = isLoading && allItems.length === 0;
+  const loadingMoreSkeletonCount = useMemo(() => {
+    if (!isFetchingNextPage || allItems.length === 0) {
+      return 0;
+    }
+
+    if (total > allItems.length) {
+      return Math.min(GALLERY_SKELETON_COUNT, total - allItems.length);
+    }
+
+    return GALLERY_SKELETON_COUNT;
+  }, [isFetchingNextPage, allItems.length, total]);
   const selectedItems = useMemo(
     () => allItems.filter((item) => selectedIds.has(item.id)),
     [allItems, selectedIds],
@@ -383,6 +536,7 @@ function GalleryPageContent() {
     mutationFn: (mediaId: number) => toggleLike(mediaId),
     onSuccess: ({ id }) => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", id] });
     },
   });
@@ -426,6 +580,7 @@ function GalleryPageContent() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
       queryClient.invalidateQueries({ queryKey: ["clusters"] });
       queryClient.invalidateQueries({ queryKey: ["people"] });
     },
@@ -488,6 +643,7 @@ function GalleryPageContent() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
       queryClient.invalidateQueries({ queryKey: ["clusters"] });
       queryClient.invalidateQueries({ queryKey: ["people"] });
     },
@@ -497,6 +653,7 @@ function GalleryPageContent() {
     mutationFn: (mediaId: number) => reprocessImage(mediaId),
     onSuccess: ({ media_id }) => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", media_id] });
       toast.success("Retry queued — analysis will restart shortly.");
     },
@@ -565,6 +722,7 @@ function GalleryPageContent() {
     },
     onSuccess: (mediaId) => {
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", mediaId] });
     },
   });
@@ -719,14 +877,14 @@ function GalleryPageContent() {
   }, []);
 
   const emptyGalleryCopy = useMemo(() => {
-    if (isLoading || allItems.length > 0) {
+    if (isInitialGalleryLoading || allItems.length > 0) {
       return null;
     }
     if (!data) {
       return null;
     }
     return getGalleryEmptyState(filter, likedOnly);
-  }, [isLoading, allItems, data, filter, likedOnly]);
+  }, [isInitialGalleryLoading, allItems.length, data, filter, likedOnly]);
 
   return (
     <div className="page-shell">
@@ -748,13 +906,24 @@ function GalleryPageContent() {
                 href={buildGalleryHref({ filter: value })}
                 scroll={false}
                 aria-current={filter === value ? "page" : undefined}
-                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                   filter === value
                     ? "bg-white text-black"
                     : "text-[color:var(--silver)] hover:bg-[color:var(--frost-soft)] hover:text-[color:var(--near-white)]"
                 }`}
               >
                 {label}
+                {counts ? (
+                  <span
+                    className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-xs ${
+                      filter === value
+                        ? "bg-black/15 text-black"
+                        : "bg-[color:var(--frost-soft)] text-[color:var(--silver)]"
+                    }`}
+                  >
+                    {counts[value]}
+                  </span>
+                ) : null}
               </Link>
             ))}
           </div>
@@ -774,10 +943,8 @@ function GalleryPageContent() {
           </button>
         </div>
 
-        {isLoading && (
-          <div className="flex items-center justify-center py-32">
-            <Loader2 className="h-8 w-8 animate-spin text-[color:var(--silver)]" />
-          </div>
+        {isInitialGalleryLoading && (
+          <GallerySkeletonGrid count={GALLERY_SKELETON_COUNT} />
         )}
 
         {error && (
@@ -911,23 +1078,13 @@ function GalleryPageContent() {
                       aria-label={`View ${item.filename}`}
                     >
                       {imageSrc ? (
-                        <Image
+                        <GalleryThumbnail
+                          key={imageSrc}
                           src={imageSrc}
                           alt={item.filename}
-                          fill
-                          className="object-cover transition duration-500 group-hover:scale-[1.035]"
-                          sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 16vw"
-                          unoptimized
                         />
                       ) : (
-                        <div
-                          className="flex h-full w-full flex-col items-center justify-center gap-2 text-[color:var(--muted)]"
-                          role="img"
-                          aria-label="No preview available"
-                        >
-                          <ImageOff className="h-7 w-7" />
-                          <span className="text-xs">No preview</span>
-                        </div>
+                        <GalleryImageFallback />
                       )}
 
                       <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/12 to-transparent opacity-60 transition-opacity group-hover:opacity-90" />
@@ -985,16 +1142,25 @@ function GalleryPageContent() {
                           <button
                             type="button"
                             onClick={() => reprocessMutation.mutate(item.id)}
-                            disabled={reprocessMutation.isPending}
+                            disabled={
+                              reprocessMutation.isPending &&
+                              reprocessMutation.variables === item.id
+                            }
                             className={`icon-button h-8 w-8 text-[color:var(--silver)] ${
-                              reprocessMutation.isPending
+                              reprocessMutation.isPending &&
+                              reprocessMutation.variables === item.id
                                 ? "cursor-not-allowed opacity-70"
                                 : ""
                             }`}
                             aria-label="Retry analysis"
                           >
                             <RotateCcw
-                              className={`h-3.5 w-3.5 ${reprocessMutation.isPending ? "animate-spin" : ""}`}
+                              className={`h-3.5 w-3.5 ${
+                                reprocessMutation.isPending &&
+                                reprocessMutation.variables === item.id
+                                  ? "animate-spin"
+                                  : ""
+                              }`}
                             />
                           </button>
                         )}
@@ -1038,6 +1204,12 @@ function GalleryPageContent() {
                   </article>
                 );
               })}
+              {buildSkeletonKeys(
+                "gallery-loading-more",
+                loadingMoreSkeletonCount,
+              ).map((skeletonKey) => (
+                <GalleryCardSkeleton key={skeletonKey} />
+              ))}
             </div>
 
             {/* Load More */}
@@ -1049,14 +1221,7 @@ function GalleryPageContent() {
                   disabled={isFetchingNextPage}
                   className="frost-button inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isFetchingNextPage ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading…
-                    </>
-                  ) : (
-                    "Load more"
-                  )}
+                  {isFetchingNextPage ? "Loading more…" : "Load more"}
                 </button>
                 <p className="text-xs text-[color:var(--silver)]">
                   Showing {allItems.length} of {total}
@@ -1080,6 +1245,7 @@ function GalleryPageContent() {
               galleryQueryKey,
               (old) => removeMediaFromGalleryCache([mediaId], old),
             );
+            queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
             setSelectedIds((current) => {
               const next = new Set(current);
               next.delete(mediaId);
@@ -1190,6 +1356,7 @@ function GalleryPageContent() {
     </div>
   );
 }
+
 /**
  * Main entry point for the Gallery route. Wraps the gallery content in a Suspense
  * boundary to support useSearchParams() during server-side rendering.
