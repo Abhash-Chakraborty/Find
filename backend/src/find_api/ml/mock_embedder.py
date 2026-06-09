@@ -14,6 +14,15 @@ from find_api.core.config import settings
 class MockEmbedder:
     """Generate stable vectors without loading external ML models."""
 
+    def _safe_normalize(self, vector: np.ndarray) -> np.ndarray:
+        """Safely normalize vector avoiding NaN/inf issues."""
+        norm = np.linalg.norm(vector)
+
+        if norm is None or norm == 0 or not np.isfinite(norm):
+            return vector  # safe fallback: keep original vector
+
+        return vector / norm
+
     def _vector_from_bytes(self, payload: bytes) -> np.ndarray:
         chunks = []
         counter = 0
@@ -27,12 +36,7 @@ class MockEmbedder:
         vector = np.frombuffer(raw, dtype=np.uint32).astype(np.float32)
         vector = (vector / np.iinfo(np.uint32).max) - 0.5
 
-        norm = np.linalg.norm(vector)
-        if norm == 0:
-            vector[0] = 1.0
-            return vector
-
-        return vector / norm
+        return self._safe_normalize(vector)
 
     def _vector_from_text(self, text: str) -> np.ndarray:
         tokens = re.findall(r"[a-z0-9]+", text.lower())
@@ -43,11 +47,9 @@ class MockEmbedder:
             self._vector_from_bytes(f"token:{token}".encode("utf-8"))
             for token in tokens
         ]
+
         vector = np.mean(vectors, axis=0)
-        norm = np.linalg.norm(vector)
-        if norm > 0:
-            vector = vector / norm
-        return vector.astype(np.float32)
+        return self._safe_normalize(vector).astype(np.float32)
 
     def embed_image(self, image: Image.Image) -> np.ndarray:
         if image.mode != "RGB":
@@ -60,6 +62,7 @@ class MockEmbedder:
             + image.height.to_bytes(4, "big")
             + thumbnail.tobytes()
         )
+
         return self._vector_from_bytes(payload)
 
     def embed_text(self, text: str | list[str]) -> np.ndarray:
@@ -77,6 +80,7 @@ class MockEmbedder:
         caption = str(metadata.get("caption", ""))
         objects = metadata.get("objects", [])
         ocr_text = str(metadata.get("ocr_text", ""))
+
         object_text = ",".join(
             sorted(
                 {
@@ -86,19 +90,23 @@ class MockEmbedder:
                 }
             )
         )
+
         image_vector = self.embed_image(image)
 
-        text_parts = [part.strip() for part in [caption, object_text, ocr_text] if part]
+        text_parts = [
+            part.strip()
+            for part in [caption, object_text, ocr_text]
+            if part
+        ]
+
         if text_parts:
             text_vector = self.embed_text(" ".join(text_parts))
-            # Bias toward text in mock mode so lexical relevance is visible during development.
+            # Bias toward text in mock mode
             hybrid_vector = (image_vector * 0.45) + (text_vector * 0.55)
         else:
             hybrid_vector = image_vector
 
-        norm = np.linalg.norm(hybrid_vector)
-        if norm > 0:
-            hybrid_vector = hybrid_vector / norm
+        hybrid_vector = self._safe_normalize(hybrid_vector)
         return hybrid_vector.tolist()
 
 
