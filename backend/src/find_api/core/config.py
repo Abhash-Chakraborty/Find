@@ -2,6 +2,7 @@
 Application configuration using Pydantic settings
 """
 
+import os
 from typing import Literal, Optional
 
 from pydantic import field_validator
@@ -31,6 +32,13 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
+
+    # Queue mode — "redis" for Docker/RQ, "sqlite" for desktop mode
+    QUEUE_MODE: Literal["redis", "sqlite"] = "redis"
+    QUEUE_DB_PATH: str = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "queue.db",
+    )
 
     # ML Models
     ML_MODE: Literal["full", "mock"] = "full"
