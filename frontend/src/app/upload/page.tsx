@@ -23,9 +23,10 @@ import {
   uploadImages,
   uploadImagesBulk,
 } from "@/lib/api";
+import { dequeue, enqueue, getQueue, updateStatus } from "@/lib/uploadQueue";
 
 type UploadMode = "single" | "bulk";
-type ProcessingState = "queued" | "processing" | "indexed" | "failed";
+type ProcessingState = "draft" | "queued" | "processing" | "indexed" | "failed";
 
 type UploadListItem = UploadResult & {
   jobStatus?: JobStatus["status"];
@@ -55,6 +56,9 @@ function getProcessingState(jobStatus?: JobStatus["status"]): ProcessingState {
 }
 
 function getDisplayStatus(item: UploadListItem) {
+  if (item.processingState === "draft") {
+    return "draft (offline)";
+  }
   if (item.status === "duplicate") {
     return "duplicate";
   }
@@ -301,13 +305,55 @@ export default function UploadPage() {
     };
   }, [activeJobs, queryClient]);
 
+  useEffect(() => {
+    const flush = async () => {
+      if (!navigator.onLine) return;
+      const items = await getQueue();
+      for (const item of items) {
+        if (item.status !== "draft") continue;
+        await updateStatus(item.id, "pending");
+        try {
+          const file = new File([item.blob], item.filename);
+          await uploadMutation.mutateAsync([file]);
+          await dequeue(item.id);
+          setUploadedFiles((prev) =>
+            prev.filter(
+              (f) => !(f.filename === item.filename && f.processingState === "draft"),
+            ),
+          );
+        } catch {
+          await updateStatus(item.id, "failed");
+        }
+      }
+    };
+    window.addEventListener("online", flush);
+    void flush();
+    return () => window.removeEventListener("online", flush);
+  // uploadMutation is stable across renders; omitting avoids infinite loop
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
+    async (acceptedFiles: File[]) => {
       if (acceptedFiles.length === 0) {
         toast.error("No valid images selected");
         return;
       }
-
+      if (!navigator.onLine) {
+        for (const file of acceptedFiles) {
+          await enqueue(file);
+          setUploadedFiles((prev) => [
+            {
+              filename: file.name,
+              status: "uploaded",
+              processingState: "draft",
+            } as UploadListItem,
+            ...prev,
+          ]);
+        }
+        toast("You're offline — files queued and will upload when reconnected.");
+        return;
+      }
       uploadMutation.mutate(acceptedFiles);
     },
     [uploadMutation],
