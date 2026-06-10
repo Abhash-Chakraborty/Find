@@ -12,11 +12,11 @@ const navLinks = [
   { href: "/gallery", label: "Gallery" },
   { href: "/vault", label: "Vault" },
   { href: "/search", label: "Search" },
+  { href: "/instance", label: "Instance" },
   { href: "/clusters", label: "Clusters" },
   { href: "/duplicates", label: "Duplicates" },
   { href: "/people", label: "People" },
 ];
-
 type Theme = "light" | "dark";
 
 export default function NavBar() {
