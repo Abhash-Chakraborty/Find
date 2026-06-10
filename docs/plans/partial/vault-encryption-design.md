@@ -192,6 +192,16 @@ This note is research only. A follow-up implementation issue should cover:
 - **No recovery path:** A forgotten passphrase cannot be recovered. This must be communicated
   clearly in the UI before the user creates a vault.
 
+## Tamper-case test plan
+
+| # | Case | Setup | Action | Expected result |
+|---|---|---|---|---|
+| 1 | Happy path | Encrypt blob with correct passphrase | Decrypt with same passphrase | Plaintext matches original |
+| 2 | Wrong passphrase | Encrypt blob with passphrase A | Decrypt with passphrase B | Decryption fails (InvalidTag or equivalent) |
+| 3 | Tampered ciphertext | Encrypt blob, flip byte in ciphertext | Decrypt with correct passphrase | AEAD auth fails, blob rejected |
+| 4 | Tampered AAD/metadata | Encrypt blob binding AAD to media_id | Decrypt with altered media_id in AAD | AEAD auth fails, blob rejected |
+| 5 | Swapped blob | Encrypt two blobs for different media_ids | Supply blob A with media_id B | AEAD auth fails when AAD is bound; currently passes if AAD is unused |
+
 ## References
 
 - OWASP Password Storage Cheat Sheet (2024): https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
