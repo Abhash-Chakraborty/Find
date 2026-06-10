@@ -129,6 +129,10 @@ jobs:
       - name: Backend import smoke check
         run: ML_MODE=mock uv run python -c "from find_api.main import app; print('smoke OK:', app.title)"
 
+      # Run backend tests after lint/format checks pass.
+      - name: Run backend pytest suite
+        run: ML_MODE=mock uv run pytest tests/ -v
+
   compose-check:
     needs: detect-changes
     if: needs.detect-changes.outputs.shared == 'true'
