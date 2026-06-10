@@ -98,6 +98,17 @@ def get_gallery(
         description="Filter by processing status",
     ),
     liked: Optional[bool] = None,
+    camera_make: Optional[str] = Query(None, description="Filter by EXIF camera make"),
+    camera_model: Optional[str] = Query(
+        None, description="Filter by EXIF camera model"
+    ),
+    min_width: Optional[int] = Query(None, ge=1, description="Minimum image width"),
+    min_height: Optional[int] = Query(None, ge=1, description="Minimum image height"),
+    file_type: Optional[str] = Query(
+        None,
+        max_length=20,
+        description="Filter by image file type",
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -118,6 +129,21 @@ def get_gallery(
         query = query.filter(Media.status == status)
     if liked is not None:
         query = query.filter(Media.liked == liked)
+    if camera_make:
+        query = query.filter(
+            Media.exif_json["make"].as_string().ilike(f"%{camera_make}%")
+        )
+    if camera_model:
+        query = query.filter(
+            Media.exif_json["model"].as_string().ilike(f"%{camera_model}%")
+        )
+    if min_width is not None:
+        query = query.filter(Media.width >= min_width)
+    if min_height is not None:
+        query = query.filter(Media.height >= min_height)
+    if file_type:
+        normalized_type = file_type.lower().lstrip(".")
+        query = query.filter(Media.content_type.ilike(f"%{normalized_type}%"))
 
     # Get total count
     total = query.count()
