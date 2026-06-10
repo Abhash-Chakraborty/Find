@@ -29,6 +29,7 @@ import {
   type PreviewMedia,
 } from "@/components/image-preview-modal";
 import { StatusIndicator } from "@/components/status-indicator";
+import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
   api,
   deleteImage,
@@ -1028,8 +1029,13 @@ function GalleryPageContent() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-              {allItems.map((item) => {
+            <VirtualizedGrid
+              items={allItems}
+              className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
+              estimateRowHeight={250}
+              gap={12}
+              getKey={(item) => item.id}
+              renderItem={(item) => {
                 const imageSrc = resolveMediaUrl(
                   item.thumbnail_url ?? item.url,
                   item.minio_key,
@@ -1203,7 +1209,9 @@ function GalleryPageContent() {
                     </div>
                   </article>
                 );
-              })}
+              }}
+            />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
               {buildSkeletonKeys(
                 "gallery-loading-more",
                 loadingMoreSkeletonCount,
