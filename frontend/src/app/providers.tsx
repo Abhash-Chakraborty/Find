@@ -40,6 +40,10 @@ export function Providers({ children }: ProvidersProps) {
     window.addEventListener("beforeunload", lockFn);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js");
+    }
+
     return () => {
       window.removeEventListener("beforeunload", lockFn);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
