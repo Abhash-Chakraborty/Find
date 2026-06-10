@@ -4,12 +4,15 @@ Status endpoint for checking job progress
 
 import json
 
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException
 from redis import Redis
 from rq.job import Job
 
 from find_api.core.config import settings
 from find_api.core.model_manager import get_model_manager
+from find_api.core.queue import get_queue_backend
 
 router = APIRouter()
 
@@ -55,14 +58,82 @@ def get_loaded_models():
 @router.get("/status/{job_id}")
 def get_job_status(job_id: str):
     """
-    Check status of a processing job
+    Check status of a processing job.
+
+    Works with both RQ/Redis and SQLite backends.
 
     Args:
-        job_id: RQ job ID
+        job_id: Job ID
 
     Returns:
         Job status information with stage tracking
     """
+    backend = get_queue_backend()
+
+    if backend == "sqlite":
+        try:
+            from find_api.core.queue_sqlite import _get_connection
+
+            conn = _get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM job_queue WHERE id = ?", (job_id,)
+                ).fetchone()
+                if row is None:
+                    raise HTTPException(
+                        status_code=404, detail=f"Job not found: {job_id}"
+                    )
+
+                def _to_iso(val: float | None) -> str | None:
+                    if val is None:
+                        return None
+                    return datetime.fromtimestamp(val).isoformat()
+
+                status_info = {
+                    "job_id": job_id,
+                    "status": row["status"],
+                    "stage": "queued",
+                    "created_at": _to_iso(row["created_at"]),
+                    "started_at": _to_iso(row["started_at"]),
+                    "ended_at": _to_iso(row["completed_at"]),
+                }
+
+                meta = {}
+                if row["meta"]:
+                    try:
+                        meta = json.loads(row["meta"])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                status_info["stage"] = meta.get("stage", row["status"])
+
+                if row["status"] == "finished":
+                    raw_result = row["result"]
+                    if raw_result is not None and isinstance(raw_result, str):
+                        try:
+                            status_info["result"] = json.loads(raw_result)
+                        except (json.JSONDecodeError, TypeError):
+                            status_info["result"] = raw_result
+                    else:
+                        status_info["result"] = raw_result
+
+                if row["status"] == "failed":
+                    status_info["error"] = meta.get(
+                        "error",
+                        row["error"] if row["error"] is not None else "Job failed",
+                    )
+                    status_info["stage"] = meta.get("stage", "failed")
+
+                return status_info
+            finally:
+                conn.close()
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=404, detail=f"Job not found: {job_id}"
+            ) from exc
+
     try:
         job = Job.fetch(job_id, connection=redis_conn)
 
