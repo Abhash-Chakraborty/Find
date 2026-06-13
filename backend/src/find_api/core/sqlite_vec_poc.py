@@ -1,0 +1,129 @@
+"""
+SQLite + sqlite-vec proof of concept.
+"""
+
+import sqlite3
+import struct
+
+import sqlite_vec
+
+
+def create_connection(db_path=":memory:"):
+    conn = sqlite3.connect(str(db_path))
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    return conn
+
+
+def create_schema(conn, embedding_dim: int):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS media (
+            id INTEGER PRIMARY KEY,
+            filename TEXT NOT NULL,
+            status TEXT NOT NULL
+        )
+    """)
+
+    conn.execute(f"""
+        CREATE VIRTUAL TABLE IF NOT EXISTS media_vectors
+        USING vec0(
+            media_id INTEGER PRIMARY KEY,
+            embedding FLOAT[{embedding_dim}]
+        )
+    """)
+
+    conn.commit()
+
+
+def insert_vector(
+    conn,
+    media_id: int,
+    embedding: list[float],
+):
+    blob = struct.pack(f"{len(embedding)}f", *embedding)
+
+    conn.execute(
+        """
+        INSERT INTO media_vectors(media_id, embedding)
+        VALUES (?, ?)
+        """,
+        (media_id, blob),
+    )
+
+    conn.commit()
+
+def insert_media(
+    conn,
+    media_id: int,
+    filename: str,
+    status: str = "indexed",
+):
+    conn.execute(
+        """
+        INSERT INTO media(id, filename, status)
+        VALUES (?, ?, ?)
+        """,
+        (media_id, filename, status),
+    )
+    conn.commit()
+
+
+def count_vectors(conn) -> int:
+    row = conn.execute(
+        "SELECT COUNT(*) FROM media_vectors"
+    ).fetchone()
+
+    return row[0]
+
+
+def search_vectors(
+    conn,
+    query_embedding: list[float],
+    limit: int = 10,
+):
+    blob = struct.pack(
+        f"{len(query_embedding)}f",
+        *query_embedding,
+    )
+
+    rows = conn.execute(
+        """
+        SELECT
+            media_id,
+            distance
+        FROM media_vectors
+        WHERE embedding MATCH ?
+        ORDER BY distance
+        LIMIT ?
+        """,
+        (blob, limit),
+    ).fetchall()
+
+    return rows
+
+def search_media(
+    conn,
+    query_embedding,
+    limit=10,
+):
+    blob = struct.pack(
+        f"{len(query_embedding)}f",
+        *query_embedding,
+    )
+
+    rows = conn.execute(
+        """
+        SELECT
+            m.id,
+            m.filename,
+            v.distance
+        FROM media_vectors v
+        JOIN media m
+            ON m.id = v.media_id
+        WHERE embedding MATCH ?
+        AND k = ?
+        """,
+        (blob, limit),
+    ).fetchall()
+
+    return rows
