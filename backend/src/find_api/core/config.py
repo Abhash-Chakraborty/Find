@@ -3,8 +3,7 @@ Application configuration using Pydantic settings
 """
 
 from typing import Literal, Optional
-
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,7 +32,11 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379"
 
     # ML Models
-    ML_MODE: Literal["full", "mock"] = "full"
+    ML_MODE: Literal["full", "mock", "remote"] = "full"
+    REMOTE_ML_URL: Optional[str] = None
+    REMOTE_ML_API_KEY: Optional[str] = None
+    REMOTE_ML_STRIP_EXIF: bool = True
+    REMOTE_ML_FEATURES: str = "embed,caption,detect,ocr,cluster"
     ML_MODEL_IDLE_TTL_SECONDS: int = 300
     ML_MAX_LOADED_MODELS: int = 5
     CLIP_MODEL: str = "ViT-B-16-SigLIP"
@@ -74,6 +77,27 @@ class Settings(BaseSettings):
         if value <= 0:
             raise ValueError(f"{info.field_name} must be greater than 0")
         return value
+    @model_validator(mode="after")
+    def validate_remote_ml_config(self):
+        """Require remote ML settings when remote mode is enabled."""
+        if self.ML_MODE.lower() != "remote":
+            return self
+
+        if not self.REMOTE_ML_URL or not self.REMOTE_ML_URL.strip():
+            raise ValueError(
+                "ML_MODE=remote requires REMOTE_ML_URL. "
+                "Set REMOTE_ML_URL to a reachable self-hosted Find ML server "
+                "or change ML_MODE to full or mock."
+            )
+
+        if not self.REMOTE_ML_API_KEY or not self.REMOTE_ML_API_KEY.strip():
+            raise ValueError(
+                "ML_MODE=remote requires REMOTE_ML_API_KEY. "
+                "Set REMOTE_ML_API_KEY to a bearer token shared with your remote ML server "
+                "or change ML_MODE to full or mock."
+            )
+
+        return self
 
 
 settings = Settings()
