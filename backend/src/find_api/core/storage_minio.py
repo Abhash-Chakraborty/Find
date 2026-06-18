@@ -1,4 +1,4 @@
-"""
+﻿"""
 MinIO storage backend implementation
 Implements StorageBackend interface for MinIO object storage
 """
@@ -66,9 +66,9 @@ class MinIOStorageBackend(StorageBackend):
                 logger.info(f"MinIO bucket exists: {self.bucket}")
 
             if settings.MINIO_PUBLIC_READ:
-                self._apply_public_read_policy()
+                await asyncio.to_thread(self._apply_public_read_policy)
             else:
-                self._remove_public_read_policy()
+                await asyncio.to_thread(self._remove_public_read_policy)
 
         except S3Error as e:
             logger.error(f"Failed to initialize MinIO storage: {e}")
@@ -106,13 +106,15 @@ class MinIOStorageBackend(StorageBackend):
     ) -> str:
         """Upload file to MinIO"""
         try:
-            self.client.put_object(
-                self.bucket,
-                object_name,
-                BytesIO(file_data),
-                length=len(file_data),
-                content_type=content_type,
-            )
+            def _upload():
+                self.client.put_object(
+                    self.bucket,
+                    object_name,
+                    BytesIO(file_data),
+                    length=len(file_data),
+                    content_type=content_type,
+                )
+            await asyncio.to_thread(_upload)
             logger.info(f"Uploaded file to MinIO: {object_name}")
             return object_name
         except S3Error as e:
@@ -121,35 +123,40 @@ class MinIOStorageBackend(StorageBackend):
 
     async def get_file(self, object_name: str) -> bytes:
         """Download file from MinIO"""
-        response = None
+        def _download():
+            response = None
+            try:
+                response = self.client.get_object(self.bucket, object_name)
+                return response.read()
+            finally:
+                if response is not None:
+                    response.close()
+                    response.release_conn()
         try:
-            response = self.client.get_object(self.bucket, object_name)
-            data = response.read()
-            return data
+            return await asyncio.to_thread(_download)
         except S3Error as e:
             logger.error(f"Failed to download file from MinIO: {e}")
             raise StorageException(f"MinIO download failed: {e}")
-        finally:
-            if response is not None:
-                response.close()
-                response.release_conn()
 
     async def download_file_to_path(self, object_name: str, destination_path: str) -> None:
         """Stream file from MinIO to local path"""
-        response = None
+        def _stream():
+            response = None
+            try:
+                response = self.client.get_object(self.bucket, object_name)
+                with open(destination_path, "wb") as destination:
+                    for chunk in response.stream(1024 * 1024):
+                        if chunk:
+                            destination.write(chunk)
+            finally:
+                if response is not None:
+                    response.close()
+                    response.release_conn()
         try:
-            response = self.client.get_object(self.bucket, object_name)
-            with open(destination_path, "wb") as destination:
-                for chunk in response.stream(1024 * 1024):
-                    if chunk:
-                        destination.write(chunk)
+            await asyncio.to_thread(_stream)
         except S3Error as e:
             logger.error(f"Failed to stream file from MinIO: {e}")
             raise StorageException(f"MinIO stream failed: {e}")
-        finally:
-            if response is not None:
-                response.close()
-                response.release_conn()
 
     async def get_file_url(self, object_name: str, expires: int = 3600) -> str:
         """Get presigned or public URL for file"""
@@ -163,27 +170,30 @@ class MinIOStorageBackend(StorageBackend):
                 else:
                     public_path = f"{base_path}/{object_path}"
 
-                return urlunparse(
-                    (
-                        parsed.scheme,
-                        parsed.netloc,
-                        public_path,
-                        "",
-                        "",
-                        "",
-                    )
-                )
+                return urlunparse((parsed.scheme, parsed.netloc, public_path, "", "", ""))
 
             signing_client = self._public_client or self.client
-            base_url = signing_client.presigned_get_object(
-                self.bucket, object_name, expires=timedelta(seconds=expires)
-            )
+
+            def _presign():
+                return signing_client.presigned_get_object(
+                    self.bucket, object_name, expires=timedelta(seconds=expires)
+                )
+
+            base_url = await asyncio.to_thread(_presign)
+
             if self._public_client and settings.MINIO_PUBLIC_ENDPOINT:
                 parsed = urlparse(settings.MINIO_PUBLIC_ENDPOINT.rstrip("/"))
                 base_path = parsed.path.rstrip("/")
                 if base_path:
                     signed_parsed = urlparse(base_url)
-                    base_url = urlunparse((signed_parsed.scheme, signed_parsed.netloc, base_path + signed_parsed.path, signed_parsed.params, signed_parsed.query, signed_parsed.fragment))
+                    base_url = urlunparse((
+                        signed_parsed.scheme,
+                        signed_parsed.netloc,
+                        base_path + signed_parsed.path,
+                        signed_parsed.params,
+                        signed_parsed.query,
+                        signed_parsed.fragment,
+                    ))
             return base_url
         except S3Error as e:
             logger.error(f"Failed to generate URL: {e}")
@@ -255,5 +265,3 @@ async def upload_thumbnail(
         "thumbnail_width": width,
         "thumbnail_height": height,
     }
-
-
