@@ -1,4 +1,4 @@
-"""
+﻿"""
 Local filesystem storage backend implementation
 Implements StorageBackend interface for local file storage (desktop mode)
 """
@@ -24,7 +24,7 @@ class LocalStorageBackend(StorageBackend):
     async def init_storage(self) -> None:
         """Initialize storage by creating base directory"""
         try:
-            self.base_path.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(self.base_path.mkdir, parents=True, exist_ok=True)
             logger.info(f"Initialized local storage at: {self.base_path}")
         except Exception as e:
             logger.error(f"Failed to initialize local storage: {e}")
@@ -52,9 +52,9 @@ class LocalStorageBackend(StorageBackend):
         """Upload file to local filesystem"""
         try:
             full_path = self._validate_path(object_name)
-            full_path.parent.mkdir(parents=True, exist_ok=True)
 
             def _write():
+                full_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(full_path, "wb") as f:
                     f.write(file_data)
             await asyncio.to_thread(_write)
@@ -73,10 +73,9 @@ class LocalStorageBackend(StorageBackend):
         try:
             full_path = self._validate_path(object_name)
 
-            if not full_path.is_file():
-                raise StorageException(f"File not found: {object_name}")
-
             def _read():
+                if not full_path.is_file():
+                    raise StorageException(f"File not found: {object_name}")
                 with open(full_path, "rb") as f:
                     return f.read()
             data = await asyncio.to_thread(_read)
@@ -95,19 +94,19 @@ class LocalStorageBackend(StorageBackend):
         try:
             full_path = self._validate_path(object_name)
 
-            if not full_path.is_file():
-                raise StorageException(f"File not found: {object_name}")
-
-            dest = Path(destination_path)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-
-            with open(full_path, "rb") as src:
-                with open(destination_path, "wb") as dst:
-                    while True:
-                        chunk = src.read(1024 * 1024)
-                        if not chunk:
-                            break
-                        dst.write(chunk)
+            def _copy():
+                if not full_path.is_file():
+                    raise StorageException(f"File not found: {object_name}")
+                dest = Path(destination_path)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with open(full_path, "rb") as src:
+                    with open(destination_path, "wb") as dst:
+                        while True:
+                            chunk = src.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            dst.write(chunk)
+            await asyncio.to_thread(_copy)
 
             logger.info(f"Streamed file from local storage: {object_name}")
 
@@ -122,7 +121,8 @@ class LocalStorageBackend(StorageBackend):
         try:
             full_path = self._validate_path(object_name)
 
-            if not full_path.is_file():
+            exists = await asyncio.to_thread(full_path.is_file)
+            if not exists:
                 raise StorageException(f"File not found: {object_name}")
 
             relative_path = full_path.relative_to(self.base_path)
@@ -139,8 +139,14 @@ class LocalStorageBackend(StorageBackend):
         try:
             full_path = self._validate_path(object_name)
 
-            if full_path.is_file():
-                full_path.unlink()
+            def _delete():
+                if full_path.is_file():
+                    full_path.unlink()
+                    return True
+                return False
+            deleted = await asyncio.to_thread(_delete)
+
+            if deleted:
                 logger.info(f"Deleted file from local storage: {object_name}")
             else:
                 logger.warning(f"File not found for deletion: {object_name}")
@@ -155,13 +161,9 @@ class LocalStorageBackend(StorageBackend):
         """Check if file exists in local filesystem"""
         try:
             full_path = self._validate_path(object_name)
-            return full_path.is_file()
+            return await asyncio.to_thread(full_path.is_file)
         except StorageException:
             raise
         except Exception as e:
             logger.error(f"Failed to check file existence: {e}")
             raise StorageException(f"Existence check failed: {e}")
-
-
-
-
