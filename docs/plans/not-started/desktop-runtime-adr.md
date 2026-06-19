@@ -2,7 +2,7 @@
 
 - **Status:** Not started
 - **Date:** 2026-05-18
-- **Last reviewed:** 2026-05-28
+- **Last reviewed:** 2026-06-19
 - **Owner:** Find maintainers
 - **Related:** Issue #43, Roadmap [local-first-roadmap.md](../partial/local-first-roadmap.md), Framework choice [desktop-tauri-vs-electron-adr.md](../partial/desktop-tauri-vs-electron-adr.md)
 
@@ -73,6 +73,37 @@ The desktop runtime must remain **local-first** by default: images, embeddings, 
   - SQLite can execute all Find queries (search by embedding, similarity, clustering filters)
   - Query performance remains acceptable (<500ms for typical gallery + search)
   - Single-file backup and export mechanisms are straightforward
+
+**SQLite vector spike result (2026-06-19):**
+
+A focused proof of concept now exists at `backend/src/find_api/core/sqlite_vec_poc.py` with tests in `backend/tests/test_sqlite_vec_poc.py`. It validates the basic desktop-mode shape without changing the production Docker/PostgreSQL runtime:
+
+- creates a SQLite database and media metadata table
+- loads `sqlite-vec` as an optional local extension
+- creates a 768-dimensional vector table matching Find's current embedding size
+- inserts media rows and vector blobs
+- runs nearest-neighbor vector search
+- returns a gallery-style metadata result shape
+
+To run the spike manually:
+
+```bash
+cd backend
+pip install sqlite-vec
+uv run pytest tests/test_sqlite_vec_poc.py -q
+```
+
+The tests skip automatically when `sqlite-vec` is not installed because this is still a desktop-runtime spike, not a default backend dependency.
+
+Current limitations:
+
+- It does not replace PostgreSQL + pgvector in Docker mode.
+- It does not cover migrations from the existing PostgreSQL schema.
+- It does not benchmark larger libraries, concurrent writes, WAL behavior, or index build cost.
+- It does not yet validate Find's full hybrid search behavior, filters, clustering joins, or queue interactions.
+- It keeps `sqlite-vec` out of the default dependency set until the project decides whether desktop mode should ship it.
+
+Follow-up implementation should only happen after the spike is benchmarked against realistic local libraries and the query abstraction is designed so PostgreSQL and SQLite can coexist cleanly.
 
 ---
 

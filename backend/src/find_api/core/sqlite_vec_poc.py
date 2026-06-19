@@ -5,14 +5,22 @@ SQLite + sqlite-vec proof of concept.
 import sqlite3
 import struct
 
-import sqlite_vec
-
 EMBEDDING_DIM = 768
 
 
 def create_connection(db_path=":memory:"):
     conn = sqlite3.connect(str(db_path))
     conn.enable_load_extension(True)
+
+    try:
+        import sqlite_vec
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "sqlite-vec is required for this desktop-runtime proof of concept. "
+            "Install it manually with `pip install sqlite-vec` before running "
+            "the sqlite_vec_poc tests."
+        ) from exc
+
     sqlite_vec.load(conn)
     return conn
 

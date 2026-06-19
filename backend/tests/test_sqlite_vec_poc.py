@@ -1,10 +1,32 @@
+import importlib.util
+
+import pytest
+
 from find_api.core.sqlite_vec_poc import (
     EMBEDDING_DIM,
     SQLiteVecPOC,
 )
 
+SQLITE_VEC_AVAILABLE = importlib.util.find_spec("sqlite_vec") is not None
 
-def test_schema_creation(tmp_path):
+
+@pytest.fixture
+def sqlite_vec_available():
+    if not SQLITE_VEC_AVAILABLE:
+        pytest.skip("sqlite-vec is optional and not installed")
+
+
+def test_missing_sqlite_vec_dependency_message(tmp_path):
+    if SQLITE_VEC_AVAILABLE:
+        pytest.skip("sqlite-vec is installed")
+
+    db_file = tmp_path / "sqlite_vec.db"
+
+    with pytest.raises(RuntimeError, match="sqlite-vec is required"):
+        SQLiteVecPOC(db_file)
+
+
+def test_schema_creation(tmp_path, sqlite_vec_available):
     db_file = tmp_path / "sqlite_vec.db"
 
     poc = SQLiteVecPOC(db_file)
@@ -13,7 +35,7 @@ def test_schema_creation(tmp_path):
     assert db_file.exists()
 
 
-def test_insert_768_dimension_vector(tmp_path):
+def test_insert_768_dimension_vector(tmp_path, sqlite_vec_available):
     db_file = tmp_path / "sqlite_vec.db"
 
     poc = SQLiteVecPOC(db_file)
@@ -31,7 +53,7 @@ def test_insert_768_dimension_vector(tmp_path):
     assert gallery[0]["filename"] == "cat.jpg"
 
 
-def test_similarity_search(tmp_path):
+def test_similarity_search(tmp_path, sqlite_vec_available):
     db_file = tmp_path / "sqlite_vec.db"
 
     poc = SQLiteVecPOC(db_file)
@@ -58,7 +80,7 @@ def test_similarity_search(tmp_path):
     assert results[0]["id"] == 1
 
 
-def test_gallery_query_shape(tmp_path):
+def test_gallery_query_shape(tmp_path, sqlite_vec_available):
     db_file = tmp_path / "sqlite_vec.db"
 
     poc = SQLiteVecPOC(db_file)
