@@ -10,10 +10,10 @@ describe("uploadQueue", () => {
     }
   });
 
-  it("enqueues a file with draft status", async () => {
+  it("enqueues a file with queued status", async () => {
     const file = new File(["data"], "test.png", { type: "image/png" });
     const item = await enqueue(file);
-    expect(item.status).toBe("draft");
+    expect(item.status).toBe("queued");
     expect(item.filename).toBe("test.png");
   });
 
@@ -27,9 +27,9 @@ describe("uploadQueue", () => {
   it("updateStatus changes item status", async () => {
     const file = new File(["x"], "b.png", { type: "image/png" });
     const item = await enqueue(file);
-    await updateStatus(item.id, "pending");
+    await updateStatus(item.id, "uploading");
     const q = await getQueue();
-    expect(q.find((i) => i.id === item.id)?.status).toBe("pending");
+    expect(q.find((i) => i.id === item.id)?.status).toBe("uploading");
   });
 
   it("dequeue removes an item", async () => {

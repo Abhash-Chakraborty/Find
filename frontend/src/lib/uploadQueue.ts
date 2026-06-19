@@ -2,7 +2,7 @@ const DB_NAME = "find-upload-queue";
 const STORE = "queue";
 const DB_VERSION = 1;
 
-export type QueueItemStatus = "draft" | "pending" | "failed";
+export type QueueItemStatus = "queued" | "uploading" | "failed" | "completed";
 
 export interface QueueItem {
   id: string;
@@ -29,7 +29,7 @@ export async function enqueue(file: File): Promise<QueueItem> {
     id: `${Date.now()}-${file.name}`,
     filename: file.name,
     blob: file,
-    status: "draft",
+    status: "queued",
     addedAt: Date.now(),
   };
   await new Promise<void>((resolve, reject) => {
@@ -51,7 +51,10 @@ export async function getQueue(): Promise<QueueItem[]> {
   });
 }
 
-export async function updateStatus(id: string, status: QueueItemStatus): Promise<void> {
+export async function updateStatus(
+  id: string,
+  status: QueueItemStatus,
+): Promise<void> {
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
