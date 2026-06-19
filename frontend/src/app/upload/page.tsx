@@ -23,11 +23,24 @@ import {
   uploadImages,
   uploadImagesBulk,
 } from "@/lib/api";
+import {
+  dequeue,
+  enqueue,
+  getQueue,
+  type QueueItem,
+  updateStatus,
+} from "@/lib/uploadQueue";
 
 type UploadMode = "single" | "bulk";
-type ProcessingState = "queued" | "processing" | "indexed" | "failed";
+type ProcessingState =
+  | "queued"
+  | "uploading"
+  | "processing"
+  | "indexed"
+  | "failed";
 
 type UploadListItem = UploadResult & {
+  queueId?: string;
   jobStatus?: JobStatus["status"];
   processingState?: ProcessingState;
   processingStage?: string;
@@ -39,6 +52,28 @@ function hydrateResults(response: UploadResponse) {
     jobStatus: result.status === "uploaded" ? "queued" : undefined,
     processingState: result.status === "uploaded" ? "queued" : undefined,
   }));
+}
+
+function queueItemToUploadListItem(item: QueueItem): UploadListItem {
+  return {
+    queueId: item.id,
+    filename: item.filename,
+    status: item.status === "failed" ? "failed" : "uploaded",
+    processingState:
+      item.status === "completed"
+        ? "indexed"
+        : item.status === "failed"
+          ? "failed"
+          : item.status === "uploading"
+            ? "uploading"
+            : "queued",
+    processingStage:
+      item.status === "queued"
+        ? "waiting for connection"
+        : item.status === "uploading"
+          ? "uploading"
+          : item.status,
+  } as UploadListItem;
 }
 
 function getProcessingState(jobStatus?: JobStatus["status"]): ProcessingState {
@@ -55,6 +90,12 @@ function getProcessingState(jobStatus?: JobStatus["status"]): ProcessingState {
 }
 
 function getDisplayStatus(item: UploadListItem) {
+  if (item.queueId && item.processingState === "queued") {
+    return "queued offline";
+  }
+  if (item.processingState === "uploading") {
+    return "uploading";
+  }
   if (item.status === "duplicate") {
     return "duplicate";
   }
@@ -62,7 +103,7 @@ function getDisplayStatus(item: UploadListItem) {
     return "upload failed";
   }
   if (item.processingState === "indexed") {
-    return "indexed";
+    return "completed";
   }
   if (item.processingState === "failed") {
     return "processing failed";
@@ -124,6 +165,9 @@ function getItemProgress(item: UploadListItem): number {
   if (item.processingState === "processing" || item.jobStatus === "started") {
     return STAGE_PROGRESS.processing ?? 20;
   }
+  if (item.processingState === "uploading") {
+    return 12;
+  }
   if (item.processingState === "queued" || item.jobStatus === "queued") {
     return STAGE_PROGRESS.queued ?? 8;
   }
@@ -141,6 +185,9 @@ function getStatusClasses(item: UploadListItem) {
     return "accent-badge status-indexed";
   }
   if (item.processingState === "processing") {
+    return "accent-badge status-processing";
+  }
+  if (item.processingState === "uploading") {
     return "accent-badge status-processing";
   }
   return "accent-badge status-default";
@@ -301,13 +348,102 @@ export default function UploadPage() {
     };
   }, [activeJobs, queryClient]);
 
+  const refreshQueuedUploads = useCallback(async () => {
+    const items = await getQueue();
+    setUploadedFiles((prev) => {
+      const nonQueued = prev.filter((item) => !item.queueId);
+      return [...items.map(queueItemToUploadListItem), ...nonQueued];
+    });
+    return items;
+  }, []);
+
+  const flushQueuedUploads = useCallback(async () => {
+    if (!navigator.onLine) {
+      await refreshQueuedUploads();
+      return;
+    }
+
+    const items = await refreshQueuedUploads();
+    for (const item of items) {
+      if (item.status !== "queued") {
+        continue;
+      }
+
+      await updateStatus(item.id, "uploading");
+      setUploadedFiles((prev) =>
+        prev.map((entry) =>
+          entry.queueId === item.id
+            ? queueItemToUploadListItem({ ...item, status: "uploading" })
+            : entry,
+        ),
+      );
+
+      try {
+        const file = new File([item.blob], item.filename, {
+          type: item.blob.type || "application/octet-stream",
+        });
+        const response = await uploadImages([file]);
+        await updateStatus(item.id, "completed");
+        await dequeue(item.id);
+        setUploadedFiles((prev) => [
+          ...hydrateResults(response),
+          ...prev.filter((entry) => entry.queueId !== item.id),
+        ]);
+        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
+      } catch (error) {
+        await updateStatus(item.id, "failed");
+        setUploadedFiles((prev) =>
+          prev.map((entry) =>
+            entry.queueId === item.id
+              ? {
+                  ...queueItemToUploadListItem({ ...item, status: "failed" }),
+                  error: extractErrorMessage(error, "Queued upload failed"),
+                }
+              : entry,
+          ),
+        );
+      }
+    }
+  }, [queryClient, refreshQueuedUploads]);
+
+  useEffect(() => {
+    window.addEventListener("online", flushQueuedUploads);
+    void flushQueuedUploads();
+    return () => window.removeEventListener("online", flushQueuedUploads);
+  }, [flushQueuedUploads]);
+
+  const removeQueuedUpload = useCallback(async (queueId: string) => {
+    await dequeue(queueId);
+    setUploadedFiles((prev) => prev.filter((item) => item.queueId !== queueId));
+  }, []);
+
+  const retryQueuedUpload = useCallback(
+    async (queueId: string) => {
+      await updateStatus(queueId, "queued");
+      await flushQueuedUploads();
+    },
+    [flushQueuedUploads],
+  );
+
   const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
+    async (acceptedFiles: File[]) => {
       if (acceptedFiles.length === 0) {
         toast.error("No valid images selected");
         return;
       }
-
+      if (!navigator.onLine) {
+        for (const file of acceptedFiles) {
+          const queuedItem = await enqueue(file);
+          setUploadedFiles((prev) => [
+            queueItemToUploadListItem(queuedItem),
+            ...prev,
+          ]);
+        }
+        toast(
+          "You're offline — files queued and will upload when reconnected.",
+        );
+        return;
+      }
       uploadMutation.mutate(acceptedFiles);
     },
     [uploadMutation],
@@ -626,6 +762,33 @@ export default function UploadPage() {
                             View existing
                           </Link>
                         )}
+
+                      {result.queueId && (
+                        <>
+                          {result.processingState === "failed" && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                result.queueId &&
+                                void retryQueuedUpload(result.queueId)
+                              }
+                              className="text-xs text-[color:var(--blue)] hover:underline"
+                            >
+                              Retry
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              result.queueId &&
+                              void removeQueuedUpload(result.queueId)
+                            }
+                            className="text-xs text-[color:var(--silver)] hover:text-[color:var(--near-white)]"
+                          >
+                            Remove
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
