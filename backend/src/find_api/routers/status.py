@@ -74,7 +74,9 @@ def get_job_status(job_id: str):
         status_info = {
             "job_id": job_id,
             "status": job.get_status(),
-            "stage": job.meta.get("stage", "queued") if hasattr(job, "meta") else "queued",
+            "stage": job.meta.get("stage", "queued")
+            if hasattr(job, "meta")
+            else "queued",
             "created_at": _attr_iso(job, "created_at"),
             "started_at": _attr_iso(job, "started_at"),
             "ended_at": _attr_iso(job, "ended_at") or _attr_iso(job, "completed_at"),
@@ -84,15 +86,21 @@ def get_job_status(job_id: str):
             status_info["result"] = job.result
 
         if job.is_failed:
-            status_info["error"] = getattr(job, "error_info", None) or job.meta.get("error", "Job failed")
-            status_info["stage"] = job.meta.get("stage", "failed") if hasattr(job, "meta") else "failed"
+            status_info["error"] = getattr(job, "error_info", None) or job.meta.get(
+                "error", "Job failed"
+            )
+            status_info["stage"] = (
+                job.meta.get("stage", "failed") if hasattr(job, "meta") else "failed"
+            )
 
         return status_info
 
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Error fetching job {job_id}: {exc}") from exc
+        raise HTTPException(
+            status_code=503, detail=f"Error fetching job {job_id}: {exc}"
+        ) from exc
 
 
 def _attr_iso(obj: Any, attr: str) -> str | None:

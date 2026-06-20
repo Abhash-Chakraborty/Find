@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from find_api.models.person import Person
 from find_api.models.face import Face
 from find_api.models.media import Media
+from find_api.models.feedback import GeneralFeedback
 
 
 @pytest.fixture
@@ -213,6 +214,37 @@ class TestGeneralFeedback:
         feedback = response.json()
         assert feedback["feedback_type"] == "search_rating"
         assert feedback["rating"] == 5
+
+    def test_reset_search_preferences(self, client, db: Session, test_media: Media):
+        """Test resetting local search ranking preferences."""
+        test_media.ranking_boost = 0.04
+        db.add(
+            GeneralFeedback(
+                feedback_type="search_rating",
+                media_id=test_media.id,
+                rating=5,
+            )
+        )
+        db.add(
+            GeneralFeedback(
+                feedback_type="caption_rating",
+                media_id=test_media.id,
+                rating=3,
+            )
+        )
+        db.commit()
+
+        response = client.delete("/api/feedback/search-preferences")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "reset"
+        assert body["deleted_search_ratings"] == 1
+
+        db.refresh(test_media)
+        assert test_media.ranking_boost == 0.0
+        remaining_feedback = db.query(GeneralFeedback).all()
+        assert [item.feedback_type for item in remaining_feedback] == ["caption_rating"]
 
     def test_caption_rating(self, client, db: Session, test_media: Media):
         """Test rating a caption"""

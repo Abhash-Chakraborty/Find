@@ -10,7 +10,11 @@ import numpy as np
 from rq import get_current_job
 
 from find_api.core.database import SessionLocal
-from find_api.core.queue import clear_clustering_job_state, enqueue_clustering_job
+from find_api.core.queue import (
+    clear_clustering_job_state,
+    clear_feedback_ranking_job_state,
+    enqueue_clustering_job,
+)
 from find_api.core.storage import get_file, upload_thumbnail
 from find_api.core.model_manager import get_model_manager
 from find_api.core.config import settings
@@ -18,6 +22,9 @@ from find_api.models.media import Media
 from find_api.services.query_cache import invalidate_query_cache
 from find_api.utils.exif import extract_exif_data
 from find_api.utils.errors import sanitize_error
+
+from sqlalchemy import func
+from find_api.models.feedback import GeneralFeedback
 
 logger = logging.getLogger(__name__)
 
@@ -367,6 +374,67 @@ def cluster_images():
 
     finally:
         clear_clustering_job_state()
+        db.close()
+
+
+def process_feedback_ranking():
+    """
+    Background job to compute tiny ranking boosts
+    from accumulated local feedback.
+    """
+
+    db = SessionLocal()
+
+    try:
+        logger.info("Starting feedback ranking update...")
+
+        media_items = db.query(Media).filter(Media.status == "indexed").all()
+
+        feedback_scores = (
+            db.query(
+                GeneralFeedback.media_id,
+                func.avg(GeneralFeedback.rating).label("avg_rating"),
+            )
+            .filter(
+                GeneralFeedback.feedback_type == "search_rating",
+            )
+            .group_by(GeneralFeedback.media_id)
+            .all()
+        )
+
+        score_map = {media_id: avg_rating for media_id, avg_rating in feedback_scores}
+
+        for media in media_items:
+            avg_rating = score_map.get(media.id)
+
+            boost = 0.0
+
+            # tiny boost for liked images
+            if media.liked:
+                boost += 0.02
+
+            # tiny adjustment from ratings
+            if avg_rating is not None:
+                boost += (float(avg_rating) - 3.0) * 0.01
+
+            # keep semantic search dominant
+            boost = max(min(boost, 0.05), -0.05)
+
+            media.ranking_boost = boost
+
+        db.commit()
+
+        logger.info("Feedback ranking update complete")
+
+        return {"status": "success"}
+
+    except Exception as e:
+        logger.error("Feedback ranking failed: %s", e)
+        db.rollback()
+        raise
+
+    finally:
+        clear_feedback_ranking_job_state()
         db.close()
 
 

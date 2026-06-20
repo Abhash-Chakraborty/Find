@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 import traceback
-from typing import Any
 
 from find_api.core.config import settings
 from find_api.core.sqlite_queue import (
@@ -31,9 +29,15 @@ def _ensure_registrations() -> None:
         return
     from find_api.workers.jobs import analyze_image, cluster_images, cluster_faces
 
-    register_job(f"{analyze_image.__module__}:{analyze_image.__qualname__}", analyze_image)
-    register_job(f"{cluster_images.__module__}:{cluster_images.__qualname__}", cluster_images)
-    register_job(f"{cluster_faces.__module__}:{cluster_faces.__qualname__}", cluster_faces)
+    register_job(
+        f"{analyze_image.__module__}:{analyze_image.__qualname__}", analyze_image
+    )
+    register_job(
+        f"{cluster_images.__module__}:{cluster_images.__qualname__}", cluster_images
+    )
+    register_job(
+        f"{cluster_faces.__module__}:{cluster_faces.__qualname__}", cluster_faces
+    )
     _JOB_REGISTRATIONS = True
 
 
@@ -148,7 +152,9 @@ def stop_worker_thread(thread: threading.Thread) -> None:
         stop_event.set()
     thread.join(timeout=WORKER_SHUTDOWN_TIMEOUT)
     if thread.is_alive():
-        logger.warning("SQLite worker thread did not stop within %ss", WORKER_SHUTDOWN_TIMEOUT)
+        logger.warning(
+            "SQLite worker thread did not stop within %ss", WORKER_SHUTDOWN_TIMEOUT
+        )
 
 
 # Allow running as a standalone script::

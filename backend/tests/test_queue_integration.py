@@ -117,10 +117,6 @@ class TestRedisMode:
         """Redis mode imports should still work."""
         from find_api.core.queue import (
             CLUSTERING_LOCK_KEY,
-            CLUSTERING_JOB_ID_KEY,
-            clear_clustering_job_state,
-            get_redis_connection,
-            get_task_queue,
         )
 
         assert CLUSTERING_LOCK_KEY == "find:clustering:queued"

@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_QUEUE_NAME = "default"
 CLUSTERING_LOCK_KEY = "find:clustering:queued"
 CLUSTERING_JOB_ID_KEY = "find:clustering:job-id"
+FEEDBACK_LOCK_KEY = "find:feedback-ranking:queued"
+FEEDBACK_JOB_ID_KEY = "find:feedback-ranking:job-id"
 
 # ---------------------------------------------------------------------------
 # Backend selection
@@ -67,7 +69,9 @@ def get_task_queue():
     return _get_backend()
 
 
-RQ_CONTROL_KWARGS = frozenset({"job_timeout", "result_ttl", "ttl", "failure_ttl", "depends_on"})
+RQ_CONTROL_KWARGS = frozenset(
+    {"job_timeout", "result_ttl", "ttl", "failure_ttl", "depends_on"}
+)
 
 
 def enqueue_job(func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -150,7 +154,9 @@ def _set_clustering_lock(*, reason: str) -> bool:
             )
         )
     else:
-        return backend.acquire_clustering_lock(CLUSTERING_LOCK_KEY, reason, _cluster_lock_ttl())
+        return backend.acquire_clustering_lock(
+            CLUSTERING_LOCK_KEY, reason, _cluster_lock_ttl()
+        )
 
 
 def _save_clustering_job_id(job_id: str) -> None:
@@ -159,6 +165,16 @@ def _save_clustering_job_id(job_id: str) -> None:
         _get_backend.redis_conn.set(
             CLUSTERING_JOB_ID_KEY, job_id, ex=_cluster_lock_ttl()
         )
+
+
+def clear_feedback_ranking_job_state() -> None:
+    """Clear keys used to coalesce feedback ranking jobs."""
+    backend = _get_backend()
+    if _get_backend.mode == "redis":
+        _get_backend.redis_conn.delete(FEEDBACK_LOCK_KEY)
+        _get_backend.redis_conn.delete(FEEDBACK_JOB_ID_KEY)
+    else:
+        backend.release_clustering_lock(FEEDBACK_LOCK_KEY)
 
 
 def enqueue_clustering_job(*, reason: str) -> dict[str, Any]:
@@ -200,3 +216,79 @@ def enqueue_clustering_job(*, reason: str) -> dict[str, Any]:
         "enqueued": True,
         "status": "queued",
     }
+
+
+def enqueue_feedback_ranking_job(reason: str) -> dict[str, Any]:
+    """Enqueue feedback ranking update job only once."""
+    from find_api.workers.jobs import process_feedback_ranking
+
+    backend = _get_backend()
+    ttl_seconds = 300
+    existing_job_id: str | None = None
+    if _get_backend.mode == "redis":
+        existing_job_id_bytes = _get_backend.redis_conn.get(FEEDBACK_JOB_ID_KEY)
+        if existing_job_id_bytes:
+            existing_job_id = existing_job_id_bytes.decode("utf-8")
+        lock_acquired = bool(
+            _get_backend.redis_conn.set(
+                FEEDBACK_LOCK_KEY,
+                reason,
+                nx=True,
+                ex=ttl_seconds,
+            )
+        )
+    else:
+        lock_acquired = backend.acquire_clustering_lock(
+            FEEDBACK_LOCK_KEY,
+            reason,
+            ttl_seconds,
+        )
+        for job in backend.list_active():
+            if "process_feedback_ranking" in job.type:
+                existing_job_id = job.id
+                break
+
+    if lock_acquired:
+        job = enqueue_job(
+            process_feedback_ranking,
+            job_timeout=settings.WORKER_TIMEOUT,
+            result_ttl=300,
+        )
+
+        if _get_backend.mode == "redis":
+            _get_backend.redis_conn.set(FEEDBACK_JOB_ID_KEY, job.id, ex=ttl_seconds)
+
+        logger.info(
+            "Queued feedback ranking job %s (%s)",
+            job.id,
+            reason,
+        )
+
+        return {
+            "job_id": job.id,
+            "message": "Feedback ranking job queued",
+            "enqueued": True,
+            "status": "queued",
+        }
+
+    if existing_job_id:
+        try:
+            job = get_job(existing_job_id)
+            if job is None:
+                raise LookupError(f"Feedback ranking job {existing_job_id} not found")
+            job_status = job.get_status()
+        except Exception:  # noqa: BLE001
+            clear_feedback_ranking_job_state()
+        else:
+            if job_status not in {"queued", "started", "deferred", "running"}:
+                clear_feedback_ranking_job_state()
+                return enqueue_feedback_ranking_job(reason=reason)
+            return {
+                "job_id": existing_job_id,
+                "message": "Feedback ranking job already queued",
+                "enqueued": False,
+                "status": job_status,
+            }
+
+    clear_feedback_ranking_job_state()
+    return enqueue_feedback_ranking_job(reason=reason)
