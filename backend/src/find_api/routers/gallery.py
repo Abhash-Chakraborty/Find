@@ -10,8 +10,8 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, desc
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_
 
 from find_api.core.config import settings
 from find_api.core.database import get_db
@@ -19,6 +19,7 @@ from find_api.core.queue import get_task_queue
 from find_api.core.storage import get_file_url, delete_file
 from find_api.models.media import Media
 from find_api.models.cluster import Cluster
+from find_api.services.query_cache import invalidate_query_cache
 from find_api.workers.jobs import analyze_image, generate_thumbnail_for_media
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,15 @@ class BulkDeleteResponse(BaseModel):
     deleted_count: int
     missing_count: int
     failed_count: int
+
+
+class GalleryCountsResponse(BaseModel):
+    """Status counts for the visible gallery tabs."""
+
+    all: int
+    indexed: int
+    processing: int
+    failed: int
 
 
 def build_thumbnail_url(media_id: int) -> str:
@@ -147,6 +157,23 @@ def parse_date_range(
             return start_date, end_date
 
     return None, None
+
+
+@router.get("/gallery/counts", response_model=GalleryCountsResponse)
+def get_gallery_counts(
+    liked: Optional[bool] = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Media).filter(Media.is_hidden.is_(False))
+    if liked is not None:
+        query = query.filter(Media.liked == liked)
+
+    return GalleryCountsResponse(
+        all=query.count(),
+        indexed=query.filter(Media.status == "indexed").count(),
+        processing=query.filter(Media.status == "processing").count(),
+        failed=query.filter(Media.status == "failed").count(),
+    )
 
 
 @router.get("/gallery")
@@ -284,11 +311,17 @@ def get_image_detail(media_id: int, db: Session = Depends(get_db)):
     Returns:
         Complete media information including metadata
     """
-    media = db.query(Media).filter(Media.id == media_id).first()
+    row = (
+        db.query(Media, Cluster.label)
+        .outerjoin(Cluster, Media.cluster_id == Cluster.id)
+        .filter(Media.id == media_id)
+        .first()
+    )
 
-    if not media:
+    if not row:
         raise HTTPException(404, "Image not found")
 
+    media, cluster_label = row
     metadata = normalize_metadata(media.metadata_json)
 
     # Build response
@@ -305,6 +338,7 @@ def get_image_detail(media_id: int, db: Session = Depends(get_db)):
         "created_at": media.created_at.isoformat() if media.created_at else None,
         "processed_at": media.processed_at.isoformat() if media.processed_at else None,
         "cluster_id": media.cluster_id,
+        "cluster_label": cluster_label,
         "thumbnail_key": media.thumbnail_key,
         "thumbnail_content_type": media.thumbnail_content_type,
         "thumbnail_size": media.thumbnail_size,
@@ -412,6 +446,7 @@ def toggle_like(media_id: int, db: Session = Depends(get_db)):
 
     media.liked = not media.liked
     db.commit()
+    invalidate_query_cache()
     db.refresh(media)
 
     return {"id": media.id, "liked": media.liked}
@@ -452,10 +487,14 @@ def reprocess_image(media_id: int, db: Session = Depends(get_db)):
 
     try:
         job = get_task_queue().enqueue(
-            analyze_image, media.id, job_timeout=settings.WORKER_TIMEOUT
+            analyze_image,
+            media.id,
+            True,
+            job_timeout=settings.WORKER_TIMEOUT,
         )
         media.analysis_job_id = job.id
         db.commit()
+        invalidate_query_cache()
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         raise HTTPException(
@@ -521,6 +560,7 @@ def delete_image(media_id: int, db: Session = Depends(get_db)):
     _remove_media_ids_from_clusters(db, {media_id})
 
     db.commit()
+    invalidate_query_cache()
 
     return {"message": "Image deleted", "id": media_id}
 
@@ -561,6 +601,8 @@ def bulk_delete_images(
         _remove_media_ids_from_clusters(db, set(deleted_ids))
 
     db.commit()
+    if deleted_ids:
+        invalidate_query_cache()
 
     return {
         "message": "Bulk delete completed",

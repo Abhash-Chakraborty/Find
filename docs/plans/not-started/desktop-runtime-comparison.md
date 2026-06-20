@@ -1,8 +1,12 @@
 # Desktop Runtime: Detailed Comparison & Trade-off Analysis
 
+**Status:** Not started  
+**Last reviewed:** 2026-05-28  
+**Current implementation status:** This comparison still describes the proposed no-Docker runtime. The current complete app runtime remains Docker/PostgreSQL/Redis/MinIO-based.
+
 **Related Documents:**
-- [desktop-runtime-design-adr.md](./desktop-runtime-design-adr.md) - Full ADR
-- [DESKTOP_RUNTIME_QUICK_REFERENCE.md](./DESKTOP_RUNTIME_QUICK_REFERENCE.md) - Quick reference
+- [desktop-runtime-adr.md](./desktop-runtime-adr.md) - Full ADR
+- [desktop-runtime-quick-reference.md](./desktop-runtime-quick-reference.md) - Quick reference
 
 ---
 
@@ -203,7 +207,7 @@
 | **Resource efficiency** | Heavier (containers) | Lighter (processes) | Tauri ✓ |
 | **Maturity** | Very mature | Newer framework | Docker Compose |
 
-**Verdict:** Tauri shell wins for MVP (no Docker, better UX, lighter). See [desktop-tauri-vs-electron-adr.md](./desktop-tauri-vs-electron-adr.md) for detailed framework analysis.
+**Verdict:** Tauri shell wins for MVP (no Docker, better UX, lighter). See [desktop-tauri-vs-electron-adr.md](../partial/desktop-tauri-vs-electron-adr.md) for detailed framework analysis.
 
 ---
 

@@ -186,14 +186,13 @@ export function GalleryDateFilter({
                 </button>
               ))}
 
-              {/* Custom date inputs */}
-              <div className="border-t border-[var(--frost)] pt-3">
+              <fieldset className="border-t border-[var(--frost)] pt-3">
+                <legend className="mb-2 text-xs font-medium text-[color:var(--silver)]">
+                  Custom date range
+                </legend>
                 <div className="space-y-2">
-                  <label
-                    htmlFor="custom-date-start"
-                    className="block text-xs font-medium text-[color:var(--silver)] mb-2"
-                  >
-                    Custom date range
+                  <label htmlFor="custom-date-start" className="sr-only">
+                    Start date
                   </label>
                   <input
                     id="custom-date-start"
@@ -203,6 +202,9 @@ export function GalleryDateFilter({
                     className="w-full rounded border border-[var(--frost)] bg-[color:var(--surface-soft)] px-2 py-1 text-xs text-[color:var(--near-white)] placeholder-[color:var(--muted)]"
                     placeholder="Start date"
                   />
+                  <label htmlFor="custom-date-end" className="sr-only">
+                    End date
+                  </label>
                   <input
                     id="custom-date-end"
                     type="date"
@@ -212,7 +214,7 @@ export function GalleryDateFilter({
                     placeholder="End date"
                   />
                 </div>
-              </div>
+              </fieldset>
 
               {/* Action buttons */}
               <div className="border-t border-[var(--frost)] pt-3 flex gap-2">

@@ -62,3 +62,34 @@ def test_cluster_detail_includes_thumbnail_urls(client, db):
     assert body["id"] == cluster.id
     member = body["members"][0]
     assert member["thumbnail_url"] == f"/api/image/{member['id']}/thumbnail"
+
+
+def test_update_cluster_label(client, db):
+    media = _seed_media(db, filename="rename.jpg")
+    cluster = _seed_cluster(db, member_ids=[media.id])
+
+    response = client.patch(
+        f"/api/cluster/{cluster.id}",
+        json={"label": "Vacation photos"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == cluster.id
+    assert body["label"] == "Vacation photos"
+
+    db.refresh(cluster)
+    assert cluster.label == "Vacation photos"
+
+
+def test_update_cluster_label_trims_empty_to_null(client, db):
+    media = _seed_media(db, filename="clear-label.jpg")
+    cluster = _seed_cluster(db, member_ids=[media.id])
+
+    response = client.patch(f"/api/cluster/{cluster.id}", json={"label": "   "})
+
+    assert response.status_code == 200
+    assert response.json()["label"] is None
+
+    db.refresh(cluster)
+    assert cluster.label is None

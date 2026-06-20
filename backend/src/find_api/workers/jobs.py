@@ -15,6 +15,7 @@ from find_api.core.storage import get_file, upload_thumbnail
 from find_api.core.model_manager import get_model_manager
 from find_api.core.config import settings
 from find_api.models.media import Media
+from find_api.services.query_cache import invalidate_query_cache
 from find_api.utils.exif import extract_exif_data
 from find_api.utils.errors import sanitize_error
 
@@ -30,6 +31,7 @@ except Exception as e:
     logger.error(f"Failed to start model cleanup thread in worker: {e}")
 
 FACE_CLUSTER_NAME_MATCH_THRESHOLD = 0.72
+ANALYSIS_MODEL_NAMES = ("yolo", "florence-2", "paddleocr", "siglip", "insightface")
 
 
 def cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
@@ -79,6 +81,7 @@ def generate_thumbnail_for_media(media_id: int):
         for key, value in thumbnail_metadata.items():
             setattr(media, key, value)
         db.commit()
+        invalidate_query_cache()
         return {"status": "success", "media_id": media_id}
     except Exception as exc:  # noqa: BLE001
         db.rollback()
@@ -88,7 +91,7 @@ def generate_thumbnail_for_media(media_id: int):
         db.close()
 
 
-def analyze_image(media_id: int):
+def analyze_image(media_id: int, clear_model_failures: bool = False):
     """
     Main worker job to analyze an uploaded image
     """
@@ -105,6 +108,9 @@ def analyze_image(media_id: int):
     metadata = None
 
     try:
+        if clear_model_failures:
+            get_model_manager().clear_model_failures(ANALYSIS_MODEL_NAMES)
+
         set_stage(job, "loading image")
 
         media = db.query(Media).filter(Media.id == media_id).first()
@@ -168,6 +174,24 @@ def analyze_image(media_id: int):
         media.processed_at = datetime.utcnow()
 
         db.commit()
+        invalidate_query_cache()
+
+        # near-duplicate detection
+        try:
+            from find_api.services.duplicate_service import (
+                find_near_duplicate,
+                flag_as_duplicate,
+            )
+
+            if media.vector is not None:
+                dup_id = find_near_duplicate(
+                    db=db, media_id=media.id, embedding=media.vector
+                )
+                if dup_id is not None:
+                    flag_as_duplicate(db=db, media_id=media.id, duplicate_of=dup_id)
+        except Exception as e:
+            db.rollback()
+            logger.warning("Near-duplicate check failed for media %s: %s", media_id, e)
 
         from find_api.workers.processors import (
             detect_and_store_faces,
@@ -240,20 +264,14 @@ def cluster_images():
     try:
         logger.info("Starting clustering job...")
 
-        db.query(Media).filter(Media.cluster_id.isnot(None)).update(
-            {Media.cluster_id: None}, synchronize_session=False
-        )
-        db.query(Cluster).delete(synchronize_session=False)
-        db.flush()
-
+        # Step 1: Read data — no DB mutations yet.
         media_rows = (
             db.query(Media.id, Media.vector)
             .filter(Media.status == "indexed", Media.vector.isnot(None))
             .all()
         )
-
+        # Step 2: Validate minimum size BEFORE touching anything.
         if len(media_rows) < settings.MIN_CLUSTER_SIZE:
-            db.commit()
             logger.warning(
                 "Not enough images for clustering (found %s, need %s)",
                 len(media_rows),
@@ -271,13 +289,14 @@ def cluster_images():
 
         logger.info(f"Clustering {len(media_rows)} images...")
 
+        # Step 3: Run clustering — pure computation, no DB.
+
         clusterer = get_image_clusterer()
         labels, info = clusterer.cluster(embeddings)
 
         cluster_labels = sorted({int(label) for label in labels if int(label) != -1})
-
+        # Step 4: Validate result BEFORE touching anything.
         if not cluster_labels:
-            db.commit()
             logger.info("Clustering completed with no stable clusters")
             return {
                 **info,
@@ -286,6 +305,12 @@ def cluster_images():
             }
 
         centroids = clusterer.compute_centroids(embeddings, labels)
+        # Step 5: Now safe to mutate — valid new state exists.
+        db.query(Media).filter(Media.cluster_id.isnot(None)).update(
+            {Media.cluster_id: None}, synchronize_session=False
+        )
+        db.query(Cluster).delete(synchronize_session=False)
+        db.flush()
 
         cluster_records = {}
         for cluster_label in cluster_labels:
@@ -317,7 +342,8 @@ def cluster_images():
             ],
         )
 
-        db.commit()
+        db.commit()  # ← single commit: delete old + insert new, atomically
+        invalidate_query_cache()
 
         result = {
             **info,

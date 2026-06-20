@@ -1,5 +1,9 @@
 # Small-Team Authentication (Instance Sharing)
 
+**Status:** In progress — backend auth foundation implemented  
+**Last reviewed:** 2026-05-30  
+**Current implementation status:** Backend auth foundation implemented (user model, session tokens, invite flow, join requests, admin approval, upload ownership tracking). Frontend UI, deletion-request workflow, and audit log remain unimplemented.
+
 ## Summary
 
 Find should support a lightweight single-admin + multi-user model for trusted small-team or household deployments while preserving the local-first philosophy. The machine hosting Find acts as the "admin" and controls storage, database, and shared access. The feature is an opt-in, self-hosted instance-sharing model rather than a cloud multi-tenant identity system.
@@ -33,6 +37,41 @@ Join an Instance (user flows)
 - They submit a username + password and an optional display name.
 - The backend creates a join request which the admin reviews and approves or denies (or if invite is pre-approved, account is created automatically).
 - Once approved, the user can sign in and interact with the shared instance.
+
+## Instance Tab UI State Checklist
+
+Use this checklist when implementing or reviewing the future Instance tab. It documents expected UI
+states only; no frontend implementation exists yet.
+
+### General states
+
+- [ ] Single-user default: local installs continue to work without creating or joining a shared
+  instance.
+- [ ] Empty state: no shared instance is configured, with clear create/join entry points.
+- [ ] Loading state: authentication, instance details, invite status, and pending request data can
+  load without flashing incorrect admin or user controls.
+- [ ] Success state: connected instance details, current user role, and active users are visible.
+- [ ] Unauthorized state: invalid permissions, missing sessions, and expired sessions are handled
+  without exposing admin actions.
+- [ ] Error state: failed requests, unavailable backend services, and invalid response shapes are
+  shown with recoverable retry paths.
+
+### Admin setup flow
+
+- [ ] Admin can explicitly enable shared-instance mode and create the first admin account.
+- [ ] Admin can generate short-lived invite tokens or links.
+- [ ] Admin can review pending join requests in loading, empty, error, and populated states.
+- [ ] Admin can approve or reject requests with visible success and failure feedback.
+- [ ] Active users list is visible to admins and handles empty, loading, and error states.
+
+### Joining-user flow
+
+- [ ] User can enter an invite token or link and submit username/password details.
+- [ ] Pending approval state is clearly displayed after a join request is submitted.
+- [ ] Approved or successful join state provides a clear sign-in or continue path.
+- [ ] Rejected, expired, reused, malformed, or unauthorized invite states are handled gracefully.
+
+> Single-user local installs must not require shared-instance setup. Sharing remains opt-in and local-first by default.
 
 ## Authentication & Accounts
 

@@ -5,7 +5,7 @@ on Find. It is intentionally focused on beginner environment issues.
 
 For real model, caption, OCR, embedding, or search-quality debugging, use:
 
-- [Real ML Troubleshooting Guide](./REAL_ML_TROUBLESHOOTING.md)
+- [Real ML Troubleshooting Guide](./real-ml-troubleshooting.md)
 
 ## Node.js and pnpm issues
 

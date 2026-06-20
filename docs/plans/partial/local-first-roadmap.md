@@ -1,8 +1,11 @@
 # Installable Local-First Architecture Roadmap for Find
 
-**Status:** Proposed  
+**Status:** Partially complete  
 **Date:** 2026-05-15  
+**Last reviewed:** 2026-05-28  
 **Related:** [Issue #41](https://github.com/Abhash-Chakraborty/Find/issues/41), [Discussion #36](https://github.com/Abhash-Chakraborty/Find/discussions/36), [Discussion #37](https://github.com/Abhash-Chakraborty/Find/discussions/37), [Discussion #38](https://github.com/Abhash-Chakraborty/Find/discussions/38), [Discussion #39](https://github.com/Abhash-Chakraborty/Find/discussions/39)
+
+**Current implementation status:** Phase 1 has a Tauri shell prototype. The full installable runtime is still incomplete because the backend, worker, database, object storage, queue, model cache, update path, and desktop process supervision are not packaged into a no-Docker user install.
 
 ## Why this roadmap exists
 

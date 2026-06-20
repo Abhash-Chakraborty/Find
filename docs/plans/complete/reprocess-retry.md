@@ -1,5 +1,9 @@
 # Reprocess / Retry Analysis Feature
 
+**Status:** Complete  
+**Last reviewed:** 2026-05-28  
+**Completion evidence:** Backend endpoint, frontend actions, and focused backend/frontend tests are present in the current codebase.
+
 This document describes the "reprocess" (retry analysis) feature added to the project, what was changed, how the tests were written, and how to run them locally.
 
 ## Summary

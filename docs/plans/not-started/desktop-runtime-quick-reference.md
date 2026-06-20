@@ -1,6 +1,10 @@
 # Desktop Runtime Design - Quick Reference
 
-**Full ADR:** [desktop-runtime-design-adr.md](./desktop-runtime-design-adr.md)
+**Status:** Not started  
+**Last reviewed:** 2026-05-28  
+**Current implementation status:** This is still a reference for the proposed no-Docker desktop runtime. The full SQLite/filesystem/SQLite-queue runtime has not landed.
+
+**Full ADR:** [desktop-runtime-adr.md](./desktop-runtime-adr.md)
 
 ---
 
@@ -197,12 +201,12 @@ Users can override via `~/.find/config.json` for advanced use.
 
 ## Files & Documentation
 
-- **Full ADR:** [desktop-runtime-design-adr.md](./desktop-runtime-design-adr.md) (full design document)
+- **Full ADR:** [desktop-runtime-adr.md](./desktop-runtime-adr.md) (full design document)
 - **Related ADRs:**
-  - [desktop-tauri-vs-electron-adr.md](./desktop-tauri-vs-electron-adr.md) - Framework choice
-  - [installable-local-first-architecture-roadmap.md](./installable-local-first-architecture-roadmap.md) - Broader roadmap
+  - [desktop-tauri-vs-electron-adr.md](../partial/desktop-tauri-vs-electron-adr.md) - Framework choice
+  - [local-first-roadmap.md](../partial/local-first-roadmap.md) - Broader roadmap
   - [mobile-strategy.md](./mobile-strategy.md) - PWA-first mobile approach
-- **Implementation reference:** [DEPENDENCY_POLICY.md](./DEPENDENCY_POLICY.md)
+- **Implementation reference:** [dependency-policy.md](../../policies/dependency-policy.md)
 
 ---
 

@@ -1,6 +1,6 @@
 # GitHub Copilot Instructions
 
-Follow the repository guidance in [AGENTS.md](../AGENTS.md) and the security policy in [docs/AGENT_SECURITY.md](../docs/AGENT_SECURITY.md).
+Follow the repository guidance in [AGENTS.md](../AGENTS.md) and the security policy in [docs/policies/agent-security.md](../docs/policies/agent-security.md).
 
 Important Find-specific rules:
 

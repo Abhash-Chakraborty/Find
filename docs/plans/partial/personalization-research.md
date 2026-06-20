@@ -1,5 +1,9 @@
 # Personalization Research: Low-Compute Approaches for Local Model Adaptation
 
+**Status:** Partially complete  
+**Last reviewed:** 2026-05-28  
+**Current implementation status:** Feedback collection exists in the backend and frontend. Adaptive epsilon tuning, negative-sample ranking, embedding re-weighting, and scheduled personalization jobs are still research/planned work.
+
 ## Overview
 
 This document evaluates approaches for personalizing Find's ML models based on user feedback, **without cloud training or heavy fine-tuning**. The goal is to improve clustering accuracy over time while keeping all computation local and GPU-optional.
