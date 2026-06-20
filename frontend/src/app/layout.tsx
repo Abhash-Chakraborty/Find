@@ -23,7 +23,7 @@ export default function RootLayout({
       <body className="antialiased">
         <Providers>
           <CursorGlow />
-          <nav className="sticky top-0 z-50 h-[var(--nav-height)] border-b border-[var(--frost)] bg-[color:var(--void)]/78 backdrop-blur-xl">
+          <nav className="sticky top-0 z-50 h-[var(--nav-height)] w-full max-w-full overflow-x-hidden border-b border-[var(--frost)] bg-[color:var(--void)]/78 backdrop-blur-xl">
             <div className="container-shell px-0 py-4">
               <div className="flex items-center justify-between gap-4">
                 <Link

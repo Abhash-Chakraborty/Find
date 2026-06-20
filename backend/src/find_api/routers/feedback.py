@@ -3,7 +3,7 @@ from datetime import datetime
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from find_api.core.database import get_db
@@ -49,8 +49,7 @@ class PersonFeedbackResponse(BaseModel):
     status: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GeneralFeedbackRequest(BaseModel):
@@ -77,8 +76,7 @@ class GeneralFeedbackResponse(BaseModel):
     extra_metadata: Optional[dict[str, Any]]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ─── Person Cluster Feedback Endpoints ────────────────────────────────────

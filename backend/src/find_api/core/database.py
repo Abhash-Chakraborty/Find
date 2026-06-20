@@ -40,6 +40,7 @@ def init_db():
     try:
         # Import all models to register them for metadata creation
         from find_api.models import media, cluster, face, person, feedback  # noqa: F401
+        from find_api.models import user, session, invite, join_request  # noqa: F401
 
         # pgvector must exist before SQLAlchemy creates vector columns.
         if engine.dialect.name == "postgresql":
@@ -120,6 +121,24 @@ def init_db():
                 )
                 conn.execute(
                     text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS uploader_user_id INTEGER"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_uploader_user_id "
+                        "ON media (uploader_user_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_single_admin "
+                        "ON users (role) WHERE role = 'admin'"
+                    )
+                )
+                conn.execute(
+                    text(
                         """
                         DO $$
                         BEGIN
@@ -132,6 +151,27 @@ def init_db():
                                 ADD CONSTRAINT fk_media_duplicate_of
                                 FOREIGN KEY (duplicate_of)
                                 REFERENCES media(id)
+                                ON DELETE SET NULL;
+                            END IF;
+                        END
+                        $$;
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        """
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1
+                                FROM pg_constraint
+                                WHERE conname = 'fk_media_uploader_user_id'
+                            ) THEN
+                                ALTER TABLE media
+                                ADD CONSTRAINT fk_media_uploader_user_id
+                                FOREIGN KEY (uploader_user_id)
+                                REFERENCES users(id)
                                 ON DELETE SET NULL;
                             END IF;
                         END

@@ -72,6 +72,14 @@ class Media(Base):
         index=True,
     )
 
+    # Uploader tracking (populated in shared mode, null in local mode)
+    uploader_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Vector embedding for semantic search
     vector = Column(Vector(settings.EMBEDDING_DIM))
 

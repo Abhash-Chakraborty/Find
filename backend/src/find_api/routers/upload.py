@@ -2,21 +2,24 @@
 Upload endpoint for image ingestion
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from PIL import Image
-from sqlalchemy.orm import Session
-from typing import List, Optional
 import hashlib
 import io
 import logging
 import mimetypes
 import zipfile
+from typing import List, Optional
 
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from PIL import Image
+from sqlalchemy.orm import Session
+
+from find_api.core.config import settings
 from find_api.core.database import get_db
+from find_api.core.dependencies import get_optional_user
 from find_api.core.queue import get_task_queue
 from find_api.core.storage import upload_file, upload_thumbnail
-from find_api.core.config import settings
 from find_api.models.media import Media
+from find_api.models.user import User
 from find_api.workers.jobs import analyze_image
 
 logger = logging.getLogger(__name__)
@@ -26,7 +29,9 @@ router = APIRouter()
 
 @router.post("/upload")
 async def upload_images(
-    files: List[UploadFile] = File(...), db: Session = Depends(get_db)
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """
     Upload one or more images for processing
@@ -44,6 +49,7 @@ async def upload_images(
                 content_type=file.content_type,
                 file_data=file_data,
                 db=db,
+                uploader_user_id=user.id if user else None,
             )
             results.append(result)
         except HTTPException:
@@ -63,7 +69,9 @@ async def upload_images(
 
 @router.post("/upload/bulk")
 async def upload_bulk_images(
-    file: UploadFile = File(...), db: Session = Depends(get_db)
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """
     Upload images in bulk via ZIP archive
@@ -166,6 +174,7 @@ async def upload_bulk_images(
                         content_type=guessed_type,
                         file_data=file_data,
                         db=db,
+                        uploader_user_id=user.id if user else None,
                     )
                     results.append(result)
                 except HTTPException as e:
@@ -204,6 +213,7 @@ def _ingest_image(
     content_type: Optional[str],
     file_data: bytes,
     db: Session,
+    uploader_user_id: Optional[int] = None,
 ) -> dict:
     """Create or reuse a media record from raw image bytes"""
     detected_type = content_type or mimetypes.guess_type(filename)[0] or ""
@@ -234,6 +244,9 @@ def _ingest_image(
 
     existing = db.query(Media).filter(Media.file_hash == file_hash).first()
     if existing:
+        if uploader_user_id is not None and existing.uploader_user_id is None:
+            existing.uploader_user_id = uploader_user_id
+            db.commit()
         logger.info(f"File {filename} already exists (hash: {file_hash})")
         return {"filename": filename, "status": "duplicate", "media_id": existing.id}
 
@@ -244,15 +257,19 @@ def _ingest_image(
     upload_file(file_data, minio_key, detected_type)
     thumbnail_metadata = upload_thumbnail(file_data, file_hash)
 
-    media = Media(
-        file_hash=file_hash,
-        minio_key=minio_key,
-        filename=filename,
-        content_type=detected_type,
-        file_size=file_size,
-        status="pending",
+    media_kwargs = {
+        "file_hash": file_hash,
+        "minio_key": minio_key,
+        "filename": filename,
+        "content_type": detected_type,
+        "file_size": file_size,
+        "status": "pending",
         **(thumbnail_metadata or {}),
-    )
+    }
+    if uploader_user_id is not None:
+        media_kwargs["uploader_user_id"] = uploader_user_id
+
+    media = Media(**media_kwargs)
 
     db.add(media)
     db.commit()

@@ -16,6 +16,14 @@ from find_api.utils.errors import sanitize_error
 
 logger = logging.getLogger(__name__)
 
+# OCR-present assets use weighted fusion to improve text-centric retrieval.
+OCR_AWARE_SIGNAL_WEIGHTS = {
+    "image": 0.40,
+    "caption": 0.25,
+    "objects": 0.15,
+    "ocr": 0.20,
+}
+
 PERSON_OBJECT_LABELS = {
     "person",
     "people",
@@ -26,6 +34,29 @@ PERSON_OBJECT_LABELS = {
     "girl",
     "face",
 }
+
+
+def _safe_normalize_embedding(
+    vector: np.ndarray,
+    *,
+    fallback: np.ndarray | None = None,
+) -> np.ndarray:
+    """Return a finite normalized embedding or a finite fallback vector."""
+    clean_vector = np.nan_to_num(
+        np.asarray(vector, dtype=np.float32),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    norm = np.linalg.norm(clean_vector)
+
+    if np.isfinite(norm) and norm > 0:
+        return (clean_vector / norm).astype(np.float32)
+
+    if fallback is not None:
+        return _safe_normalize_embedding(fallback)
+
+    return np.zeros_like(clean_vector, dtype=np.float32)
 
 
 def _record_stage_error(metadata: Dict[str, Any], stage: str, error: Exception) -> None:
@@ -148,13 +179,16 @@ def generate_hybrid_embedding(
     image: Image.Image, metadata: Dict[str, Any]
 ) -> List[float]:
     """
-    Generate hybrid embedding from image, caption, and detected objects.
+    Generate hybrid embedding from image, caption, detected objects, and OCR text.
 
-    Weighted average depends on which text signals are present:
+        Weighted average depends on which text signals are present:
       - image + caption + objects  →  equal thirds  (1/3 each)
       - image + caption only       →  halves         (1/2 each)
       - image + objects only       →  halves         (1/2 each)
       - image only                 →  image vector directly
+
+        When OCR text is present, we apply OCR-aware weights and normalise them
+        across active signals to prioritize text relevance for document-like images.
 
     Empty strings are never passed to embed_text() because CLIP encodes
     them as a deterministic non-zero vector that would introduce a
@@ -171,7 +205,7 @@ def generate_hybrid_embedding(
         embedder = get_clip_embedder()
 
         # --- 1. Image vector (always computed) ---
-        image_embedding = embedder.embed_image(image)
+        image_embedding = _safe_normalize_embedding(embedder.embed_image(image))
 
         # --- 2. Build text signals — only non-empty strings qualify ---
         caption = (metadata.get("caption") or "").strip()
@@ -191,42 +225,67 @@ def generate_hybrid_embedding(
             "detected objects: " + ", ".join(object_names) if object_names else ""
         )
 
+        ocr_text = (metadata.get("ocr_text") or "").strip()
+
         has_caption = bool(caption)
         has_objects = bool(objects_text)
+        has_ocr = bool(ocr_text)
 
         # --- 3. Embed only what exists, in a single model pass where possible ---
-        if has_caption and has_objects:
-            # Two text inputs → embed_text returns a 2-row matrix; unpack into two 1-D vectors
-            caption_embedding, objects_embedding = embedder.embed_text(
-                [caption, objects_text]
+        text_inputs: list[str] = []
+        text_signal_names: list[str] = []
+        if has_caption:
+            text_inputs.append(caption)
+            text_signal_names.append("caption")
+        if has_objects:
+            text_inputs.append(objects_text)
+            text_signal_names.append("objects")
+        if has_ocr:
+            text_inputs.append(ocr_text)
+            text_signal_names.append("ocr")
+
+        signal_vectors: dict[str, np.ndarray] = {"image": image_embedding}
+
+        if text_inputs:
+            if len(text_inputs) == 1:
+                signal_vectors[text_signal_names[0]] = _safe_normalize_embedding(
+                    embedder.embed_text(text_inputs[0])
+                )
+            else:
+                text_embeddings = embedder.embed_text(text_inputs)
+                for name, vec in zip(text_signal_names, text_embeddings):
+                    signal_vectors[name] = _safe_normalize_embedding(vec)
+
+        active_signals = list(signal_vectors.keys())
+
+        if has_ocr:
+            total_weight = sum(
+                OCR_AWARE_SIGNAL_WEIGHTS.get(name, 0.0) for name in active_signals
             )
-            components = [image_embedding, caption_embedding, objects_embedding]
-            active_signals = ["image", "caption", "objects"]
-        elif has_caption:
-            caption_embedding = embedder.embed_text(caption)
-            components = [image_embedding, caption_embedding]
-            active_signals = ["image", "caption"]
-        elif has_objects:
-            objects_embedding = embedder.embed_text(objects_text)
-            components = [image_embedding, objects_embedding]
-            active_signals = ["image", "objects"]
+            if total_weight > 0:
+                hybrid_vector = sum(
+                    signal_vectors[name]
+                    * (OCR_AWARE_SIGNAL_WEIGHTS.get(name, 0.0) / total_weight)
+                    for name in active_signals
+                )
+            else:
+                hybrid_vector = image_embedding
         else:
-            # No text signal at all — use the image embedding directly
-            components = [image_embedding]
-            active_signals = ["image"]
+            # Preserve prior behavior for non-OCR assets.
+            n = len(signal_vectors)
+            hybrid_vector = sum(signal_vectors.values()) / n
 
-        # --- 4. Equal-weight average then re-normalise ---
-        n = len(components)
-        hybrid_vector: np.ndarray = sum(components) / n  # type: ignore[assignment]
+        hybrid_vector = _safe_normalize_embedding(
+            hybrid_vector,
+            fallback=image_embedding,
+        )
 
-        norm = np.linalg.norm(hybrid_vector)
-        if norm > 0:
-            hybrid_vector = hybrid_vector / norm
-        else:
-            # Degenerate fallback — return the image vector unchanged
-            hybrid_vector = image_embedding
-
-        logger.info("Hybrid embedding generated (signals=%d: %s)", n, active_signals)
+        logger.info(
+            "Hybrid embedding generated (signals=%d: %s, ocr_weighting=%s)",
+            len(active_signals),
+            active_signals,
+            has_ocr,
+        )
         return hybrid_vector.tolist()
 
     except Exception:

@@ -17,6 +17,7 @@ from find_api.core.storage import init_storage
 from find_api.core.config import settings
 from find_api.core.model_manager import get_model_manager
 from find_api.routers import (
+    auth,
     cluster,
     clusters,
     config,
@@ -105,6 +106,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(gallery.router, prefix="/api", tags=["gallery"])
 app.include_router(search.router, prefix="/api", tags=["search"])

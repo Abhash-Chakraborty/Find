@@ -14,15 +14,29 @@ _query_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
 _index_version = 0
 
 
-def normalize_query(query: str, limit: int, skip: int, index_signature: str) -> str:
+def normalize_query(
+    query: str,
+    limit: int,
+    skip: int,
+    index_signature: str,
+    *,
+    include_ocr: bool = False,
+) -> str:
     normalized_query = " ".join(query.lower().split())
-    return f"{index_signature}:{normalized_query}:{limit}:{skip}"
+    return f"{index_signature}:{normalized_query}:{limit}:{skip}:ocr={include_ocr}"
 
 
 def get_cached_query(
-    query: str, limit: int, skip: int, index_signature: str
+    query: str,
+    limit: int,
+    skip: int,
+    index_signature: str,
+    *,
+    include_ocr: bool = False,
 ) -> dict[str, Any] | None:
-    normalized = normalize_query(query, limit, skip, index_signature)
+    normalized = normalize_query(
+        query, limit, skip, index_signature, include_ocr=include_ocr
+    )
     now = monotonic()
 
     with _cache_lock:
@@ -48,8 +62,12 @@ def set_cached_query(
     index_signature: str,
     embedding: list[float],
     response: dict[str, Any],
+    *,
+    include_ocr: bool = False,
 ) -> None:
-    normalized = normalize_query(query, limit, skip, index_signature)
+    normalized = normalize_query(
+        query, limit, skip, index_signature, include_ocr=include_ocr
+    )
 
     with _cache_lock:
         _query_cache[normalized] = {
