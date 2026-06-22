@@ -28,8 +28,7 @@ def create_storage_backend() -> StorageBackend:
 
     else:
         raise ValueError(
-            f"Invalid STORAGE_BACKEND: {backend_type}. "
-            "Must be 'minio' or 'local'"
+            f"Invalid STORAGE_BACKEND: {backend_type}. Must be 'minio' or 'local'"
         )
 
 
@@ -58,5 +57,7 @@ async def initialize_storage() -> None:
 def get_storage_instance() -> StorageBackend:
     """Get the global storage instance"""
     if _storage_instance is None:
-        raise RuntimeError("Storage backend not initialized. Call initialize_storage() first.")
+        raise RuntimeError(
+            "Storage backend not initialized. Call initialize_storage() first."
+        )
     return _storage_instance

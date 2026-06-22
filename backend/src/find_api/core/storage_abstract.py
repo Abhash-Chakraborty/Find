@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 class StorageBackend(ABC):
     """
     Abstract base class for storage backends.
-    
+
     All storage backends (MinIO, local filesystem, S3, etc.) must implement
     this interface to ensure consistent behavior across different storage providers.
     """
@@ -32,7 +32,9 @@ class StorageBackend(ABC):
         pass
 
     @abstractmethod
-    async def download_file_to_path(self, object_name: str, destination_path: str) -> None:
+    async def download_file_to_path(
+        self, object_name: str, destination_path: str
+    ) -> None:
         """Stream file from storage to local filesystem."""
         pass
 
@@ -54,4 +56,5 @@ class StorageBackend(ABC):
 
 class StorageException(Exception):
     """Base exception for storage operations"""
+
     pass

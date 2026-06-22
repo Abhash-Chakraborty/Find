@@ -1,4 +1,4 @@
-﻿"""
+"""
 MinIO storage backend implementation
 Implements StorageBackend interface for MinIO object storage
 """
@@ -114,6 +114,7 @@ class MinIOStorageBackend(StorageBackend):
     ) -> str:
         """Upload file to MinIO"""
         try:
+
             def _upload():
                 self.client.put_object(
                     self.bucket,
@@ -122,6 +123,7 @@ class MinIOStorageBackend(StorageBackend):
                     length=len(file_data),
                     content_type=content_type,
                 )
+
             await asyncio.to_thread(_upload)
             logger.info(f"Uploaded file to MinIO: {object_name}")
             return object_name
@@ -131,6 +133,7 @@ class MinIOStorageBackend(StorageBackend):
 
     async def get_file(self, object_name: str) -> bytes:
         """Download file from MinIO"""
+
         def _download():
             response = None
             try:
@@ -140,14 +143,18 @@ class MinIOStorageBackend(StorageBackend):
                 if response is not None:
                     response.close()
                     response.release_conn()
+
         try:
             return await asyncio.to_thread(_download)
         except S3Error as e:
             logger.error(f"Failed to download file from MinIO: {e}")
             raise StorageException(f"MinIO download failed: {e}")
 
-    async def download_file_to_path(self, object_name: str, destination_path: str) -> None:
+    async def download_file_to_path(
+        self, object_name: str, destination_path: str
+    ) -> None:
         """Stream file from MinIO to local path"""
+
         def _stream():
             response = None
             try:
@@ -160,6 +167,7 @@ class MinIOStorageBackend(StorageBackend):
                 if response is not None:
                     response.close()
                     response.release_conn()
+
         try:
             await asyncio.to_thread(_stream)
         except S3Error as e:
@@ -178,7 +186,9 @@ class MinIOStorageBackend(StorageBackend):
                 else:
                     public_path = f"{base_path}/{object_path}"
 
-                return urlunparse((parsed.scheme, parsed.netloc, public_path, "", "", ""))
+                return urlunparse(
+                    (parsed.scheme, parsed.netloc, public_path, "", "", "")
+                )
 
             signing_client = self._public_client or self.client
 
@@ -194,14 +204,16 @@ class MinIOStorageBackend(StorageBackend):
                 base_path = parsed.path.rstrip("/")
                 if base_path:
                     signed_parsed = urlparse(base_url)
-                    base_url = urlunparse((
-                        signed_parsed.scheme,
-                        signed_parsed.netloc,
-                        base_path + signed_parsed.path,
-                        signed_parsed.params,
-                        signed_parsed.query,
-                        signed_parsed.fragment,
-                    ))
+                    base_url = urlunparse(
+                        (
+                            signed_parsed.scheme,
+                            signed_parsed.netloc,
+                            base_path + signed_parsed.path,
+                            signed_parsed.params,
+                            signed_parsed.query,
+                            signed_parsed.fragment,
+                        )
+                    )
             return base_url
         except S3Error as e:
             logger.error(f"Failed to generate URL: {e}")

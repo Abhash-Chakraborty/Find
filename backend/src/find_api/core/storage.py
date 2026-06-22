@@ -15,6 +15,7 @@ async def init_storage():
     """Initialize storage backend during application startup"""
     try:
         from find_api.core.storage_factory import initialize_storage
+
         await initialize_storage()
         logger.info("Storage backend initialized")
     except Exception as e:

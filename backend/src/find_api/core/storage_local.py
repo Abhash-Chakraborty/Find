@@ -1,4 +1,4 @@
-﻿"""
+"""
 Local filesystem storage backend implementation
 Implements StorageBackend interface for local file storage (desktop mode)
 """
@@ -55,6 +55,7 @@ class LocalStorageBackend(StorageBackend):
                 full_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(full_path, "wb") as f:
                     f.write(file_data)
+
             await asyncio.to_thread(_write)
 
             logger.info(f"Uploaded file to local storage: {object_name}")
@@ -76,6 +77,7 @@ class LocalStorageBackend(StorageBackend):
                     raise StorageException(f"File not found: {object_name}")
                 with open(full_path, "rb") as f:
                     return f.read()
+
             data = await asyncio.to_thread(_read)
 
             logger.info(f"Downloaded file from local storage: {object_name}")
@@ -87,7 +89,9 @@ class LocalStorageBackend(StorageBackend):
             logger.error(f"Failed to download file: {e}")
             raise StorageException(f"Download failed: {e}")
 
-    async def download_file_to_path(self, object_name: str, destination_path: str) -> None:
+    async def download_file_to_path(
+        self, object_name: str, destination_path: str
+    ) -> None:
         """Stream file from local filesystem to destination path"""
         try:
             full_path = self._validate_path(object_name)
@@ -104,6 +108,7 @@ class LocalStorageBackend(StorageBackend):
                             if not chunk:
                                 break
                             dst.write(chunk)
+
             await asyncio.to_thread(_copy)
 
             logger.info(f"Streamed file from local storage: {object_name}")
@@ -142,6 +147,7 @@ class LocalStorageBackend(StorageBackend):
                     full_path.unlink()
                     return True
                 return False
+
             deleted = await asyncio.to_thread(_delete)
 
             if deleted:

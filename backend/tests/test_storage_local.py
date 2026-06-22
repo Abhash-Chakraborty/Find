@@ -1,4 +1,4 @@
-﻿"""Unit tests for LocalStorageBackend (find_api.core.storage_local)."""
+"""Unit tests for LocalStorageBackend (find_api.core.storage_local)."""
 
 from __future__ import annotations
 

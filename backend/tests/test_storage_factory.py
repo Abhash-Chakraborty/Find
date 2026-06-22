@@ -1,4 +1,4 @@
-﻿"""Unit tests for the storage backend factory (find_api.core.storage_factory)."""
+"""Unit tests for the storage backend factory (find_api.core.storage_factory)."""
 
 from __future__ import annotations
 
@@ -22,8 +22,10 @@ def test_create_storage_backend_selects_minio():
     fake_instance = MagicMock(name="MinIOStorageBackendInstance")
     fake_cls = MagicMock(return_value=fake_instance)
 
-    with patch.object(storage_factory, "MinIOStorageBackend", fake_cls), \
-         patch.object(storage_factory, "settings") as mock_settings:
+    with (
+        patch.object(storage_factory, "MinIOStorageBackend", fake_cls),
+        patch.object(storage_factory, "settings") as mock_settings,
+    ):
         mock_settings.STORAGE_BACKEND = "minio"
 
         backend = storage_factory.create_storage_backend()
@@ -36,8 +38,10 @@ def test_create_storage_backend_selects_local():
     fake_instance = MagicMock(name="LocalStorageBackendInstance")
     fake_cls = MagicMock(return_value=fake_instance)
 
-    with patch.object(storage_factory, "LocalStorageBackend", fake_cls), \
-         patch.object(storage_factory, "settings") as mock_settings:
+    with (
+        patch.object(storage_factory, "LocalStorageBackend", fake_cls),
+        patch.object(storage_factory, "settings") as mock_settings,
+    ):
         mock_settings.STORAGE_BACKEND = "local"
         mock_settings.LOCAL_STORAGE_PATH = "/tmp/test_storage"
 
@@ -51,8 +55,10 @@ def test_create_storage_backend_is_case_insensitive():
     fake_instance = MagicMock(name="LocalStorageBackendInstance")
     fake_cls = MagicMock(return_value=fake_instance)
 
-    with patch.object(storage_factory, "LocalStorageBackend", fake_cls), \
-         patch.object(storage_factory, "settings") as mock_settings:
+    with (
+        patch.object(storage_factory, "LocalStorageBackend", fake_cls),
+        patch.object(storage_factory, "settings") as mock_settings,
+    ):
         mock_settings.STORAGE_BACKEND = "LOCAL"
         mock_settings.LOCAL_STORAGE_PATH = "/tmp/test_storage"
 
@@ -75,9 +81,10 @@ def test_create_storage_backend_defaults_to_minio_when_unset():
     fake_cls = MagicMock(return_value=fake_instance)
     bare_settings = object()
 
-    with patch.object(storage_factory, "MinIOStorageBackend", fake_cls), \
-         patch.object(storage_factory, "settings", bare_settings):
-
+    with (
+        patch.object(storage_factory, "MinIOStorageBackend", fake_cls),
+        patch.object(storage_factory, "settings", bare_settings),
+    ):
         backend = storage_factory.create_storage_backend()
 
     fake_cls.assert_called_once_with()
@@ -89,7 +96,9 @@ async def test_get_storage_initializes_backend():
     fake_backend = MagicMock()
     fake_backend.init_storage = AsyncMock()
 
-    with patch.object(storage_factory, "create_storage_backend", return_value=fake_backend):
+    with patch.object(
+        storage_factory, "create_storage_backend", return_value=fake_backend
+    ):
         result = await storage_factory.get_storage()
 
     fake_backend.init_storage.assert_awaited_once()
@@ -101,7 +110,9 @@ async def test_initialize_storage_sets_global_instance():
     fake_backend = MagicMock()
     fake_backend.init_storage = AsyncMock()
 
-    with patch.object(storage_factory, "create_storage_backend", return_value=fake_backend):
+    with patch.object(
+        storage_factory, "create_storage_backend", return_value=fake_backend
+    ):
         await storage_factory.initialize_storage()
 
     assert storage_factory.get_storage_instance() is fake_backend
@@ -112,7 +123,9 @@ async def test_initialize_storage_propagates_failure():
     fake_backend = MagicMock()
     fake_backend.init_storage = AsyncMock(side_effect=RuntimeError("boom"))
 
-    with patch.object(storage_factory, "create_storage_backend", return_value=fake_backend):
+    with patch.object(
+        storage_factory, "create_storage_backend", return_value=fake_backend
+    ):
         with pytest.raises(RuntimeError, match="boom"):
             await storage_factory.initialize_storage()
 
