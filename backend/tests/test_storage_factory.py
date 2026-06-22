@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from find_api.core import storage_factory
+from find_api.core.config import Settings
 
 
 @pytest.fixture(autouse=True)
@@ -22,10 +23,9 @@ def test_create_storage_backend_selects_minio():
     fake_instance = MagicMock(name="MinIOStorageBackendInstance")
     fake_cls = MagicMock(return_value=fake_instance)
 
-    with (
-        patch.object(storage_factory, "MinIOStorageBackend", fake_cls),
-        patch.object(storage_factory, "settings") as mock_settings,
-    ):
+    with patch(
+        "find_api.core.storage_minio.MinIOStorageBackend", fake_cls
+    ), patch.object(storage_factory, "settings") as mock_settings:
         mock_settings.STORAGE_BACKEND = "minio"
 
         backend = storage_factory.create_storage_backend()
@@ -38,10 +38,9 @@ def test_create_storage_backend_selects_local():
     fake_instance = MagicMock(name="LocalStorageBackendInstance")
     fake_cls = MagicMock(return_value=fake_instance)
 
-    with (
-        patch.object(storage_factory, "LocalStorageBackend", fake_cls),
-        patch.object(storage_factory, "settings") as mock_settings,
-    ):
+    with patch(
+        "find_api.core.storage_local.LocalStorageBackend", fake_cls
+    ), patch.object(storage_factory, "settings") as mock_settings:
         mock_settings.STORAGE_BACKEND = "local"
         mock_settings.LOCAL_STORAGE_PATH = "/tmp/test_storage"
 
@@ -55,10 +54,9 @@ def test_create_storage_backend_is_case_insensitive():
     fake_instance = MagicMock(name="LocalStorageBackendInstance")
     fake_cls = MagicMock(return_value=fake_instance)
 
-    with (
-        patch.object(storage_factory, "LocalStorageBackend", fake_cls),
-        patch.object(storage_factory, "settings") as mock_settings,
-    ):
+    with patch(
+        "find_api.core.storage_local.LocalStorageBackend", fake_cls
+    ), patch.object(storage_factory, "settings") as mock_settings:
         mock_settings.STORAGE_BACKEND = "LOCAL"
         mock_settings.LOCAL_STORAGE_PATH = "/tmp/test_storage"
 
@@ -76,15 +74,42 @@ def test_create_storage_backend_rejects_invalid_value():
             storage_factory.create_storage_backend()
 
 
+def test_storage_neutral_settings_override_minio_compatibility_aliases():
+    settings = Settings(
+        _env_file=None,
+        MINIO_ENDPOINT="legacy:9000",
+        MINIO_ACCESS_KEY="legacy-user",
+        MINIO_SECRET_KEY="legacy-secret",
+        MINIO_BUCKET="legacy-bucket",
+        MINIO_SECURE=False,
+        MINIO_PUBLIC_ENDPOINT="http://legacy.example/images",
+        MINIO_PUBLIC_READ=False,
+        STORAGE_ENDPOINT="neutral:9000",
+        STORAGE_ACCESS_KEY="neutral-user",
+        STORAGE_SECRET_KEY="neutral-secret",
+        STORAGE_BUCKET="neutral-bucket",
+        STORAGE_SECURE=True,
+        STORAGE_PUBLIC_ENDPOINT="https://neutral.example/images",
+        STORAGE_PUBLIC_READ=True,
+    )
+
+    assert settings.MINIO_ENDPOINT == "neutral:9000"
+    assert settings.MINIO_ACCESS_KEY == "neutral-user"
+    assert settings.MINIO_SECRET_KEY == "neutral-secret"
+    assert settings.MINIO_BUCKET == "neutral-bucket"
+    assert settings.MINIO_SECURE is True
+    assert settings.MINIO_PUBLIC_ENDPOINT == "https://neutral.example/images"
+    assert settings.MINIO_PUBLIC_READ is True
+
+
 def test_create_storage_backend_defaults_to_minio_when_unset():
     fake_instance = MagicMock(name="MinIOStorageBackendInstance")
     fake_cls = MagicMock(return_value=fake_instance)
     bare_settings = object()
 
-    with (
-        patch.object(storage_factory, "MinIOStorageBackend", fake_cls),
-        patch.object(storage_factory, "settings", bare_settings),
-    ):
+    with patch(
+        "find_api.core.storage_minio.MinIOStorageBackend", fake_cls
+    ), patch.object(storage_factory, "settings", bare_settings):
         backend = storage_factory.create_storage_backend()
 
     fake_cls.assert_called_once_with()

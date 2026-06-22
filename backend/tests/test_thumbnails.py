@@ -1,6 +1,6 @@
 import io
 import hashlib
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from PIL import Image
 
@@ -32,8 +32,9 @@ def test_generate_thumbnail_creates_small_webp():
 def test_upload_thumbnail_returns_metadata_and_uploads_webp():
     data = _image_bytes()
     file_hash = hashlib.sha256(data).hexdigest()
+    fake_backend = AsyncMock()
 
-    with patch("find_api.core.storage.upload_file") as upload:
+    with patch("find_api.core.storage.get_storage_instance", return_value=fake_backend):
         metadata = upload_thumbnail(data, file_hash)
 
     assert metadata["thumbnail_key"] == f"thumbnails/{file_hash[:2]}/{file_hash}.webp"
@@ -41,22 +42,28 @@ def test_upload_thumbnail_returns_metadata_and_uploads_webp():
     assert metadata["thumbnail_size"] > 0
     assert metadata["thumbnail_width"] == 256
     assert metadata["thumbnail_height"] == 192
-    upload.assert_called_once()
-    assert upload.call_args.args[2] == THUMBNAIL_CONTENT_TYPE
+    fake_backend.upload_file.assert_awaited_once()
+    assert fake_backend.upload_file.call_args.args[2] == THUMBNAIL_CONTENT_TYPE
 
 
 def test_upload_thumbnail_generation_failure_returns_none():
+    fake_backend = AsyncMock()
+
     with patch(
-        "find_api.core.storage.generate_thumbnail",
+        "find_api.core.storage_thumbnails.generate_thumbnail",
         side_effect=OSError("decode failed"),
-    ):
+    ), patch("find_api.core.storage.get_storage_instance", return_value=fake_backend):
         metadata = upload_thumbnail(b"not an image", "abc123")
 
     assert metadata is None
+    fake_backend.upload_file.assert_not_awaited()
 
 
 def test_upload_thumbnail_storage_failure_returns_none():
-    with patch("find_api.core.storage.upload_file", side_effect=RuntimeError("down")):
+    fake_backend = AsyncMock()
+    fake_backend.upload_file.side_effect = RuntimeError("down")
+
+    with patch("find_api.core.storage.get_storage_instance", return_value=fake_backend):
         metadata = upload_thumbnail(_image_bytes(), "abc123")
 
     assert metadata is None

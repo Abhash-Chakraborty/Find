@@ -173,7 +173,9 @@ def _load_media_or_404(db: Session, media_id: int) -> Media:
 def _load_vault_metadata(db: Session, media_id: int) -> Optional[tuple[str, bytes]]:
     row = db.execute(
         text(
-            "SELECT encrypted_path, iv FROM vault_metadata WHERE media_id = :media_id"
+            "SELECT encrypted_path, iv "
+            "FROM vault_metadata "
+            "WHERE media_id = :media_id"
         ),
         {"media_id": media_id},
     ).first()

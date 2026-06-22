@@ -5,10 +5,8 @@ Provides a factory function to create and initialize the appropriate storage bac
 
 import logging
 
-from find_api.core.storage_abstract import StorageBackend
-from find_api.core.storage_minio import MinIOStorageBackend
-from find_api.core.storage_local import LocalStorageBackend
 from find_api.core.config import settings
+from find_api.core.storage_abstract import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +16,14 @@ def create_storage_backend() -> StorageBackend:
     backend_type = getattr(settings, "STORAGE_BACKEND", "minio").lower()
 
     if backend_type == "minio":
+        from find_api.core.storage_minio import MinIOStorageBackend
+
         logger.info("Creating MinIO storage backend")
         return MinIOStorageBackend()
 
     elif backend_type == "local":
+        from find_api.core.storage_local import LocalStorageBackend
+
         logger.info("Creating local filesystem storage backend")
         local_path = getattr(settings, "LOCAL_STORAGE_PATH", "./storage/uploads")
         return LocalStorageBackend(local_path)
