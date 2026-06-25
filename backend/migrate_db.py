@@ -88,6 +88,11 @@ def migrate_db() -> None:
                     f"ALTER TABLE media ALTER COLUMN vector TYPE vector({target_dim});"
                 )
             )
+            conn.execute(
+                text(
+                    "ALTER TABLE media ADD COLUMN IF NOT EXISTS ranking_boost FLOAT NOT NULL DEFAULT 0;"
+                )
+            )
 
             # 3. clusters.centroid_vector
             cluster_dim = get_vector_dimension(conn, "clusters", "centroid_vector")

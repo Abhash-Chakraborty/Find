@@ -7,9 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import logging
+from pathlib import Path
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from fastapi.staticfiles import StaticFiles
 from find_api.routers.duplicates import router as duplicates_router
 from find_api.core.database import init_db
 from find_api.core.recovery import run_analysis_recovery_loop
@@ -57,8 +59,8 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     init_db()
 
-    # Initialize MinIO storage
-    logger.info("Initializing MinIO storage...")
+    # Initialize configured storage backend
+    logger.info("Initializing %s storage...", settings.STORAGE_BACKEND)
     init_storage()
 
     # Start ML model cleanup
@@ -104,6 +106,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if settings.STORAGE_BACKEND.lower() == "local":
+    local_storage_path = Path(settings.LOCAL_STORAGE_PATH).resolve()
+    local_storage_path.mkdir(parents=True, exist_ok=True)
+    app.mount(
+        "/files",
+        StaticFiles(directory=str(local_storage_path)),
+        name="local-files",
+    )
 
 # Include routers
 app.include_router(auth.router, prefix="/api", tags=["auth"])

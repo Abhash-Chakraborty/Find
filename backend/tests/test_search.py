@@ -48,6 +48,14 @@ def _signature_result(token: str = "1:2026-01-01T00:00:00+00:00") -> MagicMock:
 
 def _mock_search(client, fake_rows, *, params=None, total_count=None):
     """Call /api/search with mocked embeddings and paginated DB responses."""
+    response, _mock_db = _mock_search_with_db(
+        client, fake_rows, params=params, total_count=total_count
+    )
+    return response
+
+
+def _mock_search_with_db(client, fake_rows, *, params=None, total_count=None):
+    """Call /api/search and return the mocked DB for SQL assertions."""
     mock_embedder = MagicMock()
     mock_embedder.embed_text.return_value = [0.0] * 768
 
@@ -75,7 +83,10 @@ def _mock_search(client, fake_rows, *, params=None, total_count=None):
                 return_value=mock_embedder,
             ),
         ):
-            return client.get("/api/search", params={"q": "sunset", **(params or {})})
+            response = client.get(
+                "/api/search", params={"q": "sunset", **(params or {})}
+            )
+            return response, mock_db
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -196,6 +207,22 @@ class TestSearchResponseShape:
     def test_missing_query_returns_422(self, client):
         response = client.get("/api/search")
         assert response.status_code == 422
+
+    def test_no_feedback_search_uses_zero_boost_fallback(self, client):
+        response, mock_db = _mock_search_with_db(client, [])
+
+        assert response.status_code == 200
+        search_sql = str(mock_db.execute.call_args_list[2].args[0])
+        assert "COALESCE(ranking_boost, 0) as ranking_boost" in search_sql
+        assert "+ COALESCE(ranking_boost, 0)" in search_sql
+
+    def test_search_orders_by_boosted_score_but_filters_by_similarity(self, client):
+        response, mock_db = _mock_search_with_db(client, [])
+
+        assert response.status_code == 200
+        search_sql = str(mock_db.execute.call_args_list[2].args[0])
+        assert "WHERE similarity > :threshold AND is_hidden = false" in search_sql
+        assert "ORDER BY final_score DESC, similarity DESC, id ASC" in search_sql
 
     def test_ocr_text_boost_reranks_results(self, client):
         text_heavy = MagicMock(
