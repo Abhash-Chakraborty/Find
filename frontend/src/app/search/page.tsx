@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeedbackRating } from "@/components/feedback-rating";
 import { ImagePreviewModal } from "@/components/image-preview-modal";
 import { StatusIndicator } from "@/components/status-indicator";
+import { VirtualizedGrid } from "@/components/virtualized-grid";
 import { type SearchResult, searchImages, submitSearchRating } from "@/lib/api";
 import { MINIO_URL_REFRESH_INTERVAL_MS, resolveMediaUrl } from "@/lib/media";
 
@@ -263,8 +264,13 @@ export default function SearchPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-              {allResults.map((result) => {
+            <VirtualizedGrid
+              items={allResults}
+              className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
+              estimateRowHeight={330}
+              gap={12}
+              getKey={(result) => result.media_id}
+              renderItem={(result) => {
                 const imageSrc = resolveMediaUrl(
                   result.metadata.thumbnail_url ?? result.metadata.url,
                   result.metadata.minio_key,
@@ -338,8 +344,8 @@ export default function SearchPage() {
                     </div>
                   </article>
                 );
-              })}
-            </div>
+              }}
+            />
 
             {hasMore && (
               <div className="mt-8 flex justify-center">
