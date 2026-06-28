@@ -10,6 +10,7 @@ import zipfile
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from PIL import Image
 from sqlalchemy.orm import Session
 
@@ -44,7 +45,12 @@ async def upload_images(
     for file in files:
         try:
             file_data = await file.read()
-            result = _ingest_image(
+            # _ingest_image does blocking CPU/I/O work (PIL decode, SHA-256,
+            # thumbnail resize, storage upload). Run it in the threadpool so it
+            # does not stall the event loop for other requests. The request DB
+            # session is only ever touched by one awaited call at a time.
+            result = await run_in_threadpool(
+                _ingest_image,
                 filename=file.filename,
                 content_type=file.content_type,
                 file_data=file_data,
@@ -169,7 +175,8 @@ async def upload_bulk_images(
                 guessed_type = mimetypes.guess_type(filename)[0]
 
                 try:
-                    result = _ingest_image(
+                    result = await run_in_threadpool(
+                        _ingest_image,
                         filename=filename,
                         content_type=guessed_type,
                         file_data=file_data,
