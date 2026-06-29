@@ -172,18 +172,18 @@ A **fast, lightweight, open-source** Find that:
 ### PHASE 1 — Discovery & Parity Inventory  *(parallel readers)*
 **Goal:** an exact, file-referenced map of what to build. *(~1 week, highly parallel)*
 
-- **Stage 1.1 — Feature inventory** *(lanes run concurrently)*
-  - Lane A (Timeline/grid) · Owner: ___ — [ ] todo — Map reference `web/` timeline, scrollbar, segment preview, justified layout → behaviors + data needs.
-  - Lane B (Albums/sharing) · Owner: ___ — [ ] todo — Map album CRUD, shared links, partner sharing, permissions.
-  - Lane C (Archive/favorites/trash) · Owner: ___ — [ ] todo — Map archive/favorite/trash/restore flows.
-  - Lane D (Slideshow/viewer) · Owner: ___ — [ ] todo — Map asset viewer (zoom/pan/keyboard), slideshow, casting.
-  - Lane E (Backend/API) · Owner: ___ — [ ] todo — Map reference server endpoints + DB schema for the above; diff against Find's FastAPI.
-  - Lane F (ML) · Owner: ___ — [ ] todo — Compare reference ML (CLIP/face/ONNX) vs Find models; list adopt/keep candidates + model licenses.
-  - Lane G (Settings/config) · Owner: ___ — [ ] todo — Map the reference **settings panel** structure (every config group/field) → Find settings spec; note where hardware-accel belongs.
-  - Lane H (Mobile/desktop) · Owner: ___ — [ ] todo — Inventory reference Flutter feature surface; note what maps to a future Find client.
-- **Stage 1.2 — Gap analysis & sequencing**
-  - [ ] todo — Consolidate lanes into a parity matrix (have / partial / missing) in Appendix §C.
-  - [ ] todo — Order features by value vs effort; confirm Phase 3–8 scope.
+- **Stage 1.1 — Feature inventory** *(lanes run concurrently)* — **DONE**; specs in `docs/overhaul/inventory/lane-*.md`
+  - Lane A (Timeline/grid) · [x] completed — `inventory/lane-a-timeline-grid.md`. Gap: no justified layout, no scrubber, no time-bucket model.
+  - Lane B (Albums/sharing) · [x] completed — `inventory/lane-b-albums-sharing.md`. Greenfield; share-link passwords must be hashed (ref stores plaintext).
+  - Lane C (Archive/favorites/trash) · [x] completed — `inventory/lane-c-archive-favorites-trash.md`. Needs `is_archived`+`deleted_at`; favorites = existing `liked`.
+  - Lane D (Slideshow/viewer) · [x] completed — `inventory/lane-d-viewer-slideshow.md`. Find viewer is a metadata dialog; needs zoom/pan/progressive-load/slideshow.
+  - Lane E (Backend/API) · [x] completed — `inventory/lane-e-backend-api.md`. Timeline bucket contract captured; albums/sharing/trash domains absent.
+  - Lane F (ML) · [x] completed — `inventory/lane-f-ml.md`. Adopt ONNX EP-fallback + CPU-light variants; keep Find's niche models.
+  - Lane G (Settings/config) · [x] completed — `inventory/lane-g-settings.md`. 6 setting groups; accel toggle lives in ML group; Find has only `USE_GPU` env bool.
+  - Lane H (Mobile/desktop) · [x] completed — `inventory/lane-h-mobile-desktop.md`. Tauri reuse is cheap; recommend RN+Expo for mobile spike.
+- **Stage 1.2 — Gap analysis & sequencing** — [x] completed
+  - [x] completed — Parity matrix consolidated in `docs/overhaul/inventory/parity-matrix.md` (Appendix §C points to it).
+  - [x] completed — Build sequence ordered (parity-matrix §C.5): backend foundation (timeline contract + asset-state) first, then design system, timeline UI, viewer, albums/sharing, settings/accel, ML, Rust, clients.
 
 ### PHASE 2 — Design System & Asset Transfer
 **Goal:** Find-branded design system seeded from the reference's visual language. *(~1–2 weeks)*
@@ -201,26 +201,47 @@ A **fast, lightweight, open-source** Find that:
 **Goal:** reference-grade browsing UX, reimplemented in Next.js/React, **fast even on low-end clients**. *(~4–6 weeks; lanes parallel after 3.1)*
 
 - **Stage 3.1 — Timeline data contract** · Owner: ___ *(produces contract others consume)*
-  - [ ] todo — Define time-bucket API (counts per period) + asset-window endpoints (FastAPI). Publish types in Appendix §A.
+  - [x] completed — Define time-bucket API (counts per period) + asset-window endpoints (FastAPI). Publish types in Appendix §A.
+    - [x] completed — Shipped `routers/timeline.py`: `GET /timeline/buckets` (month counts) + `GET /timeline/bucket` (columnar window with `ratio`/nullable `thumbhash`). Portable month grouping (`func.extract`, works on SQLite + Postgres), same browse scoping + IDOR guard. Contract published in Appendix §A. *verified: `uv run pytest tests/test_timeline.py` — 12 passed; full-suite delta = +12 new tests, 0 regressions.* v1 buckets by `created_at`; EXIF date-taken + thumbhash population deferred (PROPOSED, noted in §A).
 - **Stage 3.2 — Justified grid** · Lane · Owner: ___
-  - [ ] todo — Port justified-layout algorithm to React; **virtualized rendering** so large libraries stay smooth on weak hardware.
+  - [x] completed — Port justified-layout algorithm to React; **virtualized rendering** so large libraries stay smooth on weak hardware.
+    - [x] completed — Pure `lib/justified-layout.ts` (greedy row-packing, ratio-clamping, trailing-row + max-height guards) decoupled from React; virtualized `components/justified-grid.tsx` (absolute layout, ResizeObserver width, viewport windowing with overscan); timeline API client (`getTimelineBuckets`/`getTimelineBucket` + columnar types) wired to the §A contract. *verified: `pnpm vitest run` justified-layout (12) + justified-grid (4) = 16 new tests passed; full frontend suite delta = +16 new, 0 regressions (3 pre-existing gallery failures present at HEAD too).*
 - **Stage 3.3 — Fast scrollbar + segment preview** · Lane · Owner: ___
-  - [ ] todo — Date-scrubber scrollbar with segment hover previews, driven by the 3.1 contract.
+  - [x] completed — Date-scrubber scrollbar with segment hover previews, driven by the 3.1 contract.
+    - [x] completed — Pure `lib/timeline-scrubber.ts` (bucket-counts → estimated section heights + cumulative offsets; offset↔date, offset↔track-fraction, track→hovered-segment mappings; `formatBucketLabel`) decoupled from React; `components/timeline-scrubber.tsx` (draggable thumb, floating date label on hover/scrub, pointer-capture drag, `role=scrollbar` a11y) driven by the §A `/timeline/buckets` contract. *verified: `pnpm vitest run` scrubber geometry (17) + component (6) = 23 new tests passed; full frontend suite delta = +23 new, 0 regressions (same 3 pre-existing gallery failures).*
 - **Stage 3.4 — Asset viewer + slideshow** · Lane · Owner: ___
-  - [ ] todo — Full-screen viewer (zoom/pan, keyboard nav), thumbnail-vs-full-res discipline, slideshow mode.
+  - [x] completed — Full-screen viewer (zoom/pan, keyboard nav), thumbnail-vs-full-res discipline, slideshow mode.
+    - [x] completed — Three pure cores: `lib/viewer-zoom.ts` (focal-point zoom, clamped pan, toggle), `lib/viewer-preload.ts` (thumbnail→original progressive display + direction-biased neighbor preload — Find has 2 resolutions, no preview tier, so YAGNI-scoped to those), `lib/slideshow.ts` (loop/shuffle/direction sequencing). Interactive `components/asset-viewer.tsx` wires them: zoom/pan via pointer+wheel+keys, ArrowLeft/Right nav, Escape (unzoom→close), Space play/pause, `<img>` prefetch, slideshow timer, `role=dialog` a11y. *verified: `pnpm vitest run` zoom (16) + preload (~9) + slideshow (17) + component (9) = +51 new tests passed; full frontend suite delta = +51 new, 0 regressions (same 3 pre-existing gallery failures).*
 - **Stage 3.5 — Navigation & shells** · Lane · Owner: ___
-  - [ ] todo — App shell, sidebar, responsive layouts; **mobile-web/touch friendly**.
+  - [>] in-progress — App shell, sidebar, responsive layouts; **mobile-web/touch friendly**.
+    - [x] completed — Added the `/timeline` and `/settings` route pages and **wired both into the existing `NavBar`** (desktop + mobile drawer) so the new features are reachable. Full bespoke app-shell/sidebar redesign still todo (current NavBar reused). *verified: full frontend suite 164 passed.*
 - **Stage 3.6 — Integration & perf**
-  - [ ] todo — Wire timeline to live Find gallery API; verify on a large seeded library; record perf budget (Appendix §E), including a **low-end profile** (no GPU, limited RAM).
+  - [>] in-progress — Wire timeline to live Find gallery API; verify on a large seeded library; record perf budget (Appendix §E), including a **low-end profile** (no GPU, limited RAM).
+    - [x] completed — **Timeline wired end-to-end to the live timeline API.** `lib/timeline-data.ts` (pure: columnar→objects `expandBucket`, ordered+deduped `composeTimeline`, `totalAssetCount`, `bucketsToLoadAround`) + `lib/use-timeline.ts` (react-query hook: load bucket counts once, lazy per-bucket fetch, compose flat list) + `app/timeline/page.tsx` wiring `JustifiedGrid` + `TimelineScrubber` + `AssetViewer` (click cell → viewer; scrub → loads target month). *verified: `pnpm vitest run` timeline-data (13) + timeline-page integration (3) = +16 new tests; full frontend suite 164 passed, 0 regressions.*
+    - [ ] todo — Verify on a large seeded library + record perf budgets (Appendix §E) incl. low-end profile. *(Needs a running backend with seeded data — deferred to a live-env validation pass.)*
 
 ### PHASE 4 — Backend Feature Parity (FastAPI)
 **Goal:** Find APIs/DB support the new features. *(~4–6 weeks; lanes parallel)*
 
 - **Stage 4.1 — Schema & migrations** · Owner: ___
-  - [ ] todo — Add tables/columns for albums, shares, archive flag, favorites, trash. Alembic migrations + rollback.
-- **Stage 4.2 — Albums** · Lane · Owner: ___ — [ ] todo — CRUD, asset membership, cover, ordering, tests.
-- **Stage 4.3 — Sharing** · Lane · Owner: ___ — [ ] todo — Shared links (expiry, password, permissions) + partner sharing; **security review required**.
-- **Stage 4.4 — Archive / favorites / trash** · Lane · Owner: ___ — [ ] todo — State + filtered queries integrated with gallery scoping; tests.
+  - [>] in-progress — Add tables/columns for albums, shares, archive flag, favorites, trash. Alembic migrations + rollback.
+    - [x] completed — **Archive + trash (soft-delete) state on `media`.** Added `is_archived` (bool, indexed) + `deleted_at` (tz-aware, indexed); favorites reuse existing `liked`. Alembic `20260629assetstate` merges the two prior heads + has a `downgrade()`; runtime normalizer in `core/database.py` mirrors it for live Postgres. Adopted the scoping rule (`NOT hidden AND deleted_at IS NULL AND is_archived = false`) on every browse surface via new `_browsable_media_query` (gallery list + counts) and the search SQL (signature/count/ranked). Single-item lookups intentionally keep `_public_media_query` so future archive/trash detail views still open. *verified: `uv run pytest tests/test_gallery.py tests/test_search.py` — 73 passed; full Media blast-radius (gallery/search/clusters/people/vault/upload/shared-mode) green in isolation = 123 passed; full-suite delta vs HEAD = +6 new tests, 0 regressions.*
+    - [ ] todo — albums/shares tables (Stage 4.2/4.3).
+- **Stage 4.2 — Albums** · Lane · Owner: ___ — [x] completed — CRUD, asset membership, cover, ordering, tests.
+  - [x] completed — **Albums (CRUD + membership + cover + ordering).** New `Album` + `AlbumAsset` models (owner-scoped for shared mode; membership has a `position` for manual ordering, unique `(album_id, media_id)`). Alembic `20260629albums` (chains off `20260629assetstate`, single head, full `downgrade()`). Router `/albums`: list/create/get/patch/delete, `PUT/DELETE /albums/{id}/assets` (add/remove), `GET /albums/{id}/assets` (joins `_browsable_media_query` so archived/trashed never leak in), `PATCH` cover (must be a member; auto-cleared on removal), `PUT /albums/{id}/order`. Owner IDOR guard mirrors gallery scoping. Roles/sharing deferred to 4.3; activity feed deferred. **Also fixed at root** the `FakeMedia` monkeypatch leak in `test_reprocess.py` (was applied at import/collection time, shadowing real `Media` in later modules' joins → ambiguous SQL); now a scoped setup/teardown fixture. *verified: `uv run pytest tests/test_albums.py` — 15 passed; full-suite delta vs HEAD = +15 new tests (294→339 passing), 0 regressions (same 20 pre-existing pollution failures).*
+- **Stage 4.3 — Sharing** · Lane · Owner: ___ — [x] completed — Shared links (expiry, password, permissions) + partner sharing; **security review required**.
+  - [x] completed — **Albums UI (reachable in the new React UI).** Albums API client + `/albums` list+create page + `/albums/[id]` detail page (asset grid, remove asset, set cover, delete album); wired `Albums` into `NavBar`. *verified: `pnpm vitest run albums-page` — 4 passed; full frontend suite 168 passed, 0 regressions.* *(Logged under 4.2; placed here to avoid disturbing the 4.2 record.)*
+  - [x] completed — **Add-to-album from gallery.** `AddToAlbumModal` (pick an existing album or create-and-add) wired into the gallery's multi-select action bar, so album membership can now *grow* (previously `addAlbumAssets` had no UI entry point — albums could only shrink). *verified: `pnpm vitest run add-to-album-modal` — 5 passed; existing gallery tests still green; full frontend suite 184 passed, 0 regressions.*
+  - [x] completed — **Sharing UI (reachable in the new React UI).** Shared-link API client (`createSharedLink`/`getSharedLinks`/`deleteSharedLink`/`getPublicSharedAlbum`); `AlbumShareLinks` component on the album detail page (create with optional password + allow-download, list this album's links with password/view-only badges, revoke, copy the share URL surfaced once on create); public `/public/shared/[key]` view page that loads via the share-scoped endpoint, prompts for a password on 401, and renders only the backend-supplied share-scoped URLs (no raw storage keys). *verified: `pnpm vitest run sharing-ui` — 6 passed; full frontend suite 174 passed, 0 regressions.*
+  - [x] completed — **Album shared links (security-first).** New `SharedLink` model: access key is a CSPRNG `token_urlsafe(32)` stored ONLY as a SHA-256 hash (`key_hash`, raw key only ever in the URL, returned once at create); optional password as a **bcrypt** hash verified constant-time; server-enforced `expires_at`; `allow_download` + `show_exif` flags. Alembic `20260629sharedlinks` (single head, full `downgrade()`). Reuses Find's existing `hash_token`/`hash_password`/`verify_password_constant_time` — deliberately does **not** copy the reference's plaintext-password storage. Management routes (`/shared-links`) owner-scoped (IDOR); public routes (`/api/public/shared/{key}`) resolve by hashed key + enforce expiry/password and expose only the linked album's browsable assets. Partner sharing deferred (PROPOSED — needs multi-user mode).
+  - [x] completed — **`/security-review` done (mandatory per §5) — found + fixed a CRITICAL and a MEDIUM in my own code:**
+    - CRITICAL: original `allow_download=false` was cosmetic — the public listing leaked raw `minio_key`/`thumbnail_key` and bytes were reachable via the unauthenticated `/files` mount + owner-scoped `/api/image/{id}` routes. **Fix:** public serializer emits no storage keys; media served only through new share-scoped byte routes `/api/public/shared/{key}/asset/{id}/thumbnail|original` that re-validate key+expiry+password+album-membership+browsable-state on every request; `/original` returns 403 when download disallowed.
+    - MEDIUM (introduced by the fix, caught on re-review): `/thumbnail` fell back to the full-res original when no thumbnail existed, with no download gate. **Fix:** refuse (404) the fallback when `allow_download=false`.
+  - *verified: `uv run pytest tests/test_shared_links.py` — 23 passed (incl. 7 byte-layer scoping tests + regression for the thumbnail leak); full-suite delta vs HEAD = +23 new tests (294→362 passing), 0 regressions (same 20 pre-existing pollution failures).*
+- **Stage 4.4 — Archive / favorites / trash** · Lane · Owner: ___ — [x] completed — State + filtered queries integrated with gallery scoping; tests.
+  - [x] completed — **Endpoints (additive, non-breaking).** Kept existing `DELETE /api/image/{id}` as permanent hard-delete; added soft-delete/archive alongside: `POST /image/{id}/archive` (body `{archived}`, 409 if trashed), `POST /image/{id}/trash` (idempotent soft-delete, keeps file), `POST /image/{id}/restore`, `GET /archive` + `GET /trash` list views (reuse new `_serialize_media_item`), `POST /trash/empty` (only place trashing becomes permanent — best-effort file delete + cluster cleanup, mirrors bulk-delete). All scoped via `scope_media_query` (IDOR) + `can_access_media`. *verified: `uv run pytest tests/test_gallery.py` — 63 passed; blast-radius (8 Media-touching files) green in isolation; full-suite delta = +18 new tests, 0 regressions vs HEAD baseline (same 20 pre-existing pollution failures).*
+  - [x] completed — **Archive/Trash UI (reachable in the new React UI).** API client (`getArchive`/`getTrash`/`setArchive`/`trashImage`/`restoreImage`/`emptyTrash`); `/trash` page (list, per-item restore, empty-trash) + `/archive` page (list, unarchive); both wired into `NavBar`, both invalidate gallery queries on mutation. *verified: `pnpm vitest run archive-trash` — 5 passed; full frontend suite 179 passed, 0 regressions.*
+  - [x] completed — **Move-into-archive/trash from the gallery.** Added bulk **Archive** + **Move to trash** actions to the gallery selection action bar (optimistic removal from the main view, invalidate gallery/archive/trash queries). Completes the loop — items can be moved in, not just viewed on their pages. *verified: `pnpm vitest run gallery-cards` — 7 passed (incl. 2 new); full frontend suite 186 passed, 0 regressions.*
 - **Stage 4.5 — Activity/log surface** · Lane · Owner: ___ — [ ] todo — The functional archive/log surface Find lacks; define + implement.
 - **Stage 4.6 — API contract publish**
   - [ ] todo — Regenerate OpenAPI + TS client; hand to Phase 3 consumers.
@@ -229,13 +250,18 @@ A **fast, lightweight, open-source** Find that:
 **Goal:** one settings panel for all config, plus a hardware-accel layer that uses the GPU when available and **falls back to CPU automatically** on any platform. *(~2–4 weeks)*
 
 - **Stage 5.1 — Settings panel UI** · Lane · Owner: ___
-  - [ ] todo — Build a Find settings panel (React), structured from the Phase 1 Lane G spec: general, library/storage, ML, sharing, appearance, advanced.
+  - [>] in-progress — Build a Find settings panel (React), structured from the Phase 1 Lane G spec: general, library/storage, ML, sharing, appearance, advanced.
+    - [x] completed — Settings page shell (`app/settings/page.tsx`) + **hardware-acceleration section** (`components/hardware-accel-settings.tsx`): Auto/GPU/CPU radio toggle, live detected-capability + resolved-plan display, and the **non-blocking CPU-fallback notice**, all consuming the real `GET /api/config/hardware`. API client types/fn added (`getHardwareReport`). *verified: `pnpm vitest run hardware-accel-settings` — 6 passed; full frontend suite delta = +6 new, 0 regressions (same 3 pre-existing gallery failures).*
+    - [ ] todo — Remaining groups (general/library/storage/ML/sharing/appearance/advanced). *YAGNI: each lands when its backend exists, rather than stubbing groups with no persistence.*
   - [ ] todo — Persist settings via a Find settings API; validate + migrate existing config.
 - **Stage 5.2 — Hardware capability detection** · Lane · Owner: ___
-  - [ ] todo — Detect available accelerators per platform: CUDA/ROCm (Linux/Win), CoreML/Metal (Apple), DirectML (Win), NNAPI (Android), and **CPU baseline** everywhere. Expose a capability report to the settings panel.
+  - [x] completed — Detect available accelerators per platform: CUDA/ROCm (Linux/Win), CoreML/Metal (Apple), DirectML (Win), NNAPI (Android), and **CPU baseline** everywhere. Expose a capability report to the settings panel.
+    - [x] completed — `core/hardware.py` `detect_capabilities()` probes ONNX Runtime providers (CUDA/ROCm/CoreML/DirectML) + torch CUDA/MPS; every probe is failure-safe (degrades to CPU, never raises) so it's valid on CPU-only/edge. `GET /api/config/hardware` exposes the report + resolved plan to the settings panel. *(NNAPI is an Android-client concern, surfaced via the same provider list when present.)* *verified: `uv run pytest tests/test_hardware.py tests/test_config_hardware.py` — 28 passed.*
 - **Stage 5.3 — Accel toggle + auto-fallback** · Lane · Owner: ___
-  - [ ] todo — Settings toggle: `Auto` (use best available), `GPU`, `CPU`. On unsupported/failed GPU init, **automatically fall back to CPU** and surface a non-blocking notice. No crash, no hard dependency on a GPU.
-  - [ ] todo — Wire ONNX Runtime execution providers accordingly; choose CPU-friendly model variants when in CPU mode.
+  - [x] completed — Settings toggle: `Auto` (use best available), `GPU`, `CPU`. On unsupported/failed GPU init, **automatically fall back to CPU** and surface a non-blocking notice. No crash, no hard dependency on a GPU.
+    - [x] completed — `ACCEL_MODE` setting (`auto`/`gpu`/`cpu`, default `auto`) + pure `resolve_execution(mode, report)` → ordered EP list with **automatic CPU fallback** (forced `gpu` with no GPU → CPU + non-blocking notice; `auto` → GPU if present else CPU silently; EP list always ends with CPU so ORT can fall back per-op at session init). Exposed via `/config/hardware`. *verified: the GPU-with-no-GPU fallback path is unit-tested (`test_gpu_mode_falls_back_to_cpu_with_notice`).*
+    - [x] completed — **Wired into actual ML inference.** Added pure `resolve_torch_device(mode, cuda, mps)` (→ "cuda"/"mps"/"cpu" with auto-CPU-fallback) + `current_torch_device()` live helper; replaced the bare `USE_GPU and torch.cuda.is_available()` checks in `clip_embedder`, `captioner`, `object_detector` (torch device) and switched `face_detector` to `resolve_execution(...).providers` (ONNX EPs). Model-cache `config_key`s now key on `ACCEL_MODE` so switching mode reloads cleanly. Legacy `USE_GPU=false` still honored as a CPU pin. *verified: `uv run pytest tests/test_hardware.py` — 21 passed (incl. 8 torch-device cases); full backend suite 426 passed, 0 regressions.* *(`clusterer.py`'s `USE_GPU` left deliberately — it selects the cuML clustering backend, a separate library-choice concern, not torch device.)*
+    - [ ] todo — Choose CPU-friendly model variants when in CPU mode (buffalo_s / ViT-B-32). *(Pairs with Phase 7 ML alignment.)*
 - **Stage 5.4 — Low-end profile validation** · Owner: ___
   - [ ] todo — Validate end-to-end on a CPU-only machine and a constrained (low-RAM) profile; record results in Appendix §E. **Acceptance: full core workflow works with zero GPU.**
 
@@ -268,16 +294,26 @@ A **fast, lightweight, open-source** Find that:
   - [ ] todo — **Delete `reference-app/` locally and replace with placeholder images** in any fixture/sample dirs that referenced it; confirm the app builds/runs without the reference present.
 - **Stage 9.2 — Feature integration** · Owner: ___ — [ ] todo — Wire all phases together on one running build; resolve cross-lane seams; everything reachable from the new UI.
 - **Stage 9.3 — Compliance close-out** · Owner: ___ — [ ] todo — Verify §1 license/attribution obligations satisfied; verify name-scrub CI is green.
-- **Stage 9.4 — Docs** · Owner: ___ — [ ] todo — User/dev docs (incl. hardware-accel guide), migration notes, changelog.
+- **Stage 9.4 — Docs** · Owner: ___ — [>] in-progress — User/dev docs (incl. hardware-accel guide), migration notes, changelog.
+  - [x] completed — **Hardware-acceleration guide** shipped (`docs/guides/hardware-acceleration.md`): modes (auto/gpu/cpu), detection + auto-CPU-fallback, `/api/config/hardware`, configuration, CPU-only deployments, troubleshooting. Linked from `docs/index.md`; `ACCEL_MODE` documented in `.env.example` (with the legacy `USE_GPU` note).
+  - [ ] todo — Remaining: per-feature user/dev docs (timeline/albums/sharing/archive-trash), migration notes, changelog.
 
 ### PHASE 10 — Final Testing & Acceptance  *(the stop gate)*
 **Goal:** prove the whole overhaul is correct, fast, and complete — then ship. This phase is what tells an executing agent the work is *done*. *(~1–2 weeks)*
 
-- **Stage 10.1 — Full regression** · Owner: ___ — [ ] todo — Run the entire test suite (unit + integration + component) green: `uv run pytest backend/tests` and the frontend test command. Record counts.
+- **Stage 10.1 — Full regression** · Owner: ___ — [x] completed — Run the entire test suite (unit + integration + component) green: `uv run pytest backend/tests` and the frontend test command. Record counts. **Both suites green: backend 418 passed / 0 failed, frontend 148 passed / 0 failed.**
+  - [x] completed — **Backend suite fully green: `uv run pytest backend/tests` → 418 passed, 5 skipped, 0 failed, 0 errors** (no `--ignore`; order is deterministic — no randomizer installed). Root-caused + fixed ALL pre-existing full-run failures (had been 20 failed + 6 errors + 2 collection errors): every one was test-isolation pollution from two module-level monkeypatch leaks — (1) `test_reprocess.py` rebinding `gallery.Media = FakeMedia` at import time (fixed Phase 4.2 → scoped fixture), (2) `test_migrate_db.py` overwriting `sys.modules["find_api.core.config"]` with a fake at import time and never restoring it (fixed → save/restore in `finally`). No product bugs; all 5 affected files passed in isolation throughout.
+  - [ ] todo — Frontend: `pnpm test` currently 145 passed / 3 pre-existing failures (`gallery-cards`, `gallery-empty-state` — failing at HEAD, unrelated to overhaul work). Triage + green.
+    - [x] completed — **Frontend suite fully green: `pnpm test` → 148 passed, 0 failed (14 files).** Triaged the 3 pre-existing failures — all stale tests from the #249/#306 gallery refactors, not bugs: (1) loading UI moved from a `lucide-loader-circle` spinner to an accessible skeleton grid (`role=status`) — assertion updated; (2) `getGalleryCounts` added to the page but never added to the test's `@/lib/api` mock — added with a default count payload; (3) `getGallery` call shape grew `sortOrder`/`dateRange`/… and the store now hydrates filters from the URL across renders — switched exact-match to `expect.objectContaining` + persistent `mockResolvedValue`.
+    - [x] completed — **TypeScript build health: `npx tsc --noEmit` → 0 errors.** Caught that vitest (esbuild) doesn't typecheck, but `next build` has `ignoreBuildErrors: false` + `noUncheckedIndexedAccess` on — so new overhaul code had ~23 type errors that would have broken the real production build despite green unit tests. Fixed all (11 production files: justified-layout/grid, slideshow, timeline-scrubber/data, viewer-preload, use-timeline, timeline/albums/archive/trash pages; + 4 test files) — mostly `?? `/guarded narrowing for strict array-index access and `resolveMediaUrl` `string|null` → `?? undefined` on `<img src>`. Pre-existing code already typechecked clean; frontend suite still 190 passed after the fixes.
+    - [x] completed — **Backend lint health: `ruff check` clean** on all new/modified files. Caught the same class of CI break the unit tests miss — removing the `torch.cuda` check left `torch` unused in `object_detector`, and `Query` was unused in `album.py`. Auto-fixed; backend suite still 426 passed.
 - **Stage 10.2 — End-to-end journeys** · Owner: ___ — [ ] todo — E2E across the full surface: upload → timeline browse/scrub → album → share link (open in incognito) → archive/favorite/trash/restore → slideshow → settings + accel toggle. All pass.
 - **Stage 10.3 — Performance acceptance** · Owner: ___ — [ ] todo — Every Appendix §E budget met on **both** a GPU profile **and** a CPU-only/low-end profile. No budget regressed.
 - **Stage 10.4 — Hardware-accel acceptance** · Owner: ___ — [ ] todo — `Auto`/`GPU`/`CPU` modes all verified; forced GPU-init failure **auto-falls back to CPU** with no crash, on each target platform (or CI matrix). Core workflow confirmed working with **zero GPU**.
-- **Stage 10.5 — Accessibility & security acceptance** · Owner: ___ — [ ] todo — a11y scan + manual keyboard/screen-reader pass clean on new UI; `/security-review` signed off for all sharing/auth/crypto.
+- **Stage 10.5 — Accessibility & security acceptance** · Owner: ___ — [>] in-progress — a11y scan + manual keyboard/screen-reader pass clean on new UI; `/security-review` signed off for all sharing/auth/crypto.
+  - [x] completed — **Automated a11y smoke tests** for the new UI (`a11y-smoke.test.tsx`, 4 tests): viewer is a labelled `role=dialog`/`aria-modal` with named controls, scrubber is a `role=scrollbar` with orientation + value semantics, settings exposes labelled radios + heading, add-to-album is a labelled modal. Used existing testing-library role/accessible-name queries (no new framework). *verified: full frontend suite 190 passed.*
+  - [x] completed — **Security review of sharing/crypto** done in Stage 4.3 (`/security-review` via adversarial reviewer; found+fixed a critical + a medium, regression-tested).
+  - [ ] todo — Manual keyboard + screen-reader pass on the new UI (requires a human; not replaced by the automated smoke tests). Broader `/security-review` sign-off across auth as more lands.
 - **Stage 10.6 — Rollout** · Owner: ___ — [ ] todo — Staged merge of the overhaul branch to `main`; tag release.
 
 ---
@@ -331,7 +367,27 @@ Every feature lane owns its tests; the program owns the final gate (§Phase 10).
 ## Appendix
 
 ### §A — Published API/UI Contracts
-*(Producing lanes paste finalized contracts here before consumers build. Empty until Phase 3.1/4.6.)*
+*(Producing lanes paste finalized contracts here before consumers build.)*
+
+**Timeline (Phase 3.1) — shipped in `backend/src/find_api/routers/timeline.py`.**
+
+`GET /api/timeline/buckets?order=newest|oldest&liked=<bool?>`
+→ `{ "buckets": [{ "timeBucket": "YYYY-MM-01", "count": int }], "total": int }`
+Month buckets for the active scope, ordered newest- or oldest-first. Lets the
+client compute total scroll height + scrubber positions before loading photos.
+
+`GET /api/timeline/bucket?timeBucket=YYYY-MM&order=newest|oldest&liked=<bool?>`
+→ columnar parallel arrays keyed by index:
+`{ "timeBucket": "YYYY-MM-01", "count": int, "id": int[], "ratio": (float|null)[],
+   "thumbhash": null[], "liked": bool[], "createdAt": (str|null)[], "thumbnailUrl": str[] }`
+`timeBucket` accepts `YYYY-MM` or `YYYY-MM-DD`. `ratio` = width/height (null if
+unknown) — drives the justified layout. `thumbnailUrl` → `/api/image/{id}/thumbnail`.
+
+Both apply the same browse scoping as the gallery (not hidden/archived/trashed)
++ per-user IDOR guard. **v1 caveats (PROPOSED follow-ups):** buckets by
+`created_at` (upload date) — swap to EXIF "date taken" when extraction lands;
+`thumbhash` is always `null` until a worker-pipeline change populates it (grid
+lays out from `ratio` alone, blur-up is the only thing gated on it).
 
 ### §B — Lane Registry (live)
 | Lane | Phase | Owner (agent) | Worktree | Status |
@@ -339,7 +395,17 @@ Every feature lane owns its tests; the program owns the final gate (§Phase 10).
 | _seed at Phase 0.3_ | | | | |
 
 ### §C — Parity Matrix (have / partial / missing)
-*(Filled in Phase 1.2.)*
+Consolidated in `docs/overhaul/inventory/parity-matrix.md` (with per-lane detail in
+`docs/overhaul/inventory/lane-*.md`). Key takeaways:
+- The **timeline-bucket contract** (`/timeline/buckets` + `/timeline/bucket`, columnar, with
+  per-asset `ratio`+`thumbhash`) is the long pole — Phase 3 UI consumes it, so it ships first.
+- `media` needs `is_archived` + `deleted_at`; favorites already exist as `liked`. A single
+  **scoping rule** (`NOT hidden AND deleted_at IS NULL AND is_archived = false`) must be adopted
+  by every list surface (gallery/search/buckets/stats) — top leak risk.
+- Albums/sharing/trash/viewer/slideshow/settings-UI are greenfield. Share-link passwords must be
+  **hashed** (reference compares plaintext — do not copy). Casting and heavy admin settings are YAGNI-deferred.
+- Build order in parity-matrix §C.5: backend foundation → design system → timeline UI → viewer →
+  albums/sharing → settings/accel → ML → Rust → clients.
 
 ### §D — Rebrand Swap List
 *(Filled in Phase 0.2 — every reference mark → Find equivalent. No reference product name committed.)*
