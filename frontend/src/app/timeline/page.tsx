@@ -18,7 +18,10 @@ import { useTimeline } from "@/lib/use-timeline";
 import { buildScrubberLayout, offsetToSegment } from "@/lib/timeline-scrubber";
 
 export default function TimelinePage() {
-  const { buckets, assets, total, isLoadingBuckets, loadBucket } = useTimeline();
+  const [likedOnly, setLikedOnly] = useState(false);
+  const { buckets, assets, total, isLoadingBuckets, loadBucket } = useTimeline({
+    liked: likedOnly || undefined,
+  });
   const [scrollOffset, setScrollOffset] = useState(0);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -58,6 +61,14 @@ export default function TimelinePage() {
         {!isLoadingBuckets && (
           <p data-testid="timeline-total">{total} photos</p>
         )}
+        <button
+          type="button"
+          data-testid="timeline-favorites-toggle"
+          aria-pressed={likedOnly}
+          onClick={() => setLikedOnly((v) => !v)}
+        >
+          {likedOnly ? "Showing favorites" : "Show favorites"}
+        </button>
       </header>
 
       {isLoadingBuckets && (

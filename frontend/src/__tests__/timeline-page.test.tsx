@@ -143,4 +143,34 @@ describe("TimelinePage", () => {
       expect(screen.getByTestId("asset-viewer")).toBeInTheDocument(),
     );
   });
+
+  it("refetches buckets with liked=true when favorites is toggled", async () => {
+    api.getTimelineBuckets.mockResolvedValue({
+      buckets: [{ timeBucket: "2026-03-01", count: 1 }],
+      total: 1,
+    });
+    api.getTimelineBucket.mockResolvedValue({
+      timeBucket: "2026-03-01",
+      count: 1,
+      id: [101],
+      ratio: [1.5],
+      thumbhash: [null],
+      liked: [true],
+      createdAt: ["2026-03-01T00:00:00+00:00"],
+      thumbnailUrl: ["/api/image/101/thumbnail"],
+    });
+
+    renderPage();
+
+    const toggle = await screen.findByTestId("timeline-favorites-toggle");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() =>
+      expect(api.getTimelineBuckets).toHaveBeenCalledWith(
+        expect.objectContaining({ liked: true }),
+      ),
+    );
+  });
 });

@@ -13,7 +13,7 @@
  * this hook only owns fetch orchestration + cache state.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   type SortOrder,
@@ -56,6 +56,16 @@ export function useTimeline(options: {
   // Which buckets we've requested (prevents duplicate fetches). Only the
   // setter is read; the set is inspected via the updater's `prev`.
   const [, setRequested] = useState<Set<string>>(new Set());
+
+  // When the filter params change (order/liked), previously-loaded buckets are
+  // stale (they hold assets for the OLD filter), so clear the per-bucket cache.
+  // Without this, toggling favorites keeps showing the unfiltered assets for
+  // any month already loaded.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset keyed on filter params
+  useEffect(() => {
+    setLoaded({});
+    setRequested(new Set());
+  }, [order, liked]);
 
   const loadBucket = useCallback(
     (timeBucket: string) => {
