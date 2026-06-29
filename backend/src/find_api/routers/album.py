@@ -17,7 +17,7 @@ from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Query as SAQuery, Session
 
 from find_api.core.database import get_db
-from find_api.core.dependencies import get_required_user
+from find_api.core.dependencies import get_required_user, scope_media_query
 from find_api.models.album import Album, AlbumAsset
 from find_api.models.media import Media
 from find_api.models.user import User
@@ -193,9 +193,11 @@ def list_album_assets(
 ):
     _load_album_or_404(db, album_id, user)
 
-    # Join membership to browsable media so trashed/archived/hidden never leak.
+    # Join membership to browsable media so trashed/archived/hidden never leak,
+    # and scope to the caller's own media (IDOR guard) — defense-in-depth so
+    # foreign media can't be read back even if a membership row was poisoned.
     rows = (
-        _browsable_media_query(db)
+        scope_media_query(_browsable_media_query(db), user)
         .join(AlbumAsset, AlbumAsset.media_id == Media.id)
         .filter(AlbumAsset.album_id == album_id)
         .order_by(asc(AlbumAsset.position), asc(AlbumAsset.id))
@@ -217,10 +219,12 @@ def add_album_assets(
     _load_album_or_404(db, album_id, user)
 
     requested = list(dict.fromkeys(request.media_ids))
-    # Only add media that exist and are visible to this view.
+    # Only add media that exist, are visible to this view, AND belong to the
+    # caller (IDOR guard) — without scoping here a user could add another
+    # user's media ids to their own album and read the originals/metadata back.
     valid_ids = {
         m.id
-        for m in _browsable_media_query(db)
+        for m in scope_media_query(_browsable_media_query(db), user)
         .filter(Media.id.in_(requested))
         .all()
     }

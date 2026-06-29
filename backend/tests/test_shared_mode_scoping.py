@@ -172,3 +172,78 @@ class TestAdminOnlyEndpoints:
             headers=_auth(shared_instance["admin_token"]),
         )
         assert resp.status_code == 200
+
+
+class TestAlbumScoping:
+    """Albums must not let a member pull in or read back another user's media."""
+
+    def test_member_cannot_add_others_media_to_album(self, client, shared_instance):
+        # Alice creates an album she owns.
+        created = client.post(
+            "/api/albums",
+            json={"name": "Alice album"},
+            headers=_auth(shared_instance["alice_token"]),
+        )
+        assert created.status_code == 200
+        album_id = created.json()["id"]
+
+        # She tries to add BOB's media id (IDOR attempt).
+        resp = client.put(
+            f"/api/albums/{album_id}/assets",
+            json={"media_ids": [shared_instance["bob_media"]]},
+            headers=_auth(shared_instance["alice_token"]),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Bob's media must be rejected (skipped), not added.
+        assert body["added_ids"] == []
+        assert shared_instance["bob_media"] in body["skipped_ids"]
+
+        # And it must not be readable back through the album.
+        listing = client.get(
+            f"/api/albums/{album_id}/assets",
+            headers=_auth(shared_instance["alice_token"]),
+        )
+        assert listing.status_code == 200
+        assert listing.json()["items"] == []
+
+    def test_member_cannot_read_or_mutate_others_album(self, client, shared_instance):
+        # Bob creates an album.
+        created = client.post(
+            "/api/albums",
+            json={"name": "Bob album"},
+            headers=_auth(shared_instance["bob_token"]),
+        )
+        bob_album = created.json()["id"]
+
+        # Alice cannot read it (404, existence masked).
+        assert (
+            client.get(
+                f"/api/albums/{bob_album}",
+                headers=_auth(shared_instance["alice_token"]),
+            ).status_code
+            == 404
+        )
+        # Alice cannot delete it.
+        assert (
+            client.delete(
+                f"/api/albums/{bob_album}",
+                headers=_auth(shared_instance["alice_token"]),
+            ).status_code
+            == 404
+        )
+
+    def test_member_can_add_own_media_to_album(self, client, shared_instance):
+        created = client.post(
+            "/api/albums",
+            json={"name": "Alice album"},
+            headers=_auth(shared_instance["alice_token"]),
+        )
+        album_id = created.json()["id"]
+
+        resp = client.put(
+            f"/api/albums/{album_id}/assets",
+            json={"media_ids": [shared_instance["alice_media"]]},
+            headers=_auth(shared_instance["alice_token"]),
+        )
+        assert resp.json()["added_ids"] == [shared_instance["alice_media"]]
