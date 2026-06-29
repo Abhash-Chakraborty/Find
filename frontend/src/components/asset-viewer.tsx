@@ -45,6 +45,10 @@ interface AssetViewerProps {
   /** Slideshow interval in seconds (default 5). */
   slideshowSeconds?: number;
   loopSlideshow?: boolean;
+  /** Ids of favorited assets (drives the favorite control's filled state). */
+  favoriteIds?: ReadonlySet<number>;
+  /** When provided, a favorite toggle is shown; called with the active id. */
+  onToggleFavorite?: (id: number) => void;
 }
 
 export function AssetViewer({
@@ -54,6 +58,8 @@ export function AssetViewer({
   onClose,
   slideshowSeconds,
   loopSlideshow = true,
+  favoriteIds,
+  onToggleFavorite,
 }: AssetViewerProps) {
   const [zoom, setZoom] = useState<ZoomState>(IDENTITY_ZOOM);
   const [originalReady, setOriginalReady] = useState(false);
@@ -289,6 +295,21 @@ export function AssetViewer({
       >
         ✕
       </button>
+
+      {onToggleFavorite && (
+        <button
+          type="button"
+          data-testid="viewer-favorite"
+          aria-label={
+            favoriteIds?.has(active.id) ? "Remove favorite" : "Add favorite"
+          }
+          aria-pressed={favoriteIds?.has(active.id) ?? false}
+          onClick={() => onToggleFavorite(active.id)}
+          style={{ position: "absolute", top: 16, left: 16 }}
+        >
+          {favoriteIds?.has(active.id) ? "♥" : "♡"}
+        </button>
+      )}
 
       {hasPrev && (
         <button

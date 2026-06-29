@@ -161,4 +161,45 @@ describe("AssetViewer", () => {
     expect(viewer).toHaveAttribute("role", "dialog");
     expect(viewer).toHaveAttribute("aria-modal", "true");
   });
+
+  it("hides the favorite control when onToggleFavorite is not provided", () => {
+    renderViewer(0);
+    expect(screen.queryByTestId("viewer-favorite")).toBeNull();
+  });
+
+  it("shows the favorite control and toggles the active asset", () => {
+    const onToggleFavorite = vi.fn();
+    render(
+      <AssetViewer
+        assets={ASSETS}
+        index={1}
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+        favoriteIds={new Set([0])}
+        onToggleFavorite={onToggleFavorite}
+      />,
+    );
+    const fav = screen.getByTestId("viewer-favorite");
+    // Asset at index 1 has id 1, which is NOT in the favorite set {0}.
+    expect(fav).toHaveAttribute("aria-pressed", "false");
+    expect(fav).toHaveAccessibleName(/add favorite/i);
+    fireEvent.click(fav);
+    expect(onToggleFavorite).toHaveBeenCalledWith(1);
+  });
+
+  it("reflects a favorited active asset as pressed", () => {
+    render(
+      <AssetViewer
+        assets={ASSETS}
+        index={0}
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+        favoriteIds={new Set([0])}
+        onToggleFavorite={vi.fn()}
+      />,
+    );
+    const fav = screen.getByTestId("viewer-favorite");
+    expect(fav).toHaveAttribute("aria-pressed", "true");
+    expect(fav).toHaveAccessibleName(/remove favorite/i);
+  });
 });

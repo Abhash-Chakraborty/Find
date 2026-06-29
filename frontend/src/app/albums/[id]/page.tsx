@@ -24,6 +24,7 @@ import {
   getAlbum,
   getAlbumAssets,
   removeAlbumAssets,
+  toggleLike,
   updateAlbum,
 } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
@@ -82,7 +83,18 @@ export default function AlbumDetailPage() {
     onError: () => toast.error("Couldn't delete album"),
   });
 
+  const favoriteMutation = useMutation({
+    mutationFn: (mediaId: number) => toggleLike(mediaId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["album-assets", albumId] });
+    },
+    onError: () => toast.error("Couldn't update favorite"),
+  });
+
   const items = assetsData?.items ?? [];
+  const favoriteIds = new Set(
+    items.filter((item) => item.liked).map((item) => item.id),
+  );
 
   return (
     <main className="page-shell">
@@ -213,6 +225,8 @@ export default function AlbumDetailPage() {
           index={viewerIndex}
           onIndexChange={setViewerIndex}
           onClose={() => setViewerIndex(null)}
+          favoriteIds={favoriteIds}
+          onToggleFavorite={(id) => favoriteMutation.mutate(id)}
         />
       )}
     </main>
