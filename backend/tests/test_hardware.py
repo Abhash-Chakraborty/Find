@@ -35,7 +35,9 @@ class TestCapabilityReport:
     def test_best_gpu_provider_preference_order(self):
         # ROCm preferred over CoreML/DirectML when CUDA absent.
         assert _report([DIRECTML_EP, ROCM_EP, CPU_EP]).best_gpu_provider() == ROCM_EP
-        assert _report([DIRECTML_EP, COREML_EP, CPU_EP]).best_gpu_provider() == COREML_EP
+        assert (
+            _report([DIRECTML_EP, COREML_EP, CPU_EP]).best_gpu_provider() == COREML_EP
+        )
         assert _report([DIRECTML_EP, CPU_EP]).best_gpu_provider() == DIRECTML_EP
 
 
@@ -92,7 +94,9 @@ class TestResolveAutoMode:
 
     def test_mode_is_case_insensitive(self):
         assert resolve_execution("GPU", _report([CUDA_EP, CPU_EP])).using_gpu is True
-        assert resolve_execution("Cpu", _report([CUDA_EP, CPU_EP])).providers == [CPU_EP]
+        assert resolve_execution("Cpu", _report([CUDA_EP, CPU_EP])).providers == [
+            CPU_EP
+        ]
 
 
 class TestDetectionIsSafe:
@@ -104,6 +108,15 @@ class TestDetectionIsSafe:
         # Serializable for the API.
         d = report.to_dict()
         assert "available_providers" in d and "has_gpu" in d
+
+    def test_forced_gpu_resolves_to_cpu_on_gpuless_host(self):
+        """§10.4 cross-platform acceptance: on a GPU-less host (every CI runner
+        in the hardware-accel matrix), forcing ``gpu`` must resolve to a
+        CPU-terminated plan and never raise — composing the live detection with
+        resolution, which the pure-report tests above don't exercise together."""
+        plan = resolve_execution("gpu", detect_capabilities())
+        assert plan.providers, "execution plan must not be empty"
+        assert plan.providers[-1] == CPU_EP
 
 
 class TestExecutionPlanSerialization:
@@ -123,7 +136,10 @@ class TestResolveTorchDevice:
     """Pure torch-device resolution for Find's PyTorch models."""
 
     def test_cpu_mode_always_cpu(self):
-        assert resolve_torch_device("cpu", cuda_available=True, mps_available=True) == "cpu"
+        assert (
+            resolve_torch_device("cpu", cuda_available=True, mps_available=True)
+            == "cpu"
+        )
 
     def test_gpu_mode_uses_cuda_when_available(self):
         assert resolve_torch_device("gpu", cuda_available=True) == "cuda"
