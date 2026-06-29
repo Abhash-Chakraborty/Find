@@ -19,11 +19,13 @@ import TimelinePage from "../app/timeline/page";
 const api = vi.hoisted(() => ({
   getTimelineBuckets: vi.fn(),
   getTimelineBucket: vi.fn(),
+  toggleLike: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
   getTimelineBuckets: api.getTimelineBuckets,
   getTimelineBucket: api.getTimelineBucket,
+  toggleLike: api.toggleLike,
 }));
 
 // jsdom lacks layout + ResizeObserver; provide a fixed-width observer so the
@@ -64,6 +66,7 @@ beforeEach(() => {
   vi.stubGlobal("innerHeight", 5000);
   api.getTimelineBuckets.mockReset();
   api.getTimelineBucket.mockReset();
+  api.toggleLike.mockReset();
 });
 
 afterEach(() => {
@@ -172,5 +175,40 @@ describe("TimelinePage", () => {
         expect.objectContaining({ liked: true }),
       ),
     );
+  });
+
+  it("toggles favorite from the timeline viewer", async () => {
+    api.getTimelineBuckets.mockResolvedValue({
+      buckets: [{ timeBucket: "2026-03-01", count: 1 }],
+      total: 1,
+    });
+    api.getTimelineBucket.mockResolvedValue({
+      timeBucket: "2026-03-01",
+      count: 1,
+      id: [101],
+      ratio: [1.5],
+      thumbhash: [null],
+      liked: [false],
+      createdAt: ["2026-03-01T00:00:00+00:00"],
+      thumbnailUrl: ["/api/image/101/thumbnail"],
+    });
+    api.toggleLike.mockResolvedValue({ id: 101, liked: true });
+    vi.stubGlobal(
+      "Image",
+      class {
+        onload: (() => void) | null = null;
+        set src(_v: string) {}
+      },
+    );
+
+    renderPage();
+
+    const cell = await screen.findByTestId("timeline-cell-101");
+    fireEvent.click(cell);
+
+    const fav = await screen.findByTestId("viewer-favorite");
+    fireEvent.click(fav);
+
+    await waitFor(() => expect(api.toggleLike).toHaveBeenCalledWith(101));
   });
 });

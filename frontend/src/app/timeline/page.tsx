@@ -10,21 +10,48 @@
  * the small amount of view state (scroll offset, viewer open index).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { JustifiedGrid } from "@/components/justified-grid";
 import { TimelineScrubber } from "@/components/timeline-scrubber";
 import { AssetViewer } from "@/components/asset-viewer";
+import { toggleLike } from "@/lib/api";
 import { useTimeline } from "@/lib/use-timeline";
 import { buildScrubberLayout, offsetToSegment } from "@/lib/timeline-scrubber";
 
 export default function TimelinePage() {
+  const queryClient = useQueryClient();
   const [likedOnly, setLikedOnly] = useState(false);
   const { buckets, assets, total, isLoadingBuckets, loadBucket } = useTimeline({
     liked: likedOnly || undefined,
   });
   const [scrollOffset, setScrollOffset] = useState(0);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  // Local favorite overrides for instant feedback (the per-bucket cache isn't
+  // refetched on a like toggle, only on a filter change).
+  const [favoriteOverrides, setFavoriteOverrides] = useState<
+    Record<number, boolean>
+  >({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const favoriteIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const a of assets) {
+      const overridden = favoriteOverrides[a.id];
+      if (overridden ?? a.liked) {
+        ids.add(a.id);
+      }
+    }
+    return ids;
+  }, [assets, favoriteOverrides]);
+
+  const favoriteMutation = useMutation({
+    mutationFn: (mediaId: number) => toggleLike(mediaId),
+    onSuccess: ({ id, liked }) => {
+      setFavoriteOverrides((cur) => ({ ...cur, [id]: liked }));
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
+    },
+  });
 
   // Once buckets are known, eagerly load the first bucket so the grid has
   // content to render immediately.
@@ -119,6 +146,8 @@ export default function TimelinePage() {
           index={viewerIndex}
           onIndexChange={setViewerIndex}
           onClose={() => setViewerIndex(null)}
+          favoriteIds={favoriteIds}
+          onToggleFavorite={(id) => favoriteMutation.mutate(id)}
         />
       )}
     </main>
