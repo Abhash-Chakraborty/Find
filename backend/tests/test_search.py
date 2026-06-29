@@ -7,6 +7,7 @@ import pytest
 
 from find_api.core.database import get_db
 from find_api.main import app
+from find_api.routers.search import _metadata_filter_sql
 from find_api.services.query_cache import clear_query_cache, invalidate_query_cache
 
 
@@ -46,8 +47,27 @@ def _signature_result(token: str = "1:2026-01-01T00:00:00+00:00") -> MagicMock:
     return result
 
 
-def _mock_search(client, fake_rows, *, params=None, total_count=None):
+def _mock_search(client, fake_rows, *, params=None, total_count=None, return_db=False):
     """Call /api/search with mocked embeddings and paginated DB responses."""
+    response, mock_db = _mock_search_with_db(
+        client,
+        fake_rows,
+        params=params,
+        total_count=total_count,
+    )
+    if return_db:
+        return response, mock_db
+    return response
+
+
+def _mock_search_with_db(
+    client,
+    fake_rows,
+    *,
+    params=None,
+    total_count=None,
+):
+    """Call /api/search and return the mocked DB for SQL assertions."""
     mock_embedder = MagicMock()
     mock_embedder.embed_text.return_value = [0.0] * 768
 
@@ -75,7 +95,10 @@ def _mock_search(client, fake_rows, *, params=None, total_count=None):
                 return_value=mock_embedder,
             ),
         ):
-            return client.get("/api/search", params={"q": "sunset", **(params or {})})
+            response = client.get(
+                "/api/search", params={"q": "sunset", **(params or {})}
+            )
+            return response, mock_db
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -196,6 +219,205 @@ class TestSearchResponseShape:
     def test_missing_query_returns_422(self, client):
         response = client.get("/api/search")
         assert response.status_code == 422
+
+    def test_no_feedback_search_uses_zero_boost_fallback(self, client):
+        response, mock_db = _mock_search_with_db(client, [])
+
+        assert response.status_code == 200
+        search_sql = str(mock_db.execute.call_args_list[2].args[0])
+        assert "COALESCE(ranking_boost, 0) as ranking_boost" in search_sql
+        assert "+ COALESCE(ranking_boost, 0)" in search_sql
+
+    def test_search_orders_by_boosted_score_but_filters_by_similarity(self, client):
+        response, mock_db = _mock_search_with_db(client, [])
+
+        assert response.status_code == 200
+        search_sql = str(mock_db.execute.call_args_list[2].args[0])
+        assert "WHERE similarity > :threshold AND is_hidden = false" in search_sql
+        assert "ORDER BY final_score DESC, similarity DESC, id ASC" in search_sql
+
+    def test_ocr_text_boost_reranks_results(self, client):
+        text_heavy = MagicMock(
+            id=201,
+            filename="calendar.png",
+            minio_key="images/20/201.png",
+            thumbnail_key="thumbnails/20/201.webp",
+            thumbnail_content_type="image/webp",
+            thumbnail_size=256,
+            thumbnail_width=128,
+            thumbnail_height=72,
+            status="indexed",
+            liked=False,
+            width=1200,
+            height=800,
+            cluster_id=None,
+            similarity=0.62,
+            metadata_json='{"caption": "desk calendar", "objects": [], "ocr_text": "weekly planning calendar monday tuesday"}',
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        portrait = MagicMock(
+            id=202,
+            filename="portrait.jpg",
+            minio_key="images/20/202.jpg",
+            thumbnail_key="thumbnails/20/202.webp",
+            thumbnail_content_type="image/webp",
+            thumbnail_size=256,
+            thumbnail_width=128,
+            thumbnail_height=72,
+            status="indexed",
+            liked=False,
+            width=1200,
+            height=800,
+            cluster_id=None,
+            similarity=0.64,
+            metadata_json='{"caption": "person portrait", "objects": ["person"], "ocr_text": ""}',
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        response = _mock_search(
+            client, [portrait, text_heavy], params={"q": "calendar text"}
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["results"][0]["media_id"] == 201
+
+    def test_similarity_is_bounded_to_one(self, client):
+        row = MagicMock(
+            id=301,
+            filename="notes.png",
+            minio_key="images/30/301.png",
+            thumbnail_key="thumbnails/30/301.webp",
+            thumbnail_content_type="image/webp",
+            thumbnail_size=256,
+            thumbnail_width=128,
+            thumbnail_height=72,
+            status="indexed",
+            liked=False,
+            width=1200,
+            height=800,
+            cluster_id=None,
+            similarity=0.99,
+            metadata_json='{"caption": "calendar notes", "objects": [], "ocr_text": "calendar notes monday"}',
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        response = _mock_search(client, [row], params={"q": "calendar notes text"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["results"][0]["similarity"] <= 1.0
+
+    def test_ocr_not_returned_by_default_and_included_when_requested(self, client):
+        row = MagicMock(
+            id=302,
+            filename="receipt.png",
+            minio_key="images/30/302.png",
+            thumbnail_key="thumbnails/30/302.webp",
+            thumbnail_content_type="image/webp",
+            thumbnail_size=256,
+            thumbnail_width=128,
+            thumbnail_height=72,
+            status="indexed",
+            liked=False,
+            width=1200,
+            height=800,
+            cluster_id=None,
+            similarity=0.61,
+            metadata_json='{"caption": "receipt", "objects": [], "ocr_text": "total 42.00"}',
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        default_response = _mock_search(client, [row], params={"q": "receipt"})
+        include_response = _mock_search(
+            client,
+            [row],
+            params={"q": "receipt", "include_ocr": "true"},
+        )
+
+        assert default_response.status_code == 200
+        assert include_response.status_code == 200
+
+        default_meta = default_response.json()["results"][0]["metadata"]
+        include_meta = include_response.json()["results"][0]["metadata"]
+        assert "ocr_text" not in default_meta
+        assert include_meta["ocr_text"] == "total 42.00"
+
+    def test_search_accepts_metadata_filter_params(self, client):
+        response, mock_db = _mock_search(
+            client,
+            [_fake_search_row()],
+            params={
+                "camera_make": "Canon",
+                "camera_model": "EOS",
+                "date_from": "2026-01-01",
+                "date_to": "2026-12-31",
+                "min_width": 1000,
+                "min_height": 700,
+                "orientation": "landscape",
+                "file_type": "jpg",
+            },
+            return_db=True,
+        )
+
+        assert response.status_code == 200
+        count_sql = str(mock_db.execute.call_args_list[1].args[0])
+        search_sql = str(mock_db.execute.call_args_list[2].args[0])
+        search_params = mock_db.execute.call_args_list[2].args[1]
+
+        assert "exif_json ->> 'make' ILIKE :camera_make_pattern" in count_sql
+        assert "exif_json ->> 'model' ILIKE :camera_model_pattern" in search_sql
+        assert "created_at >= :date_from" in search_sql
+        assert "created_at <= :date_to" in search_sql
+        assert "width >= :min_width" in search_sql
+        assert "height >= :min_height" in search_sql
+        assert "width > height" in search_sql
+        assert "content_type ILIKE :file_type_pattern" in search_sql
+        assert search_params["camera_make_pattern"] == "%Canon%"
+        assert search_params["camera_model_pattern"] == "%EOS%"
+        assert search_params["min_width"] == 1000
+        assert search_params["min_height"] == 700
+        assert search_params["file_type_pattern"] == "%jpg%"
+
+    def test_search_rejects_invalid_metadata_filter_values(self, client):
+        invalid_date = _mock_search(
+            client,
+            [],
+            params={"date_from": "not-a-date"},
+        )
+        invalid_range = _mock_search(
+            client,
+            [],
+            params={"date_from": "2026-03-01", "date_to": "2026-02-01"},
+        )
+        invalid_orientation = _mock_search(
+            client,
+            [],
+            params={"orientation": "diagonal"},
+        )
+
+        assert invalid_date.status_code == 422
+        assert invalid_range.status_code == 422
+        assert invalid_orientation.status_code == 422
+
+    def test_metadata_filter_cache_key_escapes_user_values(self):
+        _, _, filter_key = _metadata_filter_sql(
+            camera_make="Sony&A",
+            camera_model="Alpha=7",
+            min_width=None,
+            min_height=None,
+            file_type="jpeg&png",
+            date_from=None,
+            date_to=None,
+            orientation=None,
+        )
+
+        assert "camera_make=sony%26a" in filter_key
+        assert "camera_model=alpha%3D7" in filter_key
+        assert "file_type=jpeg%26png" in filter_key
+        assert "sony&a" not in filter_key
+        assert "alpha=7" not in filter_key
 
 
 class TestSearchDiagnostics:
@@ -368,6 +590,32 @@ class TestSearchQueryCache:
 
         assert first.status_code == 200
         assert second.status_code == 200
+        assert mock_embedder.embed_text.call_count == 2
+        assert mock_db.execute.call_count == 6
+
+    def test_include_ocr_change_misses_cache(self, client):
+        row = _fake_search_row(media_id=23)
+        row.metadata_json = (
+            '{"caption": "receipt", "objects": [], "ocr_text": "total 42.00"}'
+        )
+        mock_db, mock_embedder, patches = self._mock_cached_search(
+            client,
+            [[row], [row]],
+        )
+
+        try:
+            with patches[0], patches[1]:
+                without_ocr = client.get("/api/search", params={"q": "receipt"})
+                with_ocr = client.get(
+                    "/api/search", params={"q": "receipt", "include_ocr": "true"}
+                )
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+        assert without_ocr.status_code == 200
+        assert with_ocr.status_code == 200
+        assert "ocr_text" not in without_ocr.json()["results"][0]["metadata"]
+        assert with_ocr.json()["results"][0]["metadata"]["ocr_text"] == "total 42.00"
         assert mock_embedder.embed_text.call_count == 2
         assert mock_db.execute.call_count == 6
 

@@ -439,3 +439,71 @@ Implementation issues will be opened only after this design is reviewed and acce
 - [API Token Management Best Practices for Self-Hosted Deployments](https://hoop.dev/blog/api-token-management-best-practices-for-self-hosted-deployments)
 - [REST API Authentication Best Practices — Stack Overflow Blog](https://stackoverflow.blog/2021/10/06/best-practices-for-authentication-and-authorization-for-rest-apis/)
 - [Android Network Service Discovery (mDNS)](https://developer.android.com/develop/connectivity/wifi/use-nsd)
+
+---
+
+## 13. UX Copy Checklist
+
+This checklist is for implementers building the Remote Acceleration UI described in §12.
+Copy strings are derived from §9.2, which remains the single source of truth. Implementers should refer to §9.2 for the canonical wording; this checklist summarizes the required items for convenience.
+
+---
+
+### 13.1 First-Enable Consent Dialog (§9.2)
+
+- [ ] **Dialog title:** `Enable Remote Processing?`
+- [ ] **Body — what is sent:**
+  > "Remote processing sends your images to the server you configured. Full image files are sent for detection, captioning, OCR, and indexing. Search query text is sent when remote search embedding is enabled. Only numerical vectors are sent for clustering — no image file."
+- [ ] **Body — what is never sent:**
+  > "Images are never sent to any project-hosted or third-party server. No data is transmitted without your explicit configuration."
+- [ ] **Embedding caveat (required):**
+  > "Recent research shows that CLIP/SigLIP vectors — even without the original image — can be used to approximately reconstruct images under certain conditions."
+- [ ] **Responsibility notice:**
+  > "You are responsible for the security of your configured server. Tailscale is recommended for encrypted remote connections."
+- [ ] **Cancel button label:** `Cancel`
+- [ ] **Confirm button label:** `I understand — Enable`
+  - Must not use "OK" or "Enable" alone — the full phrase is required.
+- [ ] Consent dialog is shown **once only** on first toggle-on. Not shown again unless settings are reset.
+
+---
+
+### 13.2 Active Remote Mode Indicators (§9.3)
+
+- [ ] **Per-image badge (processing view):** `Remote` — amber pill, shown alongside existing status indicator for every image processed remotely.
+- [ ] **Search bar label:** `Remote` — shown next to search icon when query embedding is remote.
+- [ ] **Search bar tooltip:** `Your search query is processed on your remote server.`
+- [ ] **Gallery header banner:** `Remote acceleration active — [server-url]` — unobtrusive, links to settings.
+- [ ] All indicators must also be present in any future mobile client.
+
+---
+
+### 13.3 HTTP (Non-localhost) Warning (§9.4)
+
+Shown when configured URL uses `http://` and host is not `localhost`, `127.0.0.1`, `::1`, or `[::1]`.
+
+- [ ] **Warning title:** `⚠ Unencrypted connection`
+- [ ] **Warning body:**
+  > "Images will be sent in plaintext over the network. Use HTTPS or Tailscale for connections outside your local network."
+- [ ] **Acknowledge button:** `I understand the risk`
+- [ ] Warning requires acknowledgment **per session** — cannot be permanently dismissed.
+
+---
+
+### 13.4 Cloudflare Tunnel Warning (§4.5)
+
+Shown when the configured URL matches `*.trycloudflare.com` or `*.cfargotunnel.com`.
+
+- [ ] **Warning body:**
+  > "Cloudflare Tunnel is active. Cloudflare decrypts traffic at its edge before forwarding it to your server. Your images are visible to Cloudflare in transit."
+- [ ] This warning must be **persistent** while Cloudflare Tunnel URL is configured — not a one-time dismissal.
+
+---
+
+### 13.5 General Implementation Notes
+
+- [ ] No project-hosted endpoint is pre-configured. The URL field must be blank by default.
+- [ ] The toggle must be **OFF** by default on every fresh install.
+- [ ] URL and API Key fields are only visible when the toggle is ON (§9.1).
+- [ ] The clustering info note must read:
+  > "Clustering sends only numerical vectors, not image files. Research shows vectors can approximately encode image content."
+- [ ] EXIF strip checkbox label: `Strip EXIF before sending` with helper text: `Recommended — removes GPS coordinates, timestamps, and device identifiers.`

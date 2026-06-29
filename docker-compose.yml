@@ -6,9 +6,12 @@ services:
     environment:
       POSTGRES_DB: find
       POSTGRES_USER: find
-      POSTGRES_PASSWORD: find123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-find123}
     ports:
-      - "5432:5432"
+      # Bound to loopback only: other services reach the db over the compose
+      # network. Not network-exposed, so the default password is not remotely
+      # reachable. Override the bind address for remote admin access.
+      - "127.0.0.1:5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,15 +23,16 @@ services:
   # Redis for job queue
   redis:
     image: redis:7-alpine
-    command: redis-server --loglevel warning
+    command: redis-server --loglevel warning --requirepass ${REDIS_PASSWORD:-find-redis-dev}
     container_name: find-redis
     hostname: redis
     ports:
-      - "6379:6379"
+      # Loopback only — the queue is internal to the compose network.
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-find-redis-dev}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -42,8 +46,10 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "${MINIO_HOST_PORT:-9200}:9000"
-      - "${MINIO_CONSOLE_HOST_PORT:-9201}:9001"
+      # Loopback only by default. Browser access to images goes through the
+      # API/next image proxy, not directly to MinIO.
+      - "127.0.0.1:${MINIO_HOST_PORT:-9200}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9201}:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -74,7 +80,7 @@ services:
       - MINIO_BUCKET=${MINIO_BUCKET:-images}
       - MINIO_PUBLIC_READ=${MINIO_PUBLIC_READ:-false}
       - MINIO_SECURE=${MINIO_SECURE:-false}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - REDIS_URL=${REDIS_URL:-redis://:find-redis-dev@redis:6379}
       - USE_GPU=${USE_GPU:-true}
       - API_HOST=0.0.0.0
       - API_PORT=8000
@@ -104,7 +110,7 @@ services:
   worker:
     image: find-backend
     container_name: find-worker
-    command: rq worker --worker-class ${RQ_WORKER_CLASS:-rq.worker.worker_classes.SimpleWorker} --url ${REDIS_URL:-redis://redis:6379} high default low
+    command: rq worker --worker-class ${RQ_WORKER_CLASS:-rq.worker.worker_classes.SimpleWorker} --url ${REDIS_URL:-redis://:find-redis-dev@redis:6379} high default low
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql://find:find123@db:5432/find}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
@@ -114,7 +120,7 @@ services:
       - MINIO_BUCKET=${MINIO_BUCKET:-images}
       - MINIO_PUBLIC_READ=${MINIO_PUBLIC_READ:-false}
       - MINIO_SECURE=${MINIO_SECURE:-false}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - REDIS_URL=${REDIS_URL:-redis://:find-redis-dev@redis:6379}
       - USE_GPU=${USE_GPU:-true}
       - MODEL_MANAGER_PROCESS_NAME=worker
       - PYTHONUNBUFFERED=1

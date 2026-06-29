@@ -3,20 +3,73 @@ from datetime import datetime
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from find_api.core.database import get_db
+from find_api.core.dependencies import get_admin_user, get_required_user
 from find_api.models.feedback import PersonFeedback, GeneralFeedback
 from find_api.models.person import Person
 from find_api.models.face import Face
 from find_api.models.media import Media
+from find_api.models.user import User
+from find_api.core.queue import enqueue_feedback_ranking_job
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["feedback"])
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────────
+
+
+def _scope_user_id(user: Optional[User]) -> Optional[int]:
+    """Return the id a regular user is restricted to, or None (unrestricted).
+
+    Local mode (user is None) and admins are unrestricted.
+    """
+    if user is None or user.role == "admin":
+        return None
+    return user.id
+
+
+def _load_owned_media_or_404(db: Session, media_id: int, user: Optional[User]) -> Media:
+    """Fetch media the caller may act on, else 404.
+
+    Returns 404 (not 403) for media owned by others so the endpoint does
+    not leak the existence of another user's media.
+    """
+    media = db.query(Media).filter(Media.id == media_id).first()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    scope_id = _scope_user_id(user)
+    if scope_id is not None and media.uploader_user_id != scope_id:
+        raise HTTPException(status_code=404, detail="Media not found")
+    return media
+
+
+def _require_person_access(db: Session, person_id: int, user: Optional[User]) -> Person:
+    """Fetch a person the caller may act on, else 404.
+
+    A regular user may only act on a person who appears in media they
+    uploaded.
+    """
+    person = db.query(Person).filter(Person.id == person_id).first()
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+    scope_id = _scope_user_id(user)
+    if scope_id is not None:
+        owns_face = (
+            db.query(Face.id)
+            .join(Media, Media.id == Face.media_id)
+            .filter(
+                Face.person_id == person_id,
+                Media.uploader_user_id == scope_id,
+            )
+            .first()
+        )
+        if owns_face is None:
+            raise HTTPException(status_code=404, detail="Person not found")
+    return person
 
 
 def _validate_rating(rating: Optional[int]) -> None:
@@ -49,8 +102,7 @@ class PersonFeedbackResponse(BaseModel):
     status: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GeneralFeedbackRequest(BaseModel):
@@ -77,8 +129,7 @@ class GeneralFeedbackResponse(BaseModel):
     extra_metadata: Optional[dict[str, Any]]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ─── Person Cluster Feedback Endpoints ────────────────────────────────────
@@ -91,6 +142,7 @@ def submit_split_feedback(
     person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """
     Mark faces to be split into a separate person group.
@@ -100,9 +152,7 @@ def submit_split_feedback(
     - Move those faces from source_person_id to new person
     - Log feedback record
     """
-    person = db.query(Person).filter(Person.id == person_id).first()
-    if not person:
-        raise HTTPException(status_code=404, detail="Person not found")
+    _require_person_access(db, person_id, user)
 
     if not body.face_ids:
         raise HTTPException(status_code=400, detail="face_ids cannot be empty")
@@ -171,19 +221,16 @@ def submit_merge_feedback(
     target_person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """
     Merge two person groups into one.
     All faces from source_person_id are moved to target_person_id.
     Source person is NOT deleted (in case user wants to undo).
     """
-    source_person = db.query(Person).filter(Person.id == person_id).first()
-    if not source_person:
-        raise HTTPException(status_code=404, detail="Source person not found")
+    _require_person_access(db, person_id, user)
 
-    target_person = db.query(Person).filter(Person.id == target_person_id).first()
-    if not target_person:
-        raise HTTPException(status_code=404, detail="Target person not found")
+    _require_person_access(db, target_person_id, user)
 
     if person_id == target_person_id:
         raise HTTPException(status_code=400, detail="Cannot merge person with itself")
@@ -229,14 +276,13 @@ def submit_wrong_person_feedback(
     person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """
     Mark specific face(s) as belonging to a different person.
     Creates a new unnamed person and moves the face(s) there.
     """
-    person = db.query(Person).filter(Person.id == person_id).first()
-    if not person:
-        raise HTTPException(status_code=404, detail="Person not found")
+    _require_person_access(db, person_id, user)
 
     if not body.face_ids:
         raise HTTPException(status_code=400, detail="face_ids cannot be empty")
@@ -301,14 +347,13 @@ def submit_correct_feedback(
     person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """
     Mark person cluster as correctly grouped (positive feedback).
     No changes are made; just records that user approves this grouping.
     """
-    person = db.query(Person).filter(Person.id == person_id).first()
-    if not person:
-        raise HTTPException(status_code=404, detail="Person not found")
+    _require_person_access(db, person_id, user)
 
     try:
         # Get all faces in this person if not specified
@@ -344,6 +389,7 @@ def submit_correct_feedback(
 def rate_search_result(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """
     Rate the relevance of a search result (1-5 stars).
@@ -353,9 +399,7 @@ def rate_search_result(
             status_code=400, detail="media_id is required for search rating"
         )
 
-    media = db.query(Media).filter(Media.id == body.media_id).first()
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
+    _load_owned_media_or_404(db, body.media_id, user)
 
     _validate_rating(body.rating)
 
@@ -370,6 +414,14 @@ def rate_search_result(
         db.commit()
         db.refresh(feedback)
 
+        try:
+            enqueue_feedback_ranking_job(reason=f"feedback:{body.media_id}")
+        except Exception as exc:
+            logger.warning(
+                "Failed to queue feedback ranking update: %s",
+                exc,
+            )
+
         logger.info(
             f"Search rating recorded for media {body.media_id}: {body.rating} stars"
         )
@@ -381,10 +433,48 @@ def rate_search_result(
         raise HTTPException(status_code=500, detail="Failed to save rating")
 
 
+@router.delete("/feedback/search-preferences")
+def reset_search_preferences(
+    db: Session = Depends(get_db),
+    _admin: Optional[User] = Depends(get_admin_user),
+):
+    """
+    Reset local search ranking preferences without deleting media or likes.
+
+    This zeroes ranking_boost for every media row, so it is restricted to
+    admins in shared mode (no-op restriction in local mode).
+    """
+    try:
+        deleted = (
+            db.query(GeneralFeedback)
+            .filter(GeneralFeedback.feedback_type == "search_rating")
+            .delete(synchronize_session=False)
+        )
+        updated = db.query(Media).update(
+            {Media.ranking_boost: 0.0},
+            synchronize_session=False,
+        )
+        db.commit()
+
+        return {
+            "status": "reset",
+            "deleted_search_ratings": deleted,
+            "reset_media_count": updated,
+        }
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to reset search preferences")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to reset search preferences",
+        )
+
+
 @router.post("/feedback/caption-rating", response_model=GeneralFeedbackResponse)
 def rate_caption(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """
     Rate the accuracy of an image caption (1-5 stars).
@@ -394,9 +484,7 @@ def rate_caption(
             status_code=400, detail="media_id is required for caption rating"
         )
 
-    media = db.query(Media).filter(Media.id == body.media_id).first()
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
+    _load_owned_media_or_404(db, body.media_id, user)
 
     _validate_rating(body.rating)
 
@@ -426,6 +514,7 @@ def rate_caption(
 def rate_object_detection(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """
     Rate the accuracy of object detection (1-5 stars).
@@ -435,9 +524,7 @@ def rate_object_detection(
             status_code=400, detail="media_id is required for object rating"
         )
 
-    media = db.query(Media).filter(Media.id == body.media_id).first()
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
+    _load_owned_media_or_404(db, body.media_id, user)
 
     _validate_rating(body.rating)
 
@@ -467,6 +554,7 @@ def rate_object_detection(
 def submit_caption_correction(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """
     Store user-edited caption text for future local personalization/training.
@@ -480,9 +568,7 @@ def submit_caption_correction(
     if not corrected_caption:
         raise HTTPException(status_code=400, detail="corrected_caption is required")
 
-    media = db.query(Media).filter(Media.id == body.media_id).first()
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
+    media = _load_owned_media_or_404(db, body.media_id, user)
 
     metadata = media.metadata_json or {}
 
@@ -513,6 +599,7 @@ def submit_caption_correction(
 def submit_object_correction(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """
     Store user-corrected object labels for future local personalization/training.
@@ -530,9 +617,7 @@ def submit_object_correction(
     if not corrected_objects:
         raise HTTPException(status_code=400, detail="corrected_objects is required")
 
-    media = db.query(Media).filter(Media.id == body.media_id).first()
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
+    media = _load_owned_media_or_404(db, body.media_id, user)
 
     metadata = media.metadata_json or {}
     original_objects = [
@@ -568,9 +653,15 @@ def submit_object_correction(
 
 
 @router.get("/feedback/stats")
-def get_feedback_stats(db: Session = Depends(get_db)):
+def get_feedback_stats(
+    db: Session = Depends(get_db),
+    _admin: Optional[User] = Depends(get_admin_user),
+):
     """
     Get aggregate feedback statistics for analytics.
+
+    Aggregates span every uploader's feedback, so this is admin-only in
+    shared mode (no-op restriction in local mode).
     """
     try:
         from sqlalchemy import func
@@ -631,14 +722,31 @@ def list_person_feedback(
     person_id: Optional[int] = None,
     feedback_type: Optional[str] = None,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """
     List all person feedback entries, optionally filtered by person or type.
     """
+    scope_id = _scope_user_id(user)
     query = db.query(PersonFeedback)
 
     if person_id:
+        # A regular user may only inspect feedback for a person in their media.
+        if scope_id is not None:
+            _require_person_access(db, person_id, user)
         query = query.filter(PersonFeedback.source_person_id == person_id)
+    elif scope_id is not None:
+        # Restrict to person groups that include the user's own faces.
+        owned_person_ids = (
+            db.query(Face.person_id)
+            .join(Media, Media.id == Face.media_id)
+            .filter(
+                Media.uploader_user_id == scope_id,
+                Face.person_id.isnot(None),
+            )
+            .distinct()
+        )
+        query = query.filter(PersonFeedback.source_person_id.in_(owned_person_ids))
 
     if feedback_type:
         query = query.filter(PersonFeedback.feedback_type == feedback_type)

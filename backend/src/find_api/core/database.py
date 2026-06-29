@@ -39,7 +39,18 @@ def init_db():
     """
     try:
         # Import all models to register them for metadata creation
-        from find_api.models import media, cluster, face, person, feedback  # noqa: F401
+        from find_api.models import (  # noqa: F401
+            cluster,
+            face,
+            feedback,
+            invite,
+            join_request,
+            media,
+            person,
+            session,
+            user,
+            vault,
+        )
 
         # pgvector must exist before SQLAlchemy creates vector columns.
         if engine.dialect.name == "postgresql":
@@ -62,6 +73,24 @@ def init_db():
                     text(
                         "ALTER TABLE IF EXISTS media "
                         "ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT false"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS vault_state VARCHAR(32) NOT NULL DEFAULT 'visible'"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMP WITH TIME ZONE"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS encrypted_at TIMESTAMP WITH TIME ZONE"
                     )
                 )
                 conn.execute(
@@ -120,6 +149,24 @@ def init_db():
                 )
                 conn.execute(
                     text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS uploader_user_id INTEGER"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_uploader_user_id "
+                        "ON media (uploader_user_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_single_admin "
+                        "ON users (role) WHERE role = 'admin'"
+                    )
+                )
+                conn.execute(
+                    text(
                         """
                         DO $$
                         BEGIN
@@ -141,8 +188,35 @@ def init_db():
                 )
                 conn.execute(
                     text(
+                        """
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1
+                                FROM pg_constraint
+                                WHERE conname = 'fk_media_uploader_user_id'
+                            ) THEN
+                                ALTER TABLE media
+                                ADD CONSTRAINT fk_media_uploader_user_id
+                                FOREIGN KEY (uploader_user_id)
+                                REFERENCES users(id)
+                                ON DELETE SET NULL;
+                            END IF;
+                        END
+                        $$;
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
                         "CREATE INDEX IF NOT EXISTS ix_media_is_hidden_false "
                         "ON media (is_hidden) WHERE is_hidden = false"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_vault_state "
+                        "ON media (vault_state)"
                     )
                 )
                 conn.execute(
@@ -162,13 +236,53 @@ def init_db():
                         "media_id INTEGER PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE, "
                         "encrypted_path TEXT NOT NULL, "
                         "iv BYTEA NOT NULL, "
+                        "encryption_algorithm VARCHAR(64) NOT NULL DEFAULT 'AES-256-GCM', "
+                        "key_derivation VARCHAR(128), "
+                        "ciphertext_size INTEGER, "
                         "created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()"
                         ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_metadata "
+                        "ADD COLUMN IF NOT EXISTS encryption_algorithm VARCHAR(64) NOT NULL DEFAULT 'AES-256-GCM'"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_metadata "
+                        "ADD COLUMN IF NOT EXISTS key_derivation VARCHAR(128)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_metadata "
+                        "ADD COLUMN IF NOT EXISTS ciphertext_size INTEGER"
                     )
                 )
                 conn.execute(text("UPDATE media SET liked = false WHERE liked IS NULL"))
                 conn.execute(
                     text("UPDATE media SET is_hidden = false WHERE is_hidden IS NULL")
+                )
+                conn.execute(
+                    text(
+                        "UPDATE media SET vault_state = CASE "
+                        "WHEN is_hidden THEN 'hidden_encrypted' "
+                        "ELSE 'visible' END "
+                    )
+                )
+                conn.execute(
+                    text(
+                        "UPDATE media SET hidden_at = created_at "
+                        "WHERE is_hidden = true AND hidden_at IS NULL"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "UPDATE media SET encrypted_at = hidden_at "
+                        "WHERE is_hidden = true AND encrypted_at IS NULL"
+                    )
                 )
                 conn.execute(
                     text(

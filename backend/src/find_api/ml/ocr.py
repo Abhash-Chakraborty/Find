@@ -186,6 +186,32 @@ class OCRExtractor:
             logger.error(f"Failed to extract text blocks: {e}")
             raise
 
+    def extract_text_and_boxes(
+        self, image: Union[Image.Image, np.ndarray]
+    ) -> tuple[str, List[Dict]]:
+        """Extract joined text and text blocks from a single OCR pass.
+
+        Equivalent to calling extract_text() and extract_text_with_boxes()
+        but runs the (expensive) model inference only once.
+        """
+        try:
+            if isinstance(image, Image.Image):
+                image = np.array(image)
+
+            with self.manager.use_model(
+                "paddleocr", self._load_model, config_key=OCR_CONFIG_KEY
+            ) as ocr:
+                result = self._run_ocr(ocr, image)
+
+            full_text = "\n".join(self._extract_text_parts(result))
+            blocks = self._extract_blocks(result)
+            logger.info(f"Extracted {len(full_text)} characters")
+            return full_text, blocks
+
+        except Exception as e:
+            logger.error(f"Failed to extract text and boxes: {e}")
+            raise
+
 
 # Global instance
 _ocr_extractor = None

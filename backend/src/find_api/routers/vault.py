@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import secrets
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
@@ -19,6 +20,7 @@ from slowapi.util import get_remote_address
 
 from find_api.core.crypto import (
     VAULT_STORAGE_DIR,
+    build_vault_aad,
     create_key_verifier,
     delete_session_key,
     decrypt_file_stream,
@@ -29,11 +31,19 @@ from find_api.core.crypto import (
     set_session_key,
 )
 from find_api.core.database import get_db
+from find_api.core.dependencies import get_required_user
 from find_api.core.storage import delete_file, download_file_to_path
 from find_api.models.media import Media
+from find_api.models.user import User
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+ENCRYPTION_ALGORITHM = "AES-256-GCM"
+KEY_DERIVATION_METHOD = "PBKDF2-HMAC-SHA256"
+
+# Minimum passphrase length enforced when a vault is first created. Existing
+# vaults are not re-validated on unlock so short legacy passphrases keep working.
+MIN_VAULT_PASSPHRASE_LENGTH = 8
 
 
 class VaultUnlockRequest(BaseModel):
@@ -50,6 +60,7 @@ class VaultHideRequest(BaseModel):
 
 
 def _normalize_binary(value: object) -> bytes:
+    """Convert database BLOB-like values to plain bytes."""
     if isinstance(value, bytes):
         return value
     if isinstance(value, memoryview):
@@ -60,6 +71,7 @@ def _normalize_binary(value: object) -> bytes:
 def _resolve_session_token(
     authorization: Optional[str], session_token: Optional[str]
 ) -> str:
+    """Resolve a vault session token from the request body or Authorization header."""
     token = session_token.strip() if session_token else ""
 
     if not token and authorization:
@@ -76,6 +88,7 @@ def _resolve_session_token(
 
 
 def _get_cached_master_key(session_token: str) -> bytes:
+    """Load the cached vault master key or translate cache misses to HTTP errors."""
     try:
         return get_session_key(session_token)
     except KeyError as exc:
@@ -85,6 +98,7 @@ def _get_cached_master_key(session_token: str) -> bytes:
 
 
 def _load_vault_config(db: Session) -> Optional[tuple[bytes, bytes, bytes]]:
+    """Return the singleton vault verifier configuration when it exists."""
     row = db.execute(
         text(
             "SELECT salt, verifier_nonce, verifier_ciphertext "
@@ -103,6 +117,7 @@ def _load_vault_config(db: Session) -> Optional[tuple[bytes, bytes, bytes]]:
 
 
 def _create_vault_config(db: Session, passphrase: str) -> bytes:
+    """Initialize vault verifier state and return the derived master key."""
     salt = os.urandom(16)
     master_key = derive_master_key(passphrase, salt)
     verifier_nonce, verifier_ciphertext = create_key_verifier(master_key)
@@ -152,6 +167,7 @@ def _create_vault_config(db: Session, passphrase: str) -> bytes:
 
 
 def _load_or_create_master_key(db: Session, passphrase: str) -> bytes:
+    """Load an existing vault key or initialize vault config on first unlock."""
     config = _load_vault_config(db)
     if config is None:
         return _create_vault_config(db, passphrase)
@@ -164,6 +180,7 @@ def _load_or_create_master_key(db: Session, passphrase: str) -> bytes:
 
 
 def _load_media_or_404(db: Session, media_id: int) -> Media:
+    """Return a media row or raise the public image-not-found response."""
     media = db.query(Media).filter(Media.id == media_id).first()
     if not media:
         raise HTTPException(status_code=404, detail="Image not found")
@@ -171,6 +188,7 @@ def _load_media_or_404(db: Session, media_id: int) -> Media:
 
 
 def _load_vault_metadata(db: Session, media_id: int) -> Optional[tuple[str, bytes]]:
+    """Return encrypted vault blob metadata for a media row."""
     row = db.execute(
         text(
             "SELECT encrypted_path, iv "
@@ -194,6 +212,9 @@ def _rollback_hidden_state_after_delete_failure(
             {"media_id": media.id},
         )
         media.is_hidden = False
+        media.vault_state = "visible"
+        media.hidden_at = None
+        media.encrypted_at = None
         db.commit()
     except Exception:  # noqa: BLE001
         db.rollback()
@@ -207,9 +228,26 @@ def unlock_vault(
     request: Request,
     payload: VaultUnlockRequest,
     db: Session = Depends(get_db),
+    _user: Optional[User] = Depends(get_required_user),
 ):
+    """Unlock the vault and cache a short-lived session token."""
     if not payload.passphrase or not payload.passphrase.strip():
         raise HTTPException(status_code=400, detail="Passphrase must not be empty")
+
+    # When no vault exists yet, the first unlock *creates* it with this
+    # passphrase. Enforce a minimum length at creation time so the global
+    # vault secret cannot be a trivial passphrase. Existing vaults are not
+    # re-validated, so previously-set passphrases keep working.
+    if _load_vault_config(db) is None:
+        if len(payload.passphrase) < MIN_VAULT_PASSPHRASE_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Vault passphrase must be at least "
+                    f"{MIN_VAULT_PASSPHRASE_LENGTH} characters"
+                ),
+            )
+
     master_key = _load_or_create_master_key(db, payload.passphrase)
     session_token = secrets.token_urlsafe(32)
     set_session_key(session_token, master_key)
@@ -221,6 +259,7 @@ def list_vault_media(
     authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
+    """List media records hidden in the vault for an unlocked session."""
     token = _resolve_session_token(authorization, None)
     _get_cached_master_key(token)
 
@@ -247,6 +286,7 @@ def lock_vault(
     payload: Optional[VaultLockRequest] = Body(default=None),
     authorization: Optional[str] = Header(default=None),
 ):
+    """Invalidate an active vault session token."""
     session_token = _resolve_session_token(
         authorization, payload.session_token if payload else None
     )
@@ -261,6 +301,7 @@ def hide_media(
     authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
+    """Encrypt a media object into the vault and remove the original blob."""
     session_token = _resolve_session_token(authorization, payload.session_token)
     master_key = _get_cached_master_key(session_token)
 
@@ -281,20 +322,34 @@ def hide_media(
     try:
         try:
             download_file_to_path(media.minio_key, temp_source_path)
-            iv = encrypt_file(master_key, temp_source_path, str(encrypted_path))
+            aad = build_vault_aad(media.id, media.file_hash)
+            iv = encrypt_file(
+                master_key,
+                temp_source_path,
+                str(encrypted_path),
+                associated_data=aad,
+            )
 
             db.execute(
                 text(
-                    "INSERT INTO vault_metadata (media_id, encrypted_path, iv) "
-                    "VALUES (:media_id, :encrypted_path, :iv)"
+                    "INSERT INTO vault_metadata "
+                    "(media_id, encrypted_path, iv, encryption_algorithm, key_derivation, ciphertext_size) "
+                    "VALUES (:media_id, :encrypted_path, :iv, :encryption_algorithm, :key_derivation, :ciphertext_size)"
                 ),
                 {
                     "media_id": media.id,
                     "encrypted_path": str(encrypted_path),
                     "iv": iv,
+                    "encryption_algorithm": ENCRYPTION_ALGORITHM,
+                    "key_derivation": KEY_DERIVATION_METHOD,
+                    "ciphertext_size": encrypted_path.stat().st_size,
                 },
             )
             media.is_hidden = True
+            media.vault_state = "hidden_encrypted"
+            hidden_timestamp = datetime.now(timezone.utc)
+            media.hidden_at = hidden_timestamp
+            media.encrypted_at = hidden_timestamp
             db.commit()
         except Exception as exc:  # noqa: BLE001
             db.rollback()
@@ -321,6 +376,7 @@ def stream_hidden_media(
     authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
+    """Stream a hidden media blob after AEAD metadata verification succeeds."""
     token = _resolve_session_token(authorization, None)
     master_key = _get_cached_master_key(token)
     media = _load_media_or_404(db, media_id)
@@ -335,7 +391,13 @@ def stream_hidden_media(
     if not encrypted_file.exists():
         raise HTTPException(status_code=404, detail="Encrypted vault blob not found")
 
+    aad = build_vault_aad(media.id, media.file_hash)
     return StreamingResponse(
-        decrypt_file_stream(master_key, iv, str(encrypted_file)),
+        decrypt_file_stream(
+            master_key,
+            iv,
+            str(encrypted_file),
+            associated_data=aad,
+        ),
         media_type=media.content_type or "application/octet-stream",
     )
