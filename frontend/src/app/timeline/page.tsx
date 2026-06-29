@@ -17,7 +17,11 @@ import { TimelineScrubber } from "@/components/timeline-scrubber";
 import { AssetViewer } from "@/components/asset-viewer";
 import { toggleLike, setArchive, trashImage } from "@/lib/api";
 import { useTimeline } from "@/lib/use-timeline";
-import { buildScrubberLayout, offsetToSegment } from "@/lib/timeline-scrubber";
+import {
+  buildScrubberLayout,
+  offsetToSegment,
+  offsetToTrackFraction,
+} from "@/lib/timeline-scrubber";
 
 export default function TimelinePage() {
   const queryClient = useQueryClient();
@@ -87,7 +91,9 @@ export default function TimelinePage() {
     }
   }, [buckets, loadBucket]);
 
-  // When the user scrubs, map the offset to a month and ensure it's loaded.
+  // When the user scrubs: load the target month's data AND scroll the grid to
+  // it. The scrubber works in estimated-height space and the grid in real
+  // layout space, so we bridge via a 0..1 fraction → window scroll position.
   const scrubberLayout = buildScrubberLayout(buckets);
   const handleScrub = useCallback(
     (offset: number) => {
@@ -95,6 +101,12 @@ export default function TimelinePage() {
       const segment = offsetToSegment(scrubberLayout, offset);
       if (segment) {
         loadBucket(segment.timeBucket);
+      }
+      if (typeof window !== "undefined") {
+        const fraction = offsetToTrackFraction(scrubberLayout, offset);
+        const doc = document.documentElement;
+        const scrollable = Math.max(0, doc.scrollHeight - window.innerHeight);
+        window.scrollTo({ top: fraction * scrollable, behavior: "auto" });
       }
     },
     [scrubberLayout, loadBucket],
