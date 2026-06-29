@@ -13,8 +13,16 @@ import { useQuery } from "@tanstack/react-query";
 import { type AccelMode, getHardwareReport } from "@/lib/api";
 
 const MODES: { value: AccelMode; label: string; hint: string }[] = [
-  { value: "auto", label: "Auto", hint: "Use the best available accelerator, otherwise CPU." },
-  { value: "gpu", label: "GPU", hint: "Prefer GPU; automatically fall back to CPU if unavailable." },
+  {
+    value: "auto",
+    label: "Auto",
+    hint: "Use the best available accelerator, otherwise CPU.",
+  },
+  {
+    value: "gpu",
+    label: "GPU",
+    hint: "Prefer GPU; automatically fall back to CPU if unavailable.",
+  },
   { value: "cpu", label: "CPU", hint: "Force CPU. Works on any machine." },
 ];
 

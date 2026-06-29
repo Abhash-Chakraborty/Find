@@ -90,7 +90,8 @@ export function AddToAlbumModal({
       <div className="w-full max-w-md rounded-2xl border border-[var(--frost)] bg-[color:var(--void)] p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-medium">
-            Add {mediaIds.length} photo{mediaIds.length === 1 ? "" : "s"} to album
+            Add {mediaIds.length} photo{mediaIds.length === 1 ? "" : "s"} to
+            album
           </h2>
           <button
             type="button"

@@ -9,7 +9,13 @@
  * Run with: pnpm vitest run src/__tests__/asset-viewer.test.tsx
  */
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssetViewer } from "@/components/asset-viewer";
 import type { ViewerAsset } from "@/lib/viewer-preload";
@@ -62,7 +68,10 @@ function renderViewer(index = 0, onIndexChange = vi.fn(), onClose = vi.fn()) {
 describe("AssetViewer", () => {
   it("renders the active asset's thumbnail first", () => {
     renderViewer(1);
-    expect(screen.getByTestId("viewer-image")).toHaveAttribute("src", "/thumb/1");
+    expect(screen.getByTestId("viewer-image")).toHaveAttribute(
+      "src",
+      "/thumb/1",
+    );
   });
 
   it("swaps to the original once it preloads", () => {
@@ -74,7 +83,10 @@ describe("AssetViewer", () => {
       originalImg?.onload?.();
     });
 
-    expect(screen.getByTestId("viewer-image")).toHaveAttribute("src", "/orig/1");
+    expect(screen.getByTestId("viewer-image")).toHaveAttribute(
+      "src",
+      "/orig/1",
+    );
   });
 
   it("navigates with next/prev buttons", () => {

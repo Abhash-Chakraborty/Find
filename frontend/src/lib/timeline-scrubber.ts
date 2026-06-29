@@ -85,7 +85,10 @@ export function formatBucketLabel(timeBucket: string): string {
   return `${MONTH_NAMES[month - 1] ?? ""} ${year}`;
 }
 
-function estimateSegmentHeight(count: number, opts: Required<ScrubberOptions>): number {
+function estimateSegmentHeight(
+  count: number,
+  opts: Required<ScrubberOptions>,
+): number {
   const rows = Math.max(1, Math.ceil(count / opts.columnsPerRow));
   return opts.headerHeight + rows * (opts.targetRowHeight + opts.gap);
 }
@@ -128,7 +131,10 @@ function segmentIndexAtOffset(layout: ScrubberLayout, offset: number): number {
   if (segments.length === 0) {
     return -1;
   }
-  const clamped = Math.min(Math.max(0, offset), Math.max(0, layout.totalHeight - 1));
+  const clamped = Math.min(
+    Math.max(0, offset),
+    Math.max(0, layout.totalHeight - 1),
+  );
 
   let lo = 0;
   let hi = segments.length - 1;

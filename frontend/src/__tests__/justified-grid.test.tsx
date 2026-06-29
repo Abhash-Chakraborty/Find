@@ -86,9 +86,9 @@ describe("JustifiedGrid", () => {
     ]);
 
     const grid = screen.getByTestId("justified-grid");
-    const wrappers = within(grid).getAllByTestId(/cell-/).map(
-      (el) => el.parentElement as HTMLElement,
-    );
+    const wrappers = within(grid)
+      .getAllByTestId(/cell-/)
+      .map((el) => el.parentElement as HTMLElement);
     for (const wrapper of wrappers) {
       expect(wrapper.style.position).toBe("absolute");
       // Width should be set to a positive pixel value.
@@ -97,9 +97,7 @@ describe("JustifiedGrid", () => {
   });
 
   it("sets a positive container height once measured", () => {
-    renderGrid(
-      Array.from({ length: 12 }, (_, i) => ({ id: i, ratio: 1.0 })),
-    );
+    renderGrid(Array.from({ length: 12 }, (_, i) => ({ id: i, ratio: 1.0 })));
     const grid = screen.getByTestId("justified-grid");
     expect(Number.parseFloat(grid.style.height)).toBeGreaterThan(0);
   });

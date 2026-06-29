@@ -13,17 +13,17 @@
  * this hook only owns fetch orchestration + cache state.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  type SortOrder,
-  type TimelineBucketAssets,
   getTimelineBucket,
   getTimelineBuckets,
+  type SortOrder,
+  type TimelineBucketAssets,
 } from "@/lib/api";
 import {
-  type TimelineAsset,
   composeTimeline,
+  type TimelineAsset,
   totalAssetCount,
 } from "@/lib/timeline-data";
 
@@ -39,10 +39,9 @@ export interface UseTimelineResult {
   loadedBucketKeys: string[];
 }
 
-export function useTimeline(options: {
-  order?: SortOrder;
-  liked?: boolean;
-} = {}): UseTimelineResult {
+export function useTimeline(
+  options: { order?: SortOrder; liked?: boolean } = {},
+): UseTimelineResult {
   const order = options.order ?? "newest";
   const liked = options.liked;
 
@@ -58,7 +57,9 @@ export function useTimeline(options: {
   const bucketOrder = useMemo(() => bucketData?.buckets ?? [], [bucketData]);
 
   // Loaded per-bucket asset payloads, keyed by month.
-  const [loaded, setLoaded] = useState<Record<string, TimelineBucketAssets>>({});
+  const [loaded, setLoaded] = useState<Record<string, TimelineBucketAssets>>(
+    {},
+  );
   // Which buckets we've requested (prevents duplicate fetches). Only the
   // setter is read; the set is inspected via the updater's `prev`.
   const [, setRequested] = useState<Set<string>>(new Set());

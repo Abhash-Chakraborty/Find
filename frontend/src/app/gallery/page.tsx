@@ -26,8 +26,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { GalleryDateFilter } from "@/components/gallery-date-filter";
 import { AddToAlbumModal } from "@/components/add-to-album-modal";
+import { GalleryDateFilter } from "@/components/gallery-date-filter";
 import {
   ImagePreviewModal,
   type PreviewMedia,
@@ -45,8 +45,8 @@ import {
   getGalleryCounts,
   getImageDetail,
   reprocessImage,
-  setArchive,
   type SortOrder,
+  setArchive,
   toggleLike,
   trashImage,
 } from "@/lib/api";
@@ -824,7 +824,9 @@ function GalleryPageContent() {
       Promise.all(mediaIds.map((id) => setArchive(id, true))),
     onMutate: (mediaIds: number[]) => {
       const previousData =
-        queryClient.getQueryData<InfiniteData<GalleryResponse>>(galleryQueryKey);
+        queryClient.getQueryData<InfiniteData<GalleryResponse>>(
+          galleryQueryKey,
+        );
       queryClient.setQueryData<InfiniteData<GalleryResponse>>(
         galleryQueryKey,
         (old) => removeMediaFromGalleryCache(mediaIds, old),
@@ -855,7 +857,9 @@ function GalleryPageContent() {
       Promise.all(mediaIds.map((id) => trashImage(id))),
     onMutate: (mediaIds: number[]) => {
       const previousData =
-        queryClient.getQueryData<InfiniteData<GalleryResponse>>(galleryQueryKey);
+        queryClient.getQueryData<InfiniteData<GalleryResponse>>(
+          galleryQueryKey,
+        );
       queryClient.setQueryData<InfiniteData<GalleryResponse>>(
         galleryQueryKey,
         (old) => removeMediaFromGalleryCache(mediaIds, old),

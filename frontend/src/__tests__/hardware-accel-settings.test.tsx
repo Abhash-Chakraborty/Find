@@ -124,7 +124,9 @@ describe("HardwareAccelSettings", () => {
   it("calls onChange when a different mode is picked", async () => {
     getHardwareReport.mockResolvedValue(GPU_REPORT);
     const onChange = vi.fn();
-    renderWithClient(<HardwareAccelSettings value="auto" onChange={onChange} />);
+    renderWithClient(
+      <HardwareAccelSettings value="auto" onChange={onChange} />,
+    );
 
     const cpuRadio = screen
       .getByTestId("accel-option-cpu")

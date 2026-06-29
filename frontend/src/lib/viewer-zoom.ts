@@ -145,7 +145,11 @@ export function panBy(
   viewport: ViewportSize,
 ): ZoomState {
   return clampPan(
-    { ...state, offsetX: state.offsetX + delta.x, offsetY: state.offsetY + delta.y },
+    {
+      ...state,
+      offsetX: state.offsetX + delta.x,
+      offsetY: state.offsetY + delta.y,
+    },
     viewport,
   );
 }

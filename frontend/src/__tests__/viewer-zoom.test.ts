@@ -6,13 +6,13 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  IDENTITY_ZOOM,
-  type ZoomState,
   clampPan,
+  IDENTITY_ZOOM,
   isZoomed,
   maxPanOffset,
   panBy,
   toggleZoom,
+  type ZoomState,
   zoomIn,
   zoomOut,
 } from "@/lib/viewer-zoom";

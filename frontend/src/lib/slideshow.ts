@@ -57,10 +57,7 @@ export function nextSlideIndex(
  * Produce a shuffled order of indices [0..total) using a caller-supplied RNG
  * (so tests are deterministic). Fisher–Yates. `rng()` must return [0,1).
  */
-export function buildShuffleOrder(
-  total: number,
-  rng: () => number,
-): number[] {
+export function buildShuffleOrder(total: number, rng: () => number): number[] {
   const order = Array.from({ length: Math.max(0, total) }, (_, i) => i);
   for (let i = order.length - 1; i > 0; i -= 1) {
     const j = Math.floor(rng() * (i + 1));
@@ -97,7 +94,11 @@ export function nextInOrder(
 }
 
 export function normalizeIntervalMs(seconds: number | undefined): number {
-  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) {
+  if (
+    typeof seconds !== "number" ||
+    !Number.isFinite(seconds) ||
+    seconds <= 0
+  ) {
     return DEFAULT_INTERVAL_MS;
   }
   // Clamp to a sane range: 1s .. 60s.

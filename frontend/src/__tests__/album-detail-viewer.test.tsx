@@ -38,7 +38,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 vi.mock("next/link", () => ({
-  default: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
+  default: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
 }));
 
 const item = (id: number) => ({
@@ -130,7 +132,10 @@ describe("AlbumDetailPage viewer", () => {
   });
 
   it("moves the viewed asset to trash and closes the viewer", async () => {
-    api.trashImage.mockResolvedValue({ id: 10, deleted_at: "2026-06-29T00:00:00+00:00" });
+    api.trashImage.mockResolvedValue({
+      id: 10,
+      deleted_at: "2026-06-29T00:00:00+00:00",
+    });
     renderPage();
 
     fireEvent.click(await screen.findByTestId("open-asset-10"));

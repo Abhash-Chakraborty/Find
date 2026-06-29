@@ -243,7 +243,6 @@ export const getHardwareReport = async (): Promise<HardwareReport> => {
   return response.data;
 };
 
-
 // API Functions
 export const uploadImages = async (
   files: FileList | File[],
@@ -782,8 +781,13 @@ export interface AlbumAssetsResponse {
   total: number;
 }
 
-export const getAlbums = async (): Promise<{ albums: Album[]; total: number }> => {
-  const response = await api.get<{ albums: Album[]; total: number }>("/api/albums");
+export const getAlbums = async (): Promise<{
+  albums: Album[];
+  total: number;
+}> => {
+  const response = await api.get<{ albums: Album[]; total: number }>(
+    "/api/albums",
+  );
   return response.data;
 };
 
@@ -829,7 +833,11 @@ export const getAlbumAssets = async (
 export const addAlbumAssets = async (
   albumId: number,
   mediaIds: number[],
-): Promise<{ added_ids: number[]; skipped_ids: number[]; added_count: number }> => {
+): Promise<{
+  added_ids: number[];
+  skipped_ids: number[];
+  added_count: number;
+}> => {
   const response = await api.put(`/api/albums/${albumId}/assets`, {
     media_ids: mediaIds,
   });
@@ -928,20 +936,18 @@ export interface MediaListResponse {
   limit: number;
 }
 
-export const getArchive = async (params: {
-  skip?: number;
-  limit?: number;
-} = {}): Promise<MediaListResponse> => {
+export const getArchive = async (
+  params: { skip?: number; limit?: number } = {},
+): Promise<MediaListResponse> => {
   const response = await api.get<MediaListResponse>("/api/archive", {
     params: { skip: params.skip ?? 0, limit: params.limit ?? 50 },
   });
   return response.data;
 };
 
-export const getTrash = async (params: {
-  skip?: number;
-  limit?: number;
-} = {}): Promise<MediaListResponse> => {
+export const getTrash = async (
+  params: { skip?: number; limit?: number } = {},
+): Promise<MediaListResponse> => {
   const response = await api.get<MediaListResponse>("/api/trash", {
     params: { skip: params.skip ?? 0, limit: params.limit ?? 50 },
   });
@@ -952,7 +958,9 @@ export const setArchive = async (
   mediaId: number,
   archived: boolean,
 ): Promise<{ id: number; is_archived: boolean }> => {
-  const response = await api.post(`/api/image/${mediaId}/archive`, { archived });
+  const response = await api.post(`/api/image/${mediaId}/archive`, {
+    archived,
+  });
   return response.data;
 };
 

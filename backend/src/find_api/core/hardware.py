@@ -43,6 +43,7 @@ class CapabilityReport:
     # torch device hints (best-effort; independent of ONNX).
     torch_cuda: bool = False
     torch_mps: bool = False  # Apple Metal
+
     # Convenience: any non-CPU provider present.
     @property
     def has_gpu(self) -> bool:
@@ -117,7 +118,10 @@ def _safe_torch_devices() -> tuple[bool, bool]:
         except Exception:  # noqa: BLE001
             cuda = False
         try:
-            mps = bool(getattr(torch.backends, "mps", None) and torch.backends.mps.is_available())
+            mps = bool(
+                getattr(torch.backends, "mps", None)
+                and torch.backends.mps.is_available()
+            )
         except Exception:  # noqa: BLE001
             mps = False
     except Exception as exc:  # noqa: BLE001

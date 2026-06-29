@@ -108,7 +108,9 @@ describe("TimelineScrubber", () => {
       pointerId: 1,
     });
 
-    expect(screen.getByTestId("scrubber-label")).toHaveTextContent("March 2026");
+    expect(screen.getByTestId("scrubber-label")).toHaveTextContent(
+      "March 2026",
+    );
   });
 
   it("updates onScrub while dragging", () => {
@@ -143,5 +145,53 @@ describe("TimelineScrubber", () => {
     expect(scrubber).toHaveAttribute("role", "scrollbar");
     expect(scrubber).toHaveAttribute("aria-orientation", "vertical");
     expect(scrubber).toHaveAttribute("aria-valuetext", "March 2026");
+  });
+
+  it("is focusable and declares the region it controls", () => {
+    render(
+      <TimelineScrubber
+        buckets={BUCKETS}
+        scrollOffset={0}
+        onScrub={() => {}}
+        layoutOptions={OPTS}
+        controlsId="my-grid"
+      />,
+    );
+    const scrubber = screen.getByTestId("timeline-scrubber");
+    // A scrollbar role must be keyboard-focusable and name its target.
+    expect(scrubber).toHaveAttribute("tabindex", "0");
+    expect(scrubber).toHaveAttribute("aria-controls", "my-grid");
+  });
+
+  it("scrubs via the keyboard (End jumps to the bottom)", () => {
+    const onScrub = vi.fn();
+    render(
+      <TimelineScrubber
+        buckets={BUCKETS}
+        scrollOffset={0}
+        onScrub={onScrub}
+        layoutOptions={OPTS}
+      />,
+    );
+    // End => fraction 1.0 => offset 600 (total height).
+    fireEvent.keyDown(screen.getByTestId("timeline-scrubber"), { key: "End" });
+    expect(onScrub).toHaveBeenLastCalledWith(600);
+  });
+
+  it("clamps keyboard nudges at the top (ArrowUp at offset 0 stays >= 0)", () => {
+    const onScrub = vi.fn();
+    render(
+      <TimelineScrubber
+        buckets={BUCKETS}
+        scrollOffset={0}
+        onScrub={onScrub}
+        layoutOptions={OPTS}
+      />,
+    );
+    fireEvent.keyDown(screen.getByTestId("timeline-scrubber"), {
+      key: "ArrowUp",
+    });
+    // Already at the top → clamped to fraction 0 → offset 0.
+    expect(onScrub).toHaveBeenLastCalledWith(0);
   });
 });

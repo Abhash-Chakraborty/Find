@@ -156,7 +156,10 @@ def list_shared_links(
         .order_by(SharedLink.created_at.desc(), SharedLink.id.desc())
         .all()
     )
-    return {"shared_links": [_serialize_link(link) for link in links], "total": len(links)}
+    return {
+        "shared_links": [_serialize_link(link) for link in links],
+        "total": len(links),
+    }
 
 
 @router.patch("/shared-links/{link_id}")
@@ -178,7 +181,9 @@ def update_shared_link(
         link.show_exif = request.show_exif
     if request.password is not None:
         # "" clears the password; non-empty sets a new bcrypt hash.
-        link.password_hash = hash_password(request.password) if request.password else None
+        link.password_hash = (
+            hash_password(request.password) if request.password else None
+        )
 
     db.commit()
     db.refresh(link)
@@ -205,11 +210,7 @@ def _resolve_public_link(db: Session, key: str) -> SharedLink:
     404 rather than 410/403 so the endpoint does not confirm a key ever
     existed).
     """
-    link = (
-        db.query(SharedLink)
-        .filter(SharedLink.key_hash == hash_token(key))
-        .first()
-    )
+    link = db.query(SharedLink).filter(SharedLink.key_hash == hash_token(key)).first()
     if not link or _is_expired(link):
         raise HTTPException(404, "Shared link not found")
     return link
@@ -266,7 +267,9 @@ def _shared_album_media_or_404(db: Session, link: SharedLink, media_id: int) -> 
     return media
 
 
-def _serve_object_bytes(object_key: Optional[str], content_type: Optional[str]) -> Response:
+def _serve_object_bytes(
+    object_key: Optional[str], content_type: Optional[str]
+) -> Response:
     if not object_key:
         raise HTTPException(404, "Asset not found")
     try:

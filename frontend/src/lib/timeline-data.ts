@@ -8,10 +8,7 @@
  * the React data hook that drives fetching.
  */
 
-import type {
-  TimelineBucket,
-  TimelineBucketAssets,
-} from "@/lib/api";
+import type { TimelineBucket, TimelineBucketAssets } from "@/lib/api";
 
 export interface TimelineAsset {
   id: number;

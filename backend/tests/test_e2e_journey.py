@@ -99,17 +99,13 @@ class TestFullJourney:
         for item in public["items"]:
             assert "minio_key" not in item
             assert "thumbnail_key" not in item
-            assert item["thumbnail_url"].startswith(
-                f"/api/public/shared/{key}/asset/"
-            )
+            assert item["thumbnail_url"].startswith(f"/api/public/shared/{key}/asset/")
             # Download disallowed → no original URL offered.
             assert item["url"] is None
 
         # Download is gated server-side, not just in the URL list: the original
         # byte route refuses with 403 before ever touching storage.
-        denied = client.get(
-            f"/api/public/shared/{key}/asset/{a.id}/original"
-        )
+        denied = client.get(f"/api/public/shared/{key}/asset/{a.id}/original")
         assert denied.status_code == 403
 
         # An unknown key is indistinguishable from an expired one (404, no leak).
@@ -124,9 +120,7 @@ class TestFullJourney:
         # No password → 401.
         assert client.get(f"/api/public/shared/{lkey}").status_code == 401
         # Wrong password → 401.
-        assert (
-            client.get(f"/api/public/shared/{lkey}?password=nope").status_code == 401
-        )
+        assert client.get(f"/api/public/shared/{lkey}?password=nope").status_code == 401
         # Correct password → 200.
         unlocked = client.get(f"/api/public/shared/{lkey}?password=s3cret")
         assert unlocked.status_code == 200
@@ -163,7 +157,9 @@ class TestFullJourney:
 
         # A trashed asset cannot be archived — must restore first (409).
         assert (
-            client.post(f"/api/image/{c.id}/archive", json={"archived": True}).status_code
+            client.post(
+                f"/api/image/{c.id}/archive", json={"archived": True}
+            ).status_code
             == 409
         )
 

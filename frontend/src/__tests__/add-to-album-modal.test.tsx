@@ -24,7 +24,9 @@ const api = vi.hoisted(() => ({
 vi.mock("@/lib/api", () => api);
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-function renderModal(props: Partial<Parameters<typeof AddToAlbumModal>[0]> = {}) {
+function renderModal(
+  props: Partial<Parameters<typeof AddToAlbumModal>[0]> = {},
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });

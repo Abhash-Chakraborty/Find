@@ -14,10 +14,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AssetViewer } from "@/components/asset-viewer";
-import { TimelineScrubber } from "@/components/timeline-scrubber";
-import { HardwareAccelSettings } from "@/components/hardware-accel-settings";
 import { AddToAlbumModal } from "@/components/add-to-album-modal";
+import { AssetViewer } from "@/components/asset-viewer";
+import { HardwareAccelSettings } from "@/components/hardware-accel-settings";
+import { TimelineScrubber } from "@/components/timeline-scrubber";
 
 vi.mock("@/lib/api", () => ({
   getHardwareReport: vi.fn().mockResolvedValue({
@@ -85,8 +85,12 @@ describe("a11y: AssetViewer", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAccessibleName(/image viewer/i);
     // Controls have accessible names (not icon-only with no label).
-    expect(screen.getByRole("button", { name: /close viewer/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /next image/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /close viewer/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /next image/i }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /play slideshow|pause slideshow/i }),
     ).toBeInTheDocument();
@@ -133,7 +137,9 @@ describe("a11y: AddToAlbumModal", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAccessibleName(/add to album/i);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^close$/i })).toBeInTheDocument(),
+      expect(
+        screen.getByRole("button", { name: /^close$/i }),
+      ).toBeInTheDocument(),
     );
     expect(screen.getByLabelText(/new album name/i)).toBeInTheDocument();
   });

@@ -99,9 +99,11 @@ export default function AlbumsPage() {
               >
                 <div className="mb-2 aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)]">
                   {album.cover_thumbnail_url && (
-                    // biome-ignore lint/a11y/useAltText: cover thumbnail
+                    // biome-ignore lint/performance/noImgElement: cover thumbnail, not a Next-optimized route
                     <img
-                      src={resolveMediaUrl(album.cover_thumbnail_url) ?? undefined}
+                      src={
+                        resolveMediaUrl(album.cover_thumbnail_url) ?? undefined
+                      }
                       alt=""
                       className="h-full w-full object-cover"
                     />

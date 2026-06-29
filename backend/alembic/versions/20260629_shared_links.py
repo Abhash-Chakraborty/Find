@@ -62,9 +62,7 @@ def upgrade() -> None:
         "ix_shared_links_key_hash", "shared_links", ["key_hash"], unique=True
     )
     op.create_index("ix_shared_links_album_id", "shared_links", ["album_id"])
-    op.create_index(
-        "ix_shared_links_owner_user_id", "shared_links", ["owner_user_id"]
-    )
+    op.create_index("ix_shared_links_owner_user_id", "shared_links", ["owner_user_id"])
 
 
 def downgrade() -> None:

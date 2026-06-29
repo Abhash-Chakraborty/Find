@@ -743,9 +743,7 @@ def get_archive(
         user,
     )
     total = query.count()
-    media_list = (
-        query.order_by(desc(Media.created_at)).offset(skip).limit(limit).all()
-    )
+    media_list = query.order_by(desc(Media.created_at)).offset(skip).limit(limit).all()
     items = [_serialize_media_item(media) for media in media_list]
     page = (skip // limit) + 1 if limit else 1
     return {"items": items, "total": total, "skip": skip, "page": page, "limit": limit}
@@ -764,9 +762,7 @@ def get_trash(
         user,
     )
     total = query.count()
-    media_list = (
-        query.order_by(desc(Media.deleted_at)).offset(skip).limit(limit).all()
-    )
+    media_list = query.order_by(desc(Media.deleted_at)).offset(skip).limit(limit).all()
     items = [_serialize_media_item(media) for media in media_list]
     page = (skip // limit) + 1 if limit else 1
     return {"items": items, "total": total, "skip": skip, "page": page, "limit": limit}

@@ -105,12 +105,18 @@ class TestTimelineBucket:
     """GET /api/timeline/bucket"""
 
     def test_returns_columnar_arrays_for_month(self, client, db):
-        a = _seed(db, filename="a.jpg", created_at=_dt(2026, 3, 1), width=1600, height=900)
-        b = _seed(db, filename="b.jpg", created_at=_dt(2026, 3, 20), width=600, height=800)
+        a = _seed(
+            db, filename="a.jpg", created_at=_dt(2026, 3, 1), width=1600, height=900
+        )
+        b = _seed(
+            db, filename="b.jpg", created_at=_dt(2026, 3, 20), width=600, height=800
+        )
         # Different month — must be excluded.
         _seed(db, filename="other.jpg", created_at=_dt(2026, 1, 5))
 
-        body = client.get("/api/timeline/bucket", params={"timeBucket": "2026-03"}).json()
+        body = client.get(
+            "/api/timeline/bucket", params={"timeBucket": "2026-03"}
+        ).json()
 
         assert body["timeBucket"] == "2026-03-01"
         assert body["count"] == 2
@@ -154,14 +160,18 @@ class TestTimelineBucket:
             deleted_at=_dt(2026, 4, 1),
         )
 
-        body = client.get("/api/timeline/bucket", params={"timeBucket": "2026-03"}).json()
+        body = client.get(
+            "/api/timeline/bucket", params={"timeBucket": "2026-03"}
+        ).json()
 
         assert body["id"] == [keep.id]
 
     def test_ratio_null_when_dimensions_missing(self, client, db):
         _seed(db, filename="a.jpg", created_at=_dt(2026, 3, 1), width=None, height=None)
 
-        body = client.get("/api/timeline/bucket", params={"timeBucket": "2026-03"}).json()
+        body = client.get(
+            "/api/timeline/bucket", params={"timeBucket": "2026-03"}
+        ).json()
 
         assert body["ratio"] == [None]
 
@@ -174,7 +184,9 @@ class TestTimelineBucket:
     def test_empty_month(self, client, db):
         _seed(db, filename="a.jpg", created_at=_dt(2026, 1, 1))
 
-        body = client.get("/api/timeline/bucket", params={"timeBucket": "2026-03"}).json()
+        body = client.get(
+            "/api/timeline/bucket", params={"timeBucket": "2026-03"}
+        ).json()
 
         assert body["count"] == 0
         assert body["id"] == []

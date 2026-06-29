@@ -36,4 +36,3 @@ def get_hardware_capabilities():
         "capabilities": report.to_dict(),
         "resolved": plan.to_dict(),
     }
-

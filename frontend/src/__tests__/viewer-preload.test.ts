@@ -6,9 +6,9 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  type ViewerAsset,
   buildPreloadPlan,
   displayUrl,
+  type ViewerAsset,
 } from "@/lib/viewer-preload";
 
 const asset = (id: number, withOriginal = true): ViewerAsset => ({

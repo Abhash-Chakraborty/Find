@@ -6,19 +6,18 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  type ScrubberBucketInput,
   buildScrubberLayout,
   dateToOffset,
   formatBucketLabel,
   offsetToSegment,
   offsetToTrackFraction,
+  type ScrubberBucketInput,
   trackFractionToOffset,
   trackFractionToSegment,
 } from "@/lib/timeline-scrubber";
 
-const buckets = (
-  ...pairs: [string, number][]
-): ScrubberBucketInput[] => pairs.map(([timeBucket, count]) => ({ timeBucket, count }));
+const buckets = (...pairs: [string, number][]): ScrubberBucketInput[] =>
+  pairs.map(([timeBucket, count]) => ({ timeBucket, count }));
 
 const OPTS = {
   targetRowHeight: 200,

@@ -9,19 +9,15 @@
  * call, so we surface it immediately for copying and never re-display it.
  */
 
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Link2, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
-  type SharedLink,
   createSharedLink,
   deleteSharedLink,
   getSharedLinks,
+  type SharedLink,
 } from "@/lib/api";
 
 interface AlbumShareLinksProps {

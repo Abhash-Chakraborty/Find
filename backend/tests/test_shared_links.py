@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from find_api.core.auth import hash_token
-from find_api.models.album import Album, AlbumAsset
+from find_api.models.album import AlbumAsset
 from find_api.models.media import Media
 from find_api.models.shared_link import SharedLink
 
@@ -191,21 +191,20 @@ class TestSharedLinkManagement:
         album, _ = _make_album_with_assets(client, db, ["a.jpg"])
         link = _create_link(client, album["id"], allow_download=True)
 
-        client.patch(
-            f"/api/shared-links/{link['id']}", json={"allow_download": False}
-        )
+        client.patch(f"/api/shared-links/{link['id']}", json={"allow_download": False})
         body = client.get(f"/api/public/shared/{link['key']}").json()
         assert all(item["url"] is None for item in body["items"])
 
     def test_create_for_missing_album_404(self, client):
         assert (
-            client.post("/api/shared-links", json={"album_id": 9999}).status_code
-            == 404
+            client.post("/api/shared-links", json={"album_id": 9999}).status_code == 404
         )
 
     def test_patch_missing_link_404(self, client):
         assert (
-            client.patch("/api/shared-links/9999", json={"description": "x"}).status_code
+            client.patch(
+                "/api/shared-links/9999", json={"description": "x"}
+            ).status_code
             == 404
         )
 
@@ -219,9 +218,7 @@ class TestSharedLinkByteLayerScoping:
     def _mock_get_file(self):
         """Storage backend is not initialized in tests; return fake bytes so the
         share-scoped byte routes can be exercised."""
-        with patch(
-            "find_api.routers.shared_link.get_file", return_value=b"fake-bytes"
-        ):
+        with patch("find_api.routers.shared_link.get_file", return_value=b"fake-bytes"):
             yield
 
     def test_public_listing_does_not_leak_storage_keys(self, client, db):
@@ -234,7 +231,9 @@ class TestSharedLinkByteLayerScoping:
         assert "minio_key" not in item
         assert "thumbnail_key" not in item
         # URLs point at the share-scoped routes, not /files or /api/image.
-        assert item["thumbnail_url"].startswith(f"/api/public/shared/{link['key']}/asset/")
+        assert item["thumbnail_url"].startswith(
+            f"/api/public/shared/{link['key']}/asset/"
+        )
         assert item["url"].startswith(f"/api/public/shared/{link['key']}/asset/")
 
     def test_thumbnail_route_serves_album_member(self, client, db):

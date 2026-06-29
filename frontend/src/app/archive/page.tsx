@@ -63,7 +63,7 @@ export default function ArchivePage() {
               data-testid={`archive-item-${item.id}`}
               className="group relative aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)]"
             >
-              {/* biome-ignore lint/a11y/useAltText: archive tile */}
+              {/* biome-ignore lint/performance/noImgElement: thumbnail tile, not a Next-optimized route */}
               <img
                 src={
                   resolveMediaUrl(

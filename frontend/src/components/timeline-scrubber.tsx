@@ -12,11 +12,11 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
-  type ScrubberBucketInput,
-  type ScrubberOptions,
   buildScrubberLayout,
   offsetToSegment,
   offsetToTrackFraction,
+  type ScrubberBucketInput,
+  type ScrubberOptions,
   trackFractionToOffset,
   trackFractionToSegment,
 } from "@/lib/timeline-scrubber";
@@ -29,7 +29,17 @@ interface TimelineScrubberProps {
   onScrub: (offset: number) => void;
   layoutOptions?: ScrubberOptions;
   className?: string;
+  /**
+   * id of the scrollable region this scrollbar controls. Required by the
+   * `scrollbar` ARIA role (aria-controls); the timeline page sets it on the
+   * grid wrapper so AT announces what the scrubber moves.
+   */
+  controlsId?: string;
 }
+
+// Keyboard step sizes as a fraction of the whole track (scrollbar semantics).
+const ARROW_STEP = 0.02;
+const PAGE_STEP = 0.1;
 
 export function TimelineScrubber({
   buckets,
@@ -37,6 +47,7 @@ export function TimelineScrubber({
   onScrub,
   layoutOptions,
   className,
+  controlsId = "timeline-scroll-region",
 }: TimelineScrubberProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -99,6 +110,43 @@ export function TimelineScrubber({
 
   const endScrub = useCallback(() => setIsScrubbing(false), []);
 
+  // Keyboard operation: a focusable scrollbar must be drivable without a
+  // pointer. Arrows nudge, PageUp/Down jump, Home/End go to the ends.
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const current = offsetToTrackFraction(layout, scrollOffset);
+      let next: number | null = null;
+      switch (event.key) {
+        case "ArrowDown":
+        case "ArrowRight":
+          next = current + ARROW_STEP;
+          break;
+        case "ArrowUp":
+        case "ArrowLeft":
+          next = current - ARROW_STEP;
+          break;
+        case "PageDown":
+          next = current + PAGE_STEP;
+          break;
+        case "PageUp":
+          next = current - PAGE_STEP;
+          break;
+        case "Home":
+          next = 0;
+          break;
+        case "End":
+          next = 1;
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      const clamped = Math.min(1, Math.max(0, next));
+      onScrub(trackFractionToOffset(layout, clamped));
+    },
+    [layout, onScrub, scrollOffset],
+  );
+
   if (layout.segments.length === 0) {
     return null;
   }
@@ -117,14 +165,18 @@ export function TimelineScrubber({
         cursor: "ns-resize",
         touchAction: "none",
       }}
+      // A scrollbar role must be focusable and operable by keyboard.
+      tabIndex={0}
       role="scrollbar"
       aria-orientation="vertical"
       aria-label="Timeline date scrubber"
+      aria-controls={controlsId}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(thumbFraction * 100)}
       aria-valuetext={activeSegment?.label}
       data-testid="timeline-scrubber"
+      onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={endScrub}

@@ -10,18 +10,18 @@
  * the small amount of view state (scroll offset, viewer open index).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AssetViewer } from "@/components/asset-viewer";
 import { JustifiedGrid } from "@/components/justified-grid";
 import { TimelineScrubber } from "@/components/timeline-scrubber";
-import { AssetViewer } from "@/components/asset-viewer";
-import { toggleLike, setArchive, trashImage } from "@/lib/api";
-import { useTimeline } from "@/lib/use-timeline";
+import { setArchive, toggleLike, trashImage } from "@/lib/api";
 import {
   buildScrubberLayout,
   offsetToSegment,
   offsetToTrackFraction,
 } from "@/lib/timeline-scrubber";
+import { useTimeline } from "@/lib/use-timeline";
 
 export default function TimelinePage() {
   const queryClient = useQueryClient();
@@ -152,7 +152,7 @@ export default function TimelinePage() {
       )}
 
       <div style={{ display: "flex" }}>
-        <div ref={scrollRef} style={{ flex: 1 }}>
+        <div ref={scrollRef} id="timeline-scroll-region" style={{ flex: 1 }}>
           <JustifiedGrid
             items={visibleAssets}
             getKey={(a) => a.id}

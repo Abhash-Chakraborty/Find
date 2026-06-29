@@ -81,7 +81,11 @@ export function buildPreloadPlan(
 
   // Active asset's original leads the queue (unless it's already shown).
   if (active.originalUrl && !activeOriginalReady) {
-    preload.push({ id: active.id, url: active.originalUrl, quality: "original" });
+    preload.push({
+      id: active.id,
+      url: active.originalUrl,
+      quality: "original",
+    });
   }
 
   // Collect neighbor offsets nearest-first: 1, -1, 2, -2, ... then bias.
@@ -107,7 +111,8 @@ export function buildPreloadPlan(
   }
 
   return {
-    activeQuality: activeOriginalReady && active.originalUrl ? "original" : "thumbnail",
+    activeQuality:
+      activeOriginalReady && active.originalUrl ? "original" : "thumbnail",
     preload,
   };
 }

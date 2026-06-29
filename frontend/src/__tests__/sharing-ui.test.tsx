@@ -132,9 +132,7 @@ describe("AlbumShareLinks", () => {
       expect(screen.getByTestId("revoke-share-30")).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByTestId("revoke-share-30"));
-    await waitFor(() =>
-      expect(api.deleteSharedLink).toHaveBeenCalledWith(30),
-    );
+    await waitFor(() => expect(api.deleteSharedLink).toHaveBeenCalledWith(30));
   });
 
   it("shows password and view-only badges", async () => {

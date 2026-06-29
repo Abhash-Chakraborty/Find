@@ -207,9 +207,7 @@ class TestAlbumCover:
         assert rejected.status_code == 400
 
         client.put(f"/api/albums/{album['id']}/assets", json={"media_ids": [a.id]})
-        ok = client.patch(
-            f"/api/albums/{album['id']}", json={"cover_media_id": a.id}
-        )
+        ok = client.patch(f"/api/albums/{album['id']}", json={"cover_media_id": a.id})
         assert ok.status_code == 200
         assert ok.json()["cover_media_id"] == a.id
         assert ok.json()["cover_thumbnail_url"] == f"/api/image/{a.id}/thumbnail"
@@ -261,9 +259,7 @@ class TestAlbumOrdering:
         )
 
         # Only specify c first; a and b keep relative order after it.
-        client.put(
-            f"/api/albums/{album['id']}/order", json={"media_ids": [c.id]}
-        )
+        client.put(f"/api/albums/{album['id']}/order", json={"media_ids": [c.id]})
 
         body = client.get(f"/api/albums/{album['id']}/assets").json()
         assert [item["id"] for item in body["items"]] == [c.id, a.id, b.id]

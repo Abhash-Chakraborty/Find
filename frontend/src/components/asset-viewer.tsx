@@ -14,28 +14,22 @@
  * (Immich). Original © its authors. Part of Find, distributed under AGPL-3.0.
  */
 
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { nextSlideIndex, normalizeIntervalMs } from "@/lib/slideshow";
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  type ViewerAsset,
   buildPreloadPlan,
   displayUrl,
+  type ViewerAsset,
 } from "@/lib/viewer-preload";
 import {
   IDENTITY_ZOOM,
-  type ZoomState,
   isZoomed,
   panBy,
   toggleZoom,
+  type ZoomState,
   zoomIn,
   zoomOut,
 } from "@/lib/viewer-zoom";
-import { nextSlideIndex, normalizeIntervalMs } from "@/lib/slideshow";
 
 interface AssetViewerProps {
   assets: ViewerAsset[];
@@ -246,7 +240,10 @@ export function AssetViewer({
     (e: React.MouseEvent<HTMLDivElement>) => {
       const rect = containerRef.current?.getBoundingClientRect();
       const focal = rect
-        ? { x: e.clientX - rect.left - rect.width / 2, y: e.clientY - rect.top - rect.height / 2 }
+        ? {
+            x: e.clientX - rect.left - rect.width / 2,
+            y: e.clientY - rect.top - rect.height / 2,
+          }
         : { x: 0, y: 0 };
       setZoom((z) => toggleZoom(z, focal, viewport()));
     },

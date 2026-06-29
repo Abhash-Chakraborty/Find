@@ -13,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Lock } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { type PublicSharedAlbum, getPublicSharedAlbum } from "@/lib/api";
+import { getPublicSharedAlbum, type PublicSharedAlbum } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -25,9 +25,9 @@ export default function PublicSharedAlbumPage() {
   const params = useParams();
   const key = String(params?.key ?? "");
   const [password, setPassword] = useState("");
-  const [submittedPassword, setSubmittedPassword] = useState<string | undefined>(
-    undefined,
-  );
+  const [submittedPassword, setSubmittedPassword] = useState<
+    string | undefined
+  >(undefined);
 
   const { data, isLoading, error } = useQuery<PublicSharedAlbum, unknown>({
     queryKey: ["public-shared", key, submittedPassword ?? null],

@@ -44,9 +44,9 @@ describe("nextSlideIndex", () => {
   });
 
   it("wraps to the end going backward with loop", () => {
-    expect(
-      nextSlideIndex(0, 5, { direction: "backward", loop: true }),
-    ).toEqual({ index: 4, wrapped: true });
+    expect(nextSlideIndex(0, 5, { direction: "backward", loop: true })).toEqual(
+      { index: 4, wrapped: true },
+    );
   });
 
   it("returns null for an empty set", () => {

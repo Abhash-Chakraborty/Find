@@ -8,8 +8,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  type JustifiedInput,
   computeJustifiedLayout,
+  type JustifiedInput,
 } from "@/lib/justified-layout";
 
 const ratios = (...rs: (number | null)[]): JustifiedInput[] =>

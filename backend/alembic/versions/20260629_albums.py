@@ -24,7 +24,10 @@ def upgrade() -> None:
         "albums",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column(
-            "name", sa.String(length=255), nullable=False, server_default="Untitled Album"
+            "name",
+            sa.String(length=255),
+            nullable=False,
+            server_default="Untitled Album",
         ),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column(

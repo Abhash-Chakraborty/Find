@@ -19,8 +19,8 @@ import {
   useState,
 } from "react";
 import {
-  type JustifiedBox,
   computeJustifiedLayout,
+  type JustifiedBox,
 } from "@/lib/justified-layout";
 
 export interface JustifiedGridItem {

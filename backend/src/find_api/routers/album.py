@@ -108,7 +108,10 @@ def list_albums(
         .order_by(desc(Album.created_at), desc(Album.id))
         .all()
     )
-    return {"albums": [_serialize_album(db, a, user) for a in albums], "total": len(albums)}
+    return {
+        "albums": [_serialize_album(db, a, user) for a in albums],
+        "total": len(albums),
+    }
 
 
 @router.post("/albums")
@@ -255,11 +258,7 @@ def add_album_assets(
         if media_id not in valid_ids or media_id in existing:
             skipped.append(media_id)
             continue
-        db.add(
-            AlbumAsset(
-                album_id=album_id, media_id=media_id, position=next_position
-            )
-        )
+        db.add(AlbumAsset(album_id=album_id, media_id=media_id, position=next_position))
         added.append(media_id)
         next_position += 1
 
@@ -321,9 +320,7 @@ def reorder_album(
 
     members = {
         row.media_id: row
-        for row in db.query(AlbumAsset)
-        .filter(AlbumAsset.album_id == album_id)
-        .all()
+        for row in db.query(AlbumAsset).filter(AlbumAsset.album_id == album_id).all()
     }
 
     position = 0
