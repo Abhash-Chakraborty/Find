@@ -156,8 +156,7 @@ def extract_image_metadata(
         from find_api.ml.ocr import get_ocr_extractor
 
         ocr = get_ocr_extractor()
-        ocr_text = ocr.extract_text(image)
-        text_blocks = ocr.extract_text_with_boxes(image)
+        ocr_text, text_blocks = ocr.extract_text_and_boxes(image)
         metadata["ocr_text"] = ocr_text
         metadata["text_blocks"] = text_blocks
         metadata["stage_status"]["ocr"] = {"status": "success", "error": None}

@@ -43,6 +43,15 @@ class Media(Base):
     is_hidden = Column(
         Boolean, nullable=False, default=False, server_default=sa_text("false")
     )
+    vault_state = Column(
+        String(32),
+        nullable=False,
+        index=True,
+        default="visible",
+        server_default="visible",
+    )
+    hidden_at = Column(DateTime(timezone=True), nullable=True)
+    encrypted_at = Column(DateTime(timezone=True), nullable=True)
 
     # Status tracking
     status = Column(String(50), default="pending", index=True)

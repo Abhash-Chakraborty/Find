@@ -72,11 +72,21 @@ async def lifespan(app: FastAPI):
 
     recovery_task = asyncio.create_task(run_analysis_recovery_loop())
 
+    sqlite_worker_thread = None
+    if settings.QUEUE_MODE == "sqlite":
+        from find_api.workers.sqlite_worker import start_worker_thread
+
+        sqlite_worker_thread = start_worker_thread()
+
     logger.info("Find API started successfully!")
 
     try:
         yield
     finally:
+        if sqlite_worker_thread is not None:
+            from find_api.workers.sqlite_worker import stop_worker_thread
+
+            stop_worker_thread(sqlite_worker_thread)
         recovery_task.cancel()
         await asyncio.gather(recovery_task, return_exceptions=True)
 

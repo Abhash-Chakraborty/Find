@@ -155,6 +155,9 @@ def test_unavailable_stage_records_safe_metadata_and_continues(monkeypatch):
         def extract_text_with_boxes(self, _image):
             return []
 
+        def extract_text_and_boxes(self, _image):
+            return "detected text", []
+
     object_detector_module.get_object_detector = lambda: BrokenDetector()
     captioner_module.get_image_captioner = lambda: Captioner()
     ocr_module.get_ocr_extractor = lambda: OcrExtractor()

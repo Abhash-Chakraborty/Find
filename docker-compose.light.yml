@@ -8,7 +8,8 @@ services:
       POSTGRES_USER: find
       POSTGRES_PASSWORD: find123
     ports:
-      - "5432:5432"
+      # Loopback only — contributor setup is single-machine.
+      - "127.0.0.1:5432:5432"
     volumes:
       - light_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +23,7 @@ services:
     command: redis-server --loglevel warning
     container_name: find-light-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - light_redis_data:/data
     healthcheck:
@@ -40,8 +41,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "${MINIO_HOST_PORT:-9200}:9000"
-      - "${MINIO_CONSOLE_HOST_PORT:-9201}:9001"
+      - "127.0.0.1:${MINIO_HOST_PORT:-9200}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9201}:9001"
     volumes:
       - light_minio_data:/data
     healthcheck:

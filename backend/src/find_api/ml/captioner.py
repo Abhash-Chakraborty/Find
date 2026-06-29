@@ -49,7 +49,7 @@ class ImageCaptioner:
     def generate_caption(
         self,
         image: Union[Image.Image, np.ndarray],
-        max_length: int = 1024,
+        max_length: int = 256,
         num_beams: int = 3,
     ) -> str:
         """
@@ -90,7 +90,7 @@ class ImageCaptioner:
                         max_new_tokens=max_length,
                         num_beams=num_beams,
                         do_sample=False,
-                        use_cache=False,
+                        use_cache=True,
                     )
 
                 generated_text = processor.batch_decode(
@@ -114,7 +114,7 @@ class ImageCaptioner:
             raise
 
     def generate_conditional_caption(
-        self, image: Union[Image.Image, np.ndarray], prompt: str, max_length: int = 1024
+        self, image: Union[Image.Image, np.ndarray], prompt: str, max_length: int = 256
     ) -> str:
         """
         Generate caption conditioned on a text prompt (VQA style)
@@ -161,7 +161,7 @@ class ImageCaptioner:
                         pixel_values=inputs["pixel_values"],
                         max_new_tokens=max_length,
                         do_sample=False,
-                        use_cache=False,
+                        use_cache=True,
                     )
 
                 generated_text = processor.batch_decode(

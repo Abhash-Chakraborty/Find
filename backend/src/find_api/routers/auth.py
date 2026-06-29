@@ -23,7 +23,7 @@ from find_api.core.auth import (
     hash_password,
     hash_token,
     is_shared_mode,
-    verify_password,
+    verify_password_constant_time,
 )
 from find_api.core.config import settings
 from find_api.core.database import get_db
@@ -148,7 +148,9 @@ def login(
     brute-force attempts.
     """
     user = db.query(User).filter(User.username == body.username).first()
-    if user is None or not verify_password(body.password, user.password_hash):
+    if not verify_password_constant_time(
+        body.password, user.password_hash if user else None
+    ):
         raise HTTPException(401, "Invalid username or password")
 
     if not user.is_active:

@@ -24,6 +24,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { GalleryDateFilter } from "@/components/gallery-date-filter";
 import {
   ImagePreviewModal,
   type PreviewMedia,
@@ -32,6 +33,7 @@ import { StatusIndicator } from "@/components/status-indicator";
 import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
   api,
+  type DateRangePreset,
   deleteImage,
   deleteImagesBulk,
   type GalleryCounts,
@@ -40,6 +42,7 @@ import {
   getGalleryCounts,
   getImageDetail,
   reprocessImage,
+  type SortOrder,
   toggleLike,
 } from "@/lib/api";
 import {
@@ -47,6 +50,11 @@ import {
   MINIO_URL_STALE_TIME_MS,
   resolveMediaUrl,
 } from "@/lib/media";
+import {
+  type GalleryFilter,
+  type GalleryFilterState,
+  galleryStore,
+} from "@/store/galleryStore";
 import { vaultStore } from "@/store/vaultStore";
 
 const GALLERY_LIMIT = 24;
@@ -57,8 +65,6 @@ const GALLERY_CARD_ACTION_SKELETON_KEYS = [
   "retry",
   "delete",
 ];
-
-type GalleryFilter = "all" | "indexed" | "processing" | "failed";
 
 type GalleryEmptyState = {
   title: string;
@@ -160,6 +166,60 @@ const getFilterFromStatusParam = (status: string | null): GalleryFilter => {
   }
 
   return "all";
+};
+
+/**
+ * Maps a raw URL sort_order parameter to a strongly-typed SortOrder.
+ * @param sortOrder - The raw string parameter from the URL.
+ * @returns The resolved SortOrder type.
+ */
+const getSortOrderFromParam = (sortOrder: string | null): SortOrder => {
+  if (sortOrder === "oldest") {
+    return "oldest";
+  }
+  return "newest";
+};
+
+/**
+ * Maps a raw URL date_range parameter to a strongly-typed DateRangePreset.
+ * @param dateRange - The raw string parameter from the URL.
+ * @returns The resolved DateRangePreset type or undefined if not set.
+ */
+const getDateRangeFromParam = (
+  dateRange: string | null,
+): DateRangePreset | undefined => {
+  if (
+    dateRange === "last_30_days" ||
+    dateRange === "last_60_days" ||
+    dateRange === "last_90_days" ||
+    dateRange === "custom"
+  ) {
+    return dateRange;
+  }
+  return undefined;
+};
+
+/**
+ * Maps a strongly-typed SortOrder back to a URL-friendly string.
+ * @param sortOrder - The active SortOrder type.
+ * @returns The string value to use in the URL, or null if it's the default.
+ */
+const getSortOrderParam = (sortOrder: SortOrder): string | null => {
+  if (sortOrder === "newest") {
+    return null;
+  }
+  return sortOrder;
+};
+
+/**
+ * Maps a strongly-typed DateRangePreset back to a URL-friendly string.
+ * @param dateRange - The active DateRangePreset type, undefined, or null.
+ * @returns The string value to use in the URL, or null if not set.
+ */
+const getDateRangeParam = (
+  dateRange: DateRangePreset | undefined | null,
+): string | null => {
+  return dateRange || null;
 };
 
 /**
@@ -318,12 +378,44 @@ function GalleryPageContent() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const filter = getFilterFromStatusParam(searchParams.get("status"));
-  const likedOnly = searchParams.get("liked") === "true";
+  const filter = galleryStore((state) => state.filter);
+  const likedOnly = galleryStore((state) => state.likedOnly);
+  const sortOrder = galleryStore((state) => state.sortOrder);
+  const dateRange = galleryStore((state) => state.dateRange);
+  const dateStart = galleryStore((state) => state.dateStart);
+  const dateEnd = galleryStore((state) => state.dateEnd);
+  const setGalleryFilters = galleryStore((state) => state.setFilters);
+  const parsedGalleryFilters = useMemo<GalleryFilterState>(() => {
+    const parsedDateRange = getDateRangeFromParam(
+      searchParams.get("date_range"),
+    );
+    return {
+      filter: getFilterFromStatusParam(searchParams.get("status")),
+      likedOnly: searchParams.get("liked") === "true",
+      sortOrder: getSortOrderFromParam(searchParams.get("sort_order")),
+      dateRange: parsedDateRange,
+      dateStart:
+        parsedDateRange === "custom" ? searchParams.get("date_start") : null,
+      dateEnd:
+        parsedDateRange === "custom" ? searchParams.get("date_end") : null,
+    };
+  }, [searchParams]);
 
-  // The query key includes filter + likedOnly so any URL filter change
+  useEffect(() => {
+    setGalleryFilters(parsedGalleryFilters);
+  }, [parsedGalleryFilters, setGalleryFilters]);
+
+  // The query key includes filter + likedOnly + sort/date params so any URL filter change
   // automatically resets the infinite query back to page 1.
-  const galleryQueryKey = ["gallery-infinite", filter, likedOnly] as const;
+  const galleryQueryKey = [
+    "gallery-infinite",
+    filter,
+    likedOnly,
+    sortOrder,
+    dateRange,
+    dateStart,
+    dateEnd,
+  ] as const;
 
   const { data: counts } = useQuery<GalleryCounts>({
     queryKey: ["gallery-counts", likedOnly],
@@ -352,6 +444,10 @@ function GalleryPageContent() {
         limit: GALLERY_LIMIT,
         status: filter === "all" ? undefined : filter,
         liked: likedOnly ? true : undefined,
+        sortOrder,
+        dateRange,
+        dateStart: dateRange === "custom" ? dateStart || undefined : undefined,
+        dateEnd: dateRange === "custom" ? dateEnd || undefined : undefined,
       }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
@@ -449,9 +545,25 @@ function GalleryPageContent() {
   }, [allItems]);
 
   const buildGalleryHref = useCallback(
-    (nextState: { filter?: GalleryFilter; likedOnly?: boolean }) => {
+    (nextState: {
+      filter?: GalleryFilter;
+      likedOnly?: boolean;
+      sortOrder?: SortOrder;
+      dateRange?: DateRangePreset | undefined | null;
+      dateStart?: string | null;
+      dateEnd?: string | null;
+    }) => {
       const nextFilter = nextState.filter ?? filter;
       const nextLikedOnly = nextState.likedOnly ?? likedOnly;
+      const nextSortOrder = nextState.sortOrder ?? sortOrder;
+      // Use !== undefined check to allow explicit null values to override existing dateRange
+      const nextDateRange =
+        nextState.dateRange !== undefined ? nextState.dateRange : dateRange;
+      // Use !== undefined check to allow explicit null values to override existing dates
+      const nextDateStart =
+        nextState.dateStart !== undefined ? nextState.dateStart : dateStart;
+      const nextDateEnd =
+        nextState.dateEnd !== undefined ? nextState.dateEnd : dateEnd;
       const nextParams = new URLSearchParams(searchParams.toString());
       const statusParam = getStatusParamFromFilter(nextFilter);
 
@@ -467,14 +579,65 @@ function GalleryPageContent() {
         nextParams.delete("liked");
       }
 
+      // Handle sort order
+      const sortOrderParam = getSortOrderParam(nextSortOrder);
+      if (sortOrderParam) {
+        nextParams.set("sort_order", sortOrderParam);
+      } else {
+        nextParams.delete("sort_order");
+      }
+
+      // Handle date range
+      const dateRangeParam = getDateRangeParam(nextDateRange);
+      if (dateRangeParam) {
+        nextParams.set("date_range", dateRangeParam);
+      } else {
+        nextParams.delete("date_range");
+      }
+
+      // Enforce invariant: only store date_start/date_end when dateRange is "custom"
+      if (nextDateRange === "custom") {
+        if (nextDateStart) {
+          nextParams.set("date_start", nextDateStart);
+        } else {
+          nextParams.delete("date_start");
+        }
+
+        if (nextDateEnd) {
+          nextParams.set("date_end", nextDateEnd);
+        } else {
+          nextParams.delete("date_end");
+        }
+      } else {
+        // Clear date_start/date_end if not using custom range
+        nextParams.delete("date_start");
+        nextParams.delete("date_end");
+      }
+
       const queryString = nextParams.toString();
       return queryString ? `${pathname}?${queryString}` : pathname;
     },
-    [filter, likedOnly, pathname, searchParams],
+    [
+      filter,
+      likedOnly,
+      sortOrder,
+      dateRange,
+      dateStart,
+      dateEnd,
+      pathname,
+      searchParams,
+    ],
   );
 
   const updateGalleryParams = useCallback(
-    (nextState: { filter?: GalleryFilter; likedOnly?: boolean }) => {
+    (nextState: {
+      filter?: GalleryFilter;
+      likedOnly?: boolean;
+      sortOrder?: SortOrder;
+      dateRange?: DateRangePreset | null;
+      dateStart?: string | null;
+      dateEnd?: string | null;
+    }) => {
       router.push(buildGalleryHref(nextState), {
         scroll: false,
       });
@@ -899,49 +1062,71 @@ function GalleryPageContent() {
           </p>
         </div>
 
-        <div className="frost-panel delayed-enter mb-8 flex flex-col items-center justify-between gap-4 rounded-3xl px-4 py-3 md:flex-row">
-          <div className="flex flex-wrap justify-center gap-1">
-            {filters.map(({ label, value }) => (
-              <Link
-                key={value}
-                href={buildGalleryHref({ filter: value })}
-                scroll={false}
-                aria-current={filter === value ? "page" : undefined}
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                  filter === value
-                    ? "bg-white text-black"
-                    : "text-[color:var(--silver)] hover:bg-[color:var(--frost-soft)] hover:text-[color:var(--near-white)]"
-                }`}
-              >
-                {label}
-                {counts ? (
-                  <span
-                    className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-xs ${
-                      filter === value
-                        ? "bg-black/15 text-black"
-                        : "bg-[color:var(--frost-soft)] text-[color:var(--silver)]"
-                    }`}
-                  >
-                    {counts[value]}
-                  </span>
-                ) : null}
-              </Link>
-            ))}
+        <div className="frost-panel delayed-enter mb-8 flex flex-col gap-4 rounded-3xl px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap justify-center gap-1">
+              {filters.map(({ label, value }) => (
+                <Link
+                  key={value}
+                  href={buildGalleryHref({ filter: value })}
+                  scroll={false}
+                  aria-current={filter === value ? "page" : undefined}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                    filter === value
+                      ? "bg-white text-black"
+                      : "text-[color:var(--silver)] hover:bg-[color:var(--frost-soft)] hover:text-[color:var(--near-white)]"
+                  }`}
+                >
+                  {label}
+                  {counts ? (
+                    <span
+                      className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-xs ${
+                        filter === value
+                          ? "bg-black/15 text-black"
+                          : "bg-[color:var(--frost-soft)] text-[color:var(--silver)]"
+                      }`}
+                    >
+                      {counts[value]}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              aria-pressed={likedOnly}
+              onClick={handleLikedOnlyChange}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-colors ${
+                likedOnly
+                  ? "border border-[var(--red-soft)] bg-[var(--red-soft)] text-[#ff9bab]"
+                  : "border border-[var(--frost)] text-[color:var(--silver)] hover:bg-[color:var(--frost-soft)] hover:text-[color:var(--near-white)]"
+              }`}
+            >
+              <Heart className={`h-4 w-4 ${likedOnly ? "fill-current" : ""}`} />
+              {likedOnly ? "Liked" : "All images"}
+            </button>
           </div>
 
-          <button
-            type="button"
-            aria-pressed={likedOnly}
-            onClick={handleLikedOnlyChange}
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-colors ${
-              likedOnly
-                ? "border border-[var(--red-soft)] bg-[var(--red-soft)] text-[#ff9bab]"
-                : "border border-[var(--frost)] text-[color:var(--silver)] hover:bg-[color:var(--frost-soft)] hover:text-[color:var(--near-white)]"
-            }`}
-          >
-            <Heart className={`h-4 w-4 ${likedOnly ? "fill-current" : ""}`} />
-            {likedOnly ? "Liked" : "All images"}
-          </button>
+          {/* Date filter row */}
+          <div className="flex flex-wrap gap-2">
+            <GalleryDateFilter
+              sortOrder={sortOrder}
+              dateRange={dateRange}
+              dateStart={dateStart}
+              dateEnd={dateEnd}
+              onSortOrderChange={(newOrder) => {
+                updateGalleryParams({ sortOrder: newOrder });
+              }}
+              onDateFilterChange={(newRange, newStart, newEnd) => {
+                updateGalleryParams({
+                  dateRange: newRange,
+                  dateStart: newStart,
+                  dateEnd: newEnd,
+                });
+              }}
+            />
+          </div>
         </div>
 
         {isInitialGalleryLoading && (

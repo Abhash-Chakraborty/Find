@@ -287,6 +287,58 @@ class TestVaultStream:
                 headers={"Authorization": f"Bearer {token}"},
             )
 
+    def test_swapped_encrypted_blob_rejected(self, client, db, vault_artifacts):
+        first_media = seed_media(db, filename="first-vault.png")
+        second_media = seed_media(db, filename="second-vault.png")
+        token = unlock_vault(client, db)
+
+        first_encrypted_path = hide_media(client, db, media=first_media, token=token)
+        second_encrypted_path = hide_media(client, db, media=second_media, token=token)
+        vault_artifacts.extend([first_encrypted_path, second_encrypted_path])
+
+        second_metadata = db.execute(
+            text(
+                "SELECT encrypted_path, iv "
+                "FROM vault_metadata WHERE media_id = :media_id"
+            ),
+            {"media_id": second_media.id},
+        ).one()
+        db.execute(
+            text(
+                "UPDATE vault_metadata SET encrypted_path = :encrypted_path, iv = :iv "
+                "WHERE media_id = :media_id"
+            ),
+            {
+                "media_id": first_media.id,
+                "encrypted_path": second_metadata.encrypted_path,
+                "iv": second_metadata.iv,
+            },
+        )
+        db.commit()
+
+        with pytest.raises(InvalidTag):
+            client.get(
+                f"/api/vault/stream/{first_media.id}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+    def test_tampered_authenticated_metadata_rejected(
+        self, client, db, vault_artifacts
+    ):
+        media = seed_media(db, filename="metadata-tamper.png")
+        token = unlock_vault(client, db)
+        encrypted_path = hide_media(client, db, media=media, token=token)
+        vault_artifacts.append(encrypted_path)
+
+        media.file_hash = hashlib.sha256(b"tampered-metadata").hexdigest()
+        db.commit()
+
+        with pytest.raises(InvalidTag):
+            client.get(
+                f"/api/vault/stream/{media.id}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
 
 class TestVaultGalleryIntegration:
     """Vault-hidden media should not appear in the public gallery."""
@@ -304,3 +356,23 @@ class TestVaultGalleryIntegration:
         ids = [item["id"] for item in response.json()["items"]]
         assert hidden_media.id not in ids
         assert visible_media.id in ids
+
+    def test_vault_list_does_not_expose_encryption_material(
+        self, client, db, vault_artifacts
+    ):
+        hidden_media = seed_media(db, filename="secret.png")
+        token = unlock_vault(client, db)
+        encrypted_path = hide_media(client, db, media=hidden_media, token=token)
+        vault_artifacts.append(encrypted_path)
+
+        response = client.get(
+            "/api/vault/list",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        item = response.json()[0]
+        assert "encrypted_path" not in item
+        assert "iv" not in item
+        assert "verifier_ciphertext" not in item
+        assert "salt" not in item

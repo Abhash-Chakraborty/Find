@@ -1,0 +1,176 @@
+name: Stale PR Handler
+
+# When a maintainer marks a PR as stale (applies the "stale" label), this
+# workflow guarantees the label is present and posts a heads-up comment.
+# A scheduled scan then closes any PR that has carried the "stale" label
+# for at least 24 hours and is still open.
+
+on:
+  pull_request_target:
+    types: [labeled]
+  schedule:
+    # Hourly, off the top of the hour to avoid GitHub's congested :00 slot.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List PRs that would be closed without closing them"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: stale-pr-${{ github.event_name }}-${{ github.event.pull_request.number || 'scan' }}
+  cancel-in-progress: false
+
+env:
+  STALE_LABEL: stale
+  STALE_COMMENT: "PR is marked as stale and will be closed in March."
+  # Hours a PR may carry the stale label before it is auto-closed.
+  STALE_CLOSE_AFTER_HOURS: "24"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Fires immediately when the "stale" label is added to a PR.
+  # Ensures the label is present (idempotent) and posts the heads-up comment.
+  # ---------------------------------------------------------------------------
+  mark-stale:
+    name: Announce stale PR
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.label.name == 'stale'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label and comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const staleLabel = process.env.STALE_LABEL;
+            const comment = process.env.STALE_COMMENT;
+
+            // Ensure the stale label is present (idempotent; no-op if already set).
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: [staleLabel],
+            });
+
+            // Avoid spamming: only comment if we have not already posted the
+            // exact stale notice since the label was (re)applied.
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+            const alreadyWarned = comments.some(
+              (c) => (c.body || "").trim() === comment.trim()
+            );
+
+            if (!alreadyWarned) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: comment,
+              });
+              core.info(`Posted stale notice on PR #${prNumber}.`);
+            } else {
+              core.info(`Stale notice already present on PR #${prNumber}; skipping.`);
+            }
+
+  # ---------------------------------------------------------------------------
+  # Runs on a schedule. Closes any open PR that has held the "stale" label for
+  # at least STALE_CLOSE_AFTER_HOURS, measured from the most recent time the
+  # label was applied (read from the issue timeline).
+  # ---------------------------------------------------------------------------
+  close-stale:
+    name: Close expired stale PRs
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan and close
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const staleLabel = process.env.STALE_LABEL;
+            const comment = process.env.STALE_COMMENT;
+            const closeAfterMs =
+              Number(process.env.STALE_CLOSE_AFTER_HOURS) * 60 * 60 * 1000;
+            const dryRun = (process.env.DRY_RUN || "false") === "true";
+            const now = Date.now();
+
+            // All open PRs carrying the stale label.
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const stalePrs = prs.filter((pr) =>
+              (pr.labels || []).some((l) => l.name === staleLabel)
+            );
+
+            for (const pr of stalePrs) {
+              // Find the most recent time the stale label was applied.
+              const events = await github.paginate(
+                github.rest.issues.listEventsForTimeline,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  per_page: 100,
+                }
+              );
+              const labeledTimes = events
+                .filter((e) => e.event === "labeled" && e.label && e.label.name === staleLabel)
+                .map((e) => new Date(e.created_at).getTime());
+
+              if (labeledTimes.length === 0) {
+                core.info(`PR #${pr.number}: stale label present but no labeled event found; skipping.`);
+                continue;
+              }
+
+              const markedAt = Math.max(...labeledTimes);
+              const ageMs = now - markedAt;
+
+              if (ageMs < closeAfterMs) {
+                const hoursLeft = ((closeAfterMs - ageMs) / 3600000).toFixed(1);
+                core.info(`PR #${pr.number}: stale for ${(ageMs / 3600000).toFixed(1)}h; ${hoursLeft}h remaining.`);
+                continue;
+              }
+
+              if (dryRun) {
+                core.info(`PR #${pr.number}: WOULD close (stale ${(ageMs / 3600000).toFixed(1)}h).`);
+                continue;
+              }
+
+              // Post the closing notice, then close the PR.
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: comment,
+              });
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                state: "closed",
+              });
+              core.info(`PR #${pr.number}: closed after ${(ageMs / 3600000).toFixed(1)}h stale.`);
+            }
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run }}

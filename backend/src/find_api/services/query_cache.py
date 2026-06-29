@@ -21,9 +21,13 @@ def normalize_query(
     index_signature: str,
     *,
     include_ocr: bool = False,
+    filter_key: str = "",
 ) -> str:
     normalized_query = " ".join(query.lower().split())
-    return f"{index_signature}:{normalized_query}:{limit}:{skip}:ocr={include_ocr}"
+    return (
+        f"{index_signature}:{normalized_query}:{limit}:{skip}:"
+        f"ocr={include_ocr}:filters={filter_key}"
+    )
 
 
 def get_cached_query(
@@ -33,9 +37,15 @@ def get_cached_query(
     index_signature: str,
     *,
     include_ocr: bool = False,
+    filter_key: str = "",
 ) -> dict[str, Any] | None:
     normalized = normalize_query(
-        query, limit, skip, index_signature, include_ocr=include_ocr
+        query,
+        limit,
+        skip,
+        index_signature,
+        include_ocr=include_ocr,
+        filter_key=filter_key,
     )
     now = monotonic()
 
@@ -64,9 +74,15 @@ def set_cached_query(
     response: dict[str, Any],
     *,
     include_ocr: bool = False,
+    filter_key: str = "",
 ) -> None:
     normalized = normalize_query(
-        query, limit, skip, index_signature, include_ocr=include_ocr
+        query,
+        limit,
+        skip,
+        index_signature,
+        include_ocr=include_ocr,
+        filter_key=filter_key,
     )
 
     with _cache_lock:

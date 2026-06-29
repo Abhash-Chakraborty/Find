@@ -11,6 +11,27 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _use_real_auth_dependencies(client):
+    """Exercise the real auth dependencies in this module.
+
+    conftest's shared client fixture forces local-mode auth (None) so that
+    pre-auth tests keep working. The auth tests need the genuine
+    get_required_user / get_admin_user behavior, so remove those overrides
+    here and restore them afterwards. Depends on ``client`` so it runs after
+    the shared fixture has installed its overrides.
+    """
+    from find_api.core.dependencies import get_admin_user, get_required_user
+    from find_api.main import app
+
+    removed = {}
+    for dep in (get_required_user, get_admin_user):
+        if dep in app.dependency_overrides:
+            removed[dep] = app.dependency_overrides.pop(dep)
+    yield
+    app.dependency_overrides.update(removed)
+
+
 @pytest.fixture(autouse=True, scope="module")
 def _disable_rate_limit():
     """Disable SlowAPI rate limiting for all auth tests.
