@@ -48,6 +48,7 @@ def init_db():
             invite,
             join_request,
             media,
+            partner_share,
             person,
             session,
             shared_link,
