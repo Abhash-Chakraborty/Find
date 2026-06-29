@@ -317,7 +317,8 @@ A **fast, lightweight, open-source** Find that:
 - **Stage 10.5 — Accessibility & security acceptance** · Owner: ___ — [>] in-progress — a11y scan + manual keyboard/screen-reader pass clean on new UI; `/security-review` signed off for all sharing/auth/crypto.
   - [x] completed — **Automated a11y smoke tests** for the new UI (`a11y-smoke.test.tsx`, 4 tests): viewer is a labelled `role=dialog`/`aria-modal` with named controls, scrubber is a `role=scrollbar` with orientation + value semantics, settings exposes labelled radios + heading, add-to-album is a labelled modal. Used existing testing-library role/accessible-name queries (no new framework). *verified: full frontend suite 190 passed.*
   - [x] completed — **Security review of sharing/crypto** done in Stage 4.3 (`/security-review` via adversarial reviewer; found+fixed a critical + a medium, regression-tested).
-  - [ ] todo — Manual keyboard + screen-reader pass on the new UI (requires a human; not replaced by the automated smoke tests). Broader `/security-review` sign-off across auth as more lands.
+  - [x] completed — **Security review of album/asset-state/timeline access control** (adversarial reviewer): found + fixed a **critical IDOR** in albums (`add_album_assets`/`list_album_assets` scoped the album but not the candidate/returned media → a shared-mode member could read another user's originals + metadata via album membership). Fixed with `scope_media_query` on both; shared-mode regression tests added. Archive/trash/restore/empty-trash/purge and timeline endpoints verified correctly scoped + gated; no SQL injection. *verified: full backend suite 432 passed.*
+  - [ ] todo — Manual keyboard + screen-reader pass on the new UI (requires a human; not replaced by the automated smoke tests).
 - **Stage 10.6 — Rollout** · Owner: ___ — [ ] todo — Staged merge of the overhaul branch to `main`; tag release.
 
 ---
