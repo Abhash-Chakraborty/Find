@@ -68,16 +68,19 @@ def _load_album_or_404(db: Session, album_id: int, user: Optional[User]) -> Albu
     return album
 
 
-def _album_asset_count(db: Session, album_id: int) -> int:
+def _album_asset_count(db: Session, album_id: int, user: Optional[User]) -> int:
+    # Count only members that actually appear in the album listing — i.e.
+    # browsable (not hidden/archived/trashed) and owned by the caller — so the
+    # card count never disagrees with what the detail view shows.
     return (
-        db.query(func.count(AlbumAsset.id))
+        scope_media_query(_browsable_media_query(db), user)
+        .join(AlbumAsset, AlbumAsset.media_id == Media.id)
         .filter(AlbumAsset.album_id == album_id)
-        .scalar()
-        or 0
+        .count()
     )
 
 
-def _serialize_album(db: Session, album: Album) -> dict:
+def _serialize_album(db: Session, album: Album, user: Optional[User]) -> dict:
     return {
         "id": album.id,
         "name": album.name,
@@ -88,7 +91,7 @@ def _serialize_album(db: Session, album: Album) -> dict:
             if album.cover_media_id
             else None
         ),
-        "asset_count": _album_asset_count(db, album.id),
+        "asset_count": _album_asset_count(db, album.id, user),
         "created_at": album.created_at.isoformat() if album.created_at else None,
         "updated_at": album.updated_at.isoformat() if album.updated_at else None,
     }
@@ -105,7 +108,7 @@ def list_albums(
         .order_by(desc(Album.created_at), desc(Album.id))
         .all()
     )
-    return {"albums": [_serialize_album(db, a) for a in albums], "total": len(albums)}
+    return {"albums": [_serialize_album(db, a, user) for a in albums], "total": len(albums)}
 
 
 @router.post("/albums")
@@ -122,7 +125,7 @@ def create_album(
     db.add(album)
     db.commit()
     db.refresh(album)
-    return _serialize_album(db, album)
+    return _serialize_album(db, album, user)
 
 
 @router.get("/albums/{album_id}")
@@ -132,7 +135,7 @@ def get_album(
     user: Optional[User] = Depends(get_required_user),
 ):
     album = _load_album_or_404(db, album_id, user)
-    return _serialize_album(db, album)
+    return _serialize_album(db, album, user)
 
 
 @router.patch("/albums/{album_id}")
@@ -164,7 +167,7 @@ def update_album(
 
     db.commit()
     db.refresh(album)
-    return _serialize_album(db, album)
+    return _serialize_album(db, album, user)
 
 
 @router.delete("/albums/{album_id}")

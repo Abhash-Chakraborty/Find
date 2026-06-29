@@ -148,6 +148,33 @@ class TestAlbumMembership:
         body = client.get(f"/api/albums/{album['id']}/assets").json()
         assert [item["id"] for item in body["items"]] == [visible.id]
 
+    def test_asset_count_matches_listing_after_archive(self, client, db):
+        """The card's asset_count must track the listing — archiving a member
+        decrements it (regression: count once counted all rows)."""
+        album = _create_album(client)
+        a = _seed_media(db, filename="a.jpg")
+        b = _seed_media(db, filename="b.jpg")
+        client.put(
+            f"/api/albums/{album['id']}/assets", json={"media_ids": [a.id, b.id]}
+        )
+        assert client.get(f"/api/albums/{album['id']}").json()["asset_count"] == 2
+
+        # Archive one member directly.
+        a.is_archived = True
+        db.commit()
+
+        # Both the listing and the count drop to 1 — they agree.
+        listing = client.get(f"/api/albums/{album['id']}/assets").json()
+        assert listing["total"] == 1
+        assert client.get(f"/api/albums/{album['id']}").json()["asset_count"] == 1
+        # And it shows in the albums list card too.
+        card = next(
+            alb
+            for alb in client.get("/api/albums").json()["albums"]
+            if alb["id"] == album["id"]
+        )
+        assert card["asset_count"] == 1
+
     def test_remove_assets(self, client, db):
         album = _create_album(client)
         a = _seed_media(db, filename="a.jpg")
