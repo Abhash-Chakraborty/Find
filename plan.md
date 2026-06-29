@@ -292,10 +292,11 @@ A **fast, lightweight, open-source** Find that:
 **Goal:** remove the reference copy, prove independence, integrate. *(~1–2 weeks)*
 
 - **Stage 9.1 — Reference removal** · Owner: ___
-  - [ ] todo — Confirm no reference source is committed (`git ls-files | grep -i` checks); confirm derived files carry attribution (Path A).
-  - [ ] todo — **Delete `reference-app/` locally and replace with placeholder images** in any fixture/sample dirs that referenced it; confirm the app builds/runs without the reference present.
+  - [x] completed — Confirm no reference source is committed (`git ls-files | grep -i` checks); confirm derived files carry attribution (Path A). *verified: `git ls-files | grep -iE 'reference-app|immich'` → none; `reference-app/` is gitignored; the 6 genuinely-ported pure modules (justified-layout, timeline-scrubber, viewer-zoom/preload, slideshow, asset-viewer) carry the AGPL attribution header. New backend routers are original Find code (no verbatim port).*
+  - [ ] todo — **Delete `reference-app/` locally and replace with placeholder images** — **HELD: needs user go-ahead.** This irreversibly deletes the local (gitignored, ~437MB) `reference-app/`; not done autonomously.
 - **Stage 9.2 — Feature integration** · Owner: ___ — [ ] todo — Wire all phases together on one running build; resolve cross-lane seams; everything reachable from the new UI.
-- **Stage 9.3 — Compliance close-out** · Owner: ___ — [ ] todo — Verify §1 license/attribution obligations satisfied; verify name-scrub CI is green.
+- **Stage 9.3 — Compliance close-out** · Owner: ___ — [>] in-progress — Verify §1 license/attribution obligations satisfied; verify name-scrub CI is green.
+  - [x] completed — §1 attribution obligations verified (see 9.1: no reference source committed, derived files attributed, Find is AGPL-3.0 per §G). *(Name-scrub CI intentionally not built — see opening note: it would enforce stripping upstream attribution, contrary to AGPL; attribution is credited in NOTICE instead. The factual check "no reference source committed" passes.)*
 - **Stage 9.4 — Docs** · Owner: ___ — [>] in-progress — User/dev docs (incl. hardware-accel guide), migration notes, changelog.
   - [x] completed — **Hardware-acceleration guide** shipped (`docs/guides/hardware-acceleration.md`): modes (auto/gpu/cpu), detection + auto-CPU-fallback, `/api/config/hardware`, configuration, CPU-only deployments, troubleshooting. Linked from `docs/index.md`; `ACCEL_MODE` documented in `.env.example` (with the legacy `USE_GPU` note).
   - [x] completed — **Migration notes + changelog.** `CHANGELOG.md` (Keep-a-Changelog, Unreleased/overhaul section) + `MIGRATION.md` (3 Alembic migrations to `head`, runtime normalizer note, `ACCEL_MODE` env var, non-breaking-change + accurate merge-point rollback notes). Linked both from `docs/index.md`.
@@ -416,10 +417,11 @@ Consolidated in `docs/overhaul/inventory/parity-matrix.md` (with per-lane detail
 ### §E — Performance Budgets
 | Metric | Target | Current | Low-end (CPU-only) target | Notes |
 |---|---|---|---|---|
-| Timeline first paint (10k assets) | TBD | — | TBD | |
-| Scroll-to-date latency | TBD | — | TBD | |
-| Thumbnail generation throughput | TBD | — | TBD | CPU vs GPU |
-| ML embedding latency (CPU mode) | TBD | — | TBD | §5.4 acceptance |
+| Justified-layout compute (50k items) | < 250 ms | **~12 ms** ✅ | < 250 ms | Pure O(n) hot path; verified by `justified-layout.perf.test.ts` (also asserts ~linear scaling). |
+| Timeline first paint (10k assets) | TBD | — | TBD | Needs live stack + seeded library (§10.3). |
+| Scroll-to-date latency | TBD | — | TBD | Needs live stack. |
+| Thumbnail generation throughput | TBD | — | TBD | CPU vs GPU; needs live worker. |
+| ML embedding latency (CPU mode) | TBD | — | TBD | §5.4 acceptance; needs live worker. |
 
 ### §F — ML Model Audit
 | Capability | Find model | Reference model | License | CPU latency | Decision |
