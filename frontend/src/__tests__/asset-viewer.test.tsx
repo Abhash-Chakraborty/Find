@@ -202,4 +202,44 @@ describe("AssetViewer", () => {
     expect(fav).toHaveAttribute("aria-pressed", "true");
     expect(fav).toHaveAccessibleName(/remove favorite/i);
   });
+
+  it("hides archive/trash controls when their callbacks are absent", () => {
+    renderViewer(0);
+    expect(screen.queryByTestId("viewer-archive")).toBeNull();
+    expect(screen.queryByTestId("viewer-trash")).toBeNull();
+  });
+
+  it("archives the active asset and closes the viewer", () => {
+    const onArchive = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <AssetViewer
+        assets={ASSETS}
+        index={1}
+        onIndexChange={vi.fn()}
+        onClose={onClose}
+        onArchive={onArchive}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("viewer-archive"));
+    expect(onArchive).toHaveBeenCalledWith(1);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("moves the active asset to trash and closes the viewer", () => {
+    const onTrash = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <AssetViewer
+        assets={ASSETS}
+        index={0}
+        onIndexChange={vi.fn()}
+        onClose={onClose}
+        onTrash={onTrash}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("viewer-trash"));
+    expect(onTrash).toHaveBeenCalledWith(0);
+    expect(onClose).toHaveBeenCalled();
+  });
 });

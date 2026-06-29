@@ -15,7 +15,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { JustifiedGrid } from "@/components/justified-grid";
 import { TimelineScrubber } from "@/components/timeline-scrubber";
 import { AssetViewer } from "@/components/asset-viewer";
-import { toggleLike } from "@/lib/api";
+import { toggleLike, setArchive, trashImage } from "@/lib/api";
 import { useTimeline } from "@/lib/use-timeline";
 import { buildScrubberLayout, offsetToSegment } from "@/lib/timeline-scrubber";
 
@@ -32,7 +32,15 @@ export default function TimelinePage() {
   const [favoriteOverrides, setFavoriteOverrides] = useState<
     Record<number, boolean>
   >({});
+  // Assets archived/trashed from the viewer leave the grid immediately; the
+  // per-bucket cache still holds them, so we hide them locally.
+  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const visibleAssets = useMemo(
+    () => assets.filter((a) => !removedIds.has(a.id)),
+    [assets, removedIds],
+  );
 
   const favoriteIds = useMemo(() => {
     const ids = new Set<number>();
@@ -50,6 +58,22 @@ export default function TimelinePage() {
     onSuccess: ({ id, liked }) => {
       setFavoriteOverrides((cur) => ({ ...cur, [id]: liked }));
       queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (mediaId: number) => setArchive(mediaId, true),
+    onSuccess: ({ id }) => {
+      setRemovedIds((cur) => new Set(cur).add(id));
+      queryClient.invalidateQueries({ queryKey: ["archive"] });
+    },
+  });
+
+  const trashMutation = useMutation({
+    mutationFn: (mediaId: number) => trashImage(mediaId),
+    onSuccess: ({ id }) => {
+      setRemovedIds((cur) => new Set(cur).add(id));
+      queryClient.invalidateQueries({ queryKey: ["trash"] });
     },
   });
 
@@ -75,7 +99,7 @@ export default function TimelinePage() {
     [scrubberLayout, loadBucket],
   );
 
-  const viewerAssets = assets.map((a) => ({
+  const viewerAssets = visibleAssets.map((a) => ({
     id: a.id,
     thumbnailUrl: a.thumbnailUrl,
     originalUrl: `/api/image/${a.id}`,
@@ -111,7 +135,7 @@ export default function TimelinePage() {
       <div style={{ display: "flex" }}>
         <div ref={scrollRef} style={{ flex: 1 }}>
           <JustifiedGrid
-            items={assets}
+            items={visibleAssets}
             getKey={(a) => a.id}
             renderItem={(asset, index) => (
               <button
@@ -148,6 +172,8 @@ export default function TimelinePage() {
           onClose={() => setViewerIndex(null)}
           favoriteIds={favoriteIds}
           onToggleFavorite={(id) => favoriteMutation.mutate(id)}
+          onArchive={(id) => archiveMutation.mutate(id)}
+          onTrash={(id) => trashMutation.mutate(id)}
         />
       )}
     </main>

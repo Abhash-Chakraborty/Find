@@ -49,6 +49,16 @@ interface AssetViewerProps {
   favoriteIds?: ReadonlySet<number>;
   /** When provided, a favorite toggle is shown; called with the active id. */
   onToggleFavorite?: (id: number) => void;
+  /**
+   * When provided, an archive control is shown. The asset leaves the list
+   * after archiving, so the viewer closes once fired.
+   */
+  onArchive?: (id: number) => void;
+  /**
+   * When provided, a move-to-trash control is shown. The asset leaves the list
+   * after trashing, so the viewer closes once fired.
+   */
+  onTrash?: (id: number) => void;
 }
 
 export function AssetViewer({
@@ -60,6 +70,8 @@ export function AssetViewer({
   loopSlideshow = true,
   favoriteIds,
   onToggleFavorite,
+  onArchive,
+  onTrash,
 }: AssetViewerProps) {
   const [zoom, setZoom] = useState<ZoomState>(IDENTITY_ZOOM);
   const [originalReady, setOriginalReady] = useState(false);
@@ -308,6 +320,38 @@ export function AssetViewer({
           style={{ position: "absolute", top: 16, left: 16 }}
         >
           {favoriteIds?.has(active.id) ? "♥" : "♡"}
+        </button>
+      )}
+
+      {onArchive && (
+        <button
+          type="button"
+          data-testid="viewer-archive"
+          aria-label="Archive image"
+          onClick={() => {
+            // The asset leaves the list after archiving — close the viewer.
+            onArchive(active.id);
+            onClose();
+          }}
+          style={{ position: "absolute", top: 16, left: 56 }}
+        >
+          🗄
+        </button>
+      )}
+
+      {onTrash && (
+        <button
+          type="button"
+          data-testid="viewer-trash"
+          aria-label="Move to trash"
+          onClick={() => {
+            // The asset leaves the list after trashing — close the viewer.
+            onTrash(active.id);
+            onClose();
+          }}
+          style={{ position: "absolute", top: 16, left: 96 }}
+        >
+          🗑
         </button>
       )}
 
