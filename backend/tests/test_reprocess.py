@@ -53,6 +53,12 @@ class FakeMedia(Base):
     file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     liked: Mapped[bool] = mapped_column(Boolean, default=False)
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Mirror the asset-state columns the gallery router queries
+    # (_browsable_media_query) so this stand-in stays in sync with the real model.
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
     status: Mapped[str] = mapped_column(String(50), default="pending")
     analysis_job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -93,7 +99,6 @@ def _fresh_db():
 # ---------------------------------------------------------------------------
 
 _ORIGINAL_GALLERY_MEDIA = gallery_module.Media
-gallery_module.Media = FakeMedia  # type: ignore[assignment]
 
 test_app = FastAPI()
 test_app.include_router(gallery_module.router, prefix="/api")
@@ -106,14 +111,21 @@ test_app.dependency_overrides[get_required_user] = lambda: None
 
 
 @pytest.fixture(autouse=True, scope="module")
-def _restore_gallery_media():
-    """Undo the module-level gallery_module.Media monkeypatch after this module.
+def _patch_gallery_media():
+    """Patch gallery_module.Media to FakeMedia for THIS module's tests only.
 
-    Without this the FakeMedia patch leaks into other test modules (e.g. the
-    shared-mode scoping tests) that use the real gallery router.
+    The patch is applied at fixture setup (not import time) and undone at
+    teardown, so it can't leak into other test modules during collection. The
+    gallery router resolves ``Media`` as a module global at call time, so
+    patching here is sufficient for this module's requests. Without the
+    teardown, FakeMedia would shadow the real Media in any later module that
+    joins it (e.g. albums join AlbumAsset->Media), producing ambiguous SQL.
     """
-    yield
-    gallery_module.Media = _ORIGINAL_GALLERY_MEDIA
+    gallery_module.Media = FakeMedia  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        gallery_module.Media = _ORIGINAL_GALLERY_MEDIA
 
 
 @pytest.fixture(autouse=True)

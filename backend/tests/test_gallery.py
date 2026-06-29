@@ -16,6 +16,8 @@ def _seed(
     liked=False,
     metadata_json=None,
     is_hidden=False,
+    is_archived=False,
+    deleted_at=None,
 ):
     """Insert a Media row into the test database."""
     media = Media(
@@ -35,6 +37,8 @@ def _seed(
         thumbnail_height=192,
         metadata_json=metadata_json,
         is_hidden=is_hidden,
+        is_archived=is_archived,
+        deleted_at=deleted_at,
         vault_state="hidden_encrypted" if is_hidden else "visible",
         created_at=datetime.now(timezone.utc),
     )
@@ -894,3 +898,238 @@ class TestGalleryMetadataFilters:
         body = response.json()
         assert body["total"] == 1
         assert body["items"][0]["filename"] == "large-canon.jpg"
+
+
+class TestAssetStateScoping:
+    """Archive + soft-delete (trash) scoping on browse surfaces.
+
+    Asset-state columns (is_archived, deleted_at) were added in Phase 4.1.
+    The rule: an asset is in the main timeline/search iff NOT hidden AND
+    NOT archived AND deleted_at IS NULL. Archive/trash views (added later)
+    surface those assets explicitly; single-item lookups still work so a
+    detail view can open them.
+    """
+
+    def test_archived_excluded_from_gallery(self, client, db):
+        _seed(db, filename="visible.jpg", status="indexed")
+        _seed(db, filename="archived.jpg", status="indexed", is_archived=True)
+
+        body = client.get("/api/gallery").json()
+
+        assert body["total"] == 1
+        assert [item["filename"] for item in body["items"]] == ["visible.jpg"]
+
+    def test_trashed_excluded_from_gallery(self, client, db):
+        _seed(db, filename="visible.jpg", status="indexed")
+        _seed(
+            db,
+            filename="trashed.jpg",
+            status="indexed",
+            deleted_at=datetime.now(timezone.utc),
+        )
+
+        body = client.get("/api/gallery").json()
+
+        assert body["total"] == 1
+        assert [item["filename"] for item in body["items"]] == ["visible.jpg"]
+
+    def test_archived_and_trashed_excluded_from_counts(self, client, db):
+        _seed(db, filename="a.jpg", status="indexed")
+        _seed(db, filename="b.jpg", status="indexed")
+        _seed(db, filename="arch.jpg", status="indexed", is_archived=True)
+        _seed(
+            db,
+            filename="trash.jpg",
+            status="indexed",
+            deleted_at=datetime.now(timezone.utc),
+        )
+
+        body = client.get("/api/gallery/counts").json()
+
+        assert body["all"] == 2
+        assert body["indexed"] == 2
+
+    def test_archived_item_detail_still_accessible(self, client, db):
+        """Archive view must be able to open an archived asset's detail."""
+        archived = _seed(
+            db, filename="archived.jpg", status="indexed", is_archived=True
+        )
+
+        response = client.get(f"/api/image/{archived.id}")
+
+        assert response.status_code == 200
+        assert response.json()["id"] == archived.id
+
+    def test_liked_filter_still_excludes_archived(self, client, db):
+        _seed(db, filename="liked-visible.jpg", status="indexed", liked=True)
+        _seed(
+            db,
+            filename="liked-archived.jpg",
+            status="indexed",
+            liked=True,
+            is_archived=True,
+        )
+
+        body = client.get("/api/gallery", params={"liked": "true"}).json()
+
+        assert body["total"] == 1
+        assert body["items"][0]["filename"] == "liked-visible.jpg"
+
+    def test_columns_default_to_visible(self, client, db):
+        """New rows default to not-archived / not-trashed (behavior-neutral)."""
+        media = _seed(db, filename="default.jpg", status="indexed")
+
+        assert media.is_archived is False
+        assert media.deleted_at is None
+
+        body = client.get("/api/gallery").json()
+        assert body["total"] == 1
+
+
+class TestArchiveTrashRestore:
+    """Archive / trash (soft-delete) / restore endpoints (Phase 4.4)."""
+
+    # --- archive -----------------------------------------------------------
+    def test_archive_sets_flag_and_hides_from_gallery(self, client, db):
+        media = _seed(db, filename="arch.jpg", status="indexed")
+
+        response = client.post(f"/api/image/{media.id}/archive", json={})
+
+        assert response.status_code == 200
+        assert response.json() == {"id": media.id, "is_archived": True}
+        assert client.get("/api/gallery").json()["total"] == 0
+
+    def test_unarchive_returns_to_gallery(self, client, db):
+        media = _seed(db, filename="arch.jpg", status="indexed", is_archived=True)
+        assert client.get("/api/gallery").json()["total"] == 0
+
+        response = client.post(
+            f"/api/image/{media.id}/archive", json={"archived": False}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["is_archived"] is False
+        assert client.get("/api/gallery").json()["total"] == 1
+
+    def test_archive_not_found_returns_404(self, client):
+        assert client.post("/api/image/99999/archive", json={}).status_code == 404
+
+    def test_cannot_archive_trashed_image(self, client, db):
+        media = _seed(
+            db,
+            filename="trash.jpg",
+            status="indexed",
+            deleted_at=datetime.now(timezone.utc),
+        )
+
+        response = client.post(f"/api/image/{media.id}/archive", json={})
+
+        assert response.status_code == 409
+
+    # --- trash / restore ---------------------------------------------------
+    def test_trash_sets_deleted_at_and_hides_from_gallery(self, client, db):
+        media = _seed(db, filename="t.jpg", status="indexed")
+
+        response = client.post(f"/api/image/{media.id}/trash")
+
+        assert response.status_code == 200
+        assert response.json()["deleted_at"] is not None
+        assert client.get("/api/gallery").json()["total"] == 0
+        # Row + file are kept (soft delete).
+        db.expire_all()
+        assert db.query(Media).filter(Media.id == media.id).first() is not None
+
+    def test_trash_does_not_delete_file(self, client, db):
+        media = _seed(db, filename="t.jpg", status="indexed")
+
+        with patch("find_api.routers.gallery.delete_file") as mock_delete:
+            client.post(f"/api/image/{media.id}/trash")
+
+        mock_delete.assert_not_called()
+
+    def test_restore_returns_to_gallery(self, client, db):
+        media = _seed(
+            db,
+            filename="t.jpg",
+            status="indexed",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        assert client.get("/api/gallery").json()["total"] == 0
+
+        response = client.post(f"/api/image/{media.id}/restore")
+
+        assert response.status_code == 200
+        assert response.json() == {"id": media.id, "deleted_at": None}
+        assert client.get("/api/gallery").json()["total"] == 1
+
+    def test_trash_is_idempotent(self, client, db):
+        media = _seed(db, filename="t.jpg", status="indexed")
+
+        first = client.post(f"/api/image/{media.id}/trash").json()["deleted_at"]
+        second = client.post(f"/api/image/{media.id}/trash").json()["deleted_at"]
+
+        assert first == second  # second trash does not bump the timestamp
+
+    # --- list views --------------------------------------------------------
+    def test_archive_view_lists_only_archived(self, client, db):
+        _seed(db, filename="normal.jpg", status="indexed")
+        _seed(db, filename="arch.jpg", status="indexed", is_archived=True)
+        _seed(
+            db,
+            filename="trash.jpg",
+            status="indexed",
+            deleted_at=datetime.now(timezone.utc),
+        )
+
+        body = client.get("/api/archive").json()
+
+        assert body["total"] == 1
+        assert body["items"][0]["filename"] == "arch.jpg"
+        assert body["items"][0]["is_archived"] is True
+
+    def test_trash_view_lists_only_trashed(self, client, db):
+        _seed(db, filename="normal.jpg", status="indexed")
+        _seed(db, filename="arch.jpg", status="indexed", is_archived=True)
+        _seed(
+            db,
+            filename="trash.jpg",
+            status="indexed",
+            deleted_at=datetime.now(timezone.utc),
+        )
+
+        body = client.get("/api/trash").json()
+
+        assert body["total"] == 1
+        assert body["items"][0]["filename"] == "trash.jpg"
+        assert body["items"][0]["deleted_at"] is not None
+
+    # --- empty trash -------------------------------------------------------
+    def test_empty_trash_permanently_deletes_only_trashed(self, client, db):
+        keep = _seed(db, filename="keep.jpg", status="indexed")
+        trashed = _seed(
+            db,
+            filename="gone.jpg",
+            status="indexed",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        keep_id, trashed_id, trashed_key = keep.id, trashed.id, trashed.minio_key
+
+        with patch("find_api.routers.gallery.delete_file") as mock_delete:
+            response = client.post("/api/trash/empty")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["deleted_count"] == 1
+        assert body["deleted_ids"] == [trashed_id]
+        mock_delete.assert_any_call(trashed_key)
+
+        assert db.query(Media).filter(Media.id == trashed_id).first() is None
+        assert db.query(Media).filter(Media.id == keep_id).first() is not None
+
+    def test_empty_trash_noop_when_empty(self, client, db):
+        _seed(db, filename="keep.jpg", status="indexed")
+
+        response = client.post("/api/trash/empty")
+
+        assert response.status_code == 200
+        assert response.json()["deleted_count"] == 0
