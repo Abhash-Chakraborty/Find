@@ -14,6 +14,7 @@ from find_api.models.invite import InviteToken
 from find_api.models.join_request import JoinRequest
 from find_api.models.album import Album, AlbumAsset
 from find_api.models.shared_link import SharedLink
+from find_api.models.app_setting import AppSetting
 
 __all__ = [
     "Media",
@@ -31,4 +32,5 @@ __all__ = [
     "Album",
     "AlbumAsset",
     "SharedLink",
+    "AppSetting",
 ]

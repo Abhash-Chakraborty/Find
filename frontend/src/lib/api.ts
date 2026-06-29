@@ -243,6 +243,22 @@ export const getHardwareReport = async (): Promise<HardwareReport> => {
   return response.data;
 };
 
+export interface AppSettings {
+  accel_mode: AccelMode;
+}
+
+export const getSettings = async (): Promise<AppSettings> => {
+  const response = await api.get<AppSettings>("/api/settings");
+  return response.data;
+};
+
+export const updateSettings = async (
+  patch: Partial<AppSettings>,
+): Promise<AppSettings> => {
+  const response = await api.put<AppSettings>("/api/settings", patch);
+  return response.data;
+};
+
 // API Functions
 export const uploadImages = async (
   files: FileList | File[],
