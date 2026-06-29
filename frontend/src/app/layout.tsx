@@ -50,7 +50,7 @@ export default function RootLayout({
           {children}
 
           <div className="pointer-events-none fixed bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] px-3 py-1 text-[11px] font-medium text-[color:var(--muted)] backdrop-blur-md">
-            © 2026 Find. MIT License.
+            © 2026 Find. AGPL-3.0 License.
           </div>
         </Providers>
       </body>

@@ -98,6 +98,12 @@ jobs:
       # Ensure the production bundle actually builds — catches tree-shake bugs, type errors
       - run: pnpm build
 
+      # Browser E2E (Playwright) — boots the built app and asserts the shell +
+      # new routes render in a real Chromium. The smoke specs need no backend
+      # (assert static shell only), so they run in CI without a live stack.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
   backend-check:
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.uncategorized == 'true'
