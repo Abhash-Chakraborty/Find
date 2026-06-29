@@ -84,6 +84,15 @@ describe("AlbumsPage", () => {
     );
   });
 
+  it("shows an error state when album loading fails", async () => {
+    api.getAlbums.mockRejectedValue(new Error("boom"));
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("albums-error")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("albums-empty")).toBeNull();
+  });
+
   it("lists albums with their photo counts", async () => {
     api.getAlbums.mockResolvedValue({
       albums: [album(1, "Trip", 3), album(2, "Pets", 1)],

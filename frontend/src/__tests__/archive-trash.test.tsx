@@ -69,6 +69,15 @@ describe("TrashPage", () => {
     );
   });
 
+  it("shows an error state when loading fails", async () => {
+    api.getTrash.mockRejectedValue(new Error("boom"));
+    renderWithClient(<TrashPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("trash-error")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("trash-empty")).toBeNull();
+  });
+
   it("lists trashed items and restores one", async () => {
     api.getTrash.mockResolvedValue(listResponse([1, 2]));
     api.restoreImage.mockResolvedValue({ id: 1, deleted_at: null });
@@ -109,6 +118,15 @@ describe("ArchivePage", () => {
     await waitFor(() =>
       expect(screen.getByTestId("archive-empty")).toBeInTheDocument(),
     );
+  });
+
+  it("shows an error state when loading fails", async () => {
+    api.getArchive.mockRejectedValue(new Error("boom"));
+    renderWithClient(<ArchivePage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("archive-error")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("archive-empty")).toBeNull();
   });
 
   it("lists archived items and unarchives one", async () => {

@@ -15,7 +15,7 @@ import { resolveMediaUrl } from "@/lib/media";
 export default function ArchivePage() {
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["archive"],
     queryFn: () => getArchive(),
   });
@@ -44,7 +44,13 @@ export default function ArchivePage() {
           </div>
         )}
 
-        {!isLoading && items.length === 0 && (
+        {!isLoading && isError && (
+          <p data-testid="archive-error" role="alert" className="muted-copy">
+            Couldn't load the archive. Please try again.
+          </p>
+        )}
+
+        {!isLoading && !isError && items.length === 0 && (
           <p data-testid="archive-empty" className="muted-copy">
             No archived photos.
           </p>

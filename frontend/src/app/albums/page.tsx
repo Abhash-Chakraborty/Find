@@ -17,7 +17,7 @@ export default function AlbumsPage() {
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState("");
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["albums"],
     queryFn: getAlbums,
   });
@@ -77,7 +77,13 @@ export default function AlbumsPage() {
           </div>
         )}
 
-        {!isLoading && albums.length === 0 && (
+        {!isLoading && isError && (
+          <p data-testid="albums-error" role="alert" className="muted-copy">
+            Couldn't load albums. Please try again.
+          </p>
+        )}
+
+        {!isLoading && !isError && albums.length === 0 && (
           <p data-testid="albums-empty" className="muted-copy">
             No albums yet. Create your first one above.
           </p>

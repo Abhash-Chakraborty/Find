@@ -15,7 +15,7 @@ import { resolveMediaUrl } from "@/lib/media";
 export default function TrashPage() {
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["trash"],
     queryFn: () => getTrash(),
   });
@@ -70,7 +70,13 @@ export default function TrashPage() {
           </div>
         )}
 
-        {!isLoading && items.length === 0 && (
+        {!isLoading && isError && (
+          <p data-testid="trash-error" role="alert" className="muted-copy">
+            Couldn't load the trash. Please try again.
+          </p>
+        )}
+
+        {!isLoading && !isError && items.length === 0 && (
           <p data-testid="trash-empty" className="muted-copy">
             Trash is empty.
           </p>
