@@ -10,12 +10,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def extract_exif_data(image: Image.Image) -> Dict[str, Any]:
+def extract_exif_data(
+    image: Image.Image, *, include_gps: bool = False
+) -> Dict[str, Any]:
     """
     Extract EXIF metadata from image
 
     Args:
         image: PIL Image object
+        include_gps: When False (default) GPS/location tags are dropped so
+            stored metadata cannot leak the photo's location.
 
     Returns:
         Dictionary of EXIF data
@@ -42,6 +46,9 @@ def extract_exif_data(image: Image.Image) -> Dict[str, Any]:
 
             # Handle GPS info specially
             if tag == "GPSInfo":
+                if not include_gps:
+                    # Drop location data entirely.
+                    continue
                 gps_data = {}
                 for gps_tag_id, gps_value in value.items():
                     gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)

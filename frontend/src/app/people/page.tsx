@@ -18,6 +18,7 @@ import {
   type PreviewMedia,
 } from "@/components/image-preview-modal";
 import { FeedbackActions } from "@/components/person-feedback-actions";
+import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
   getPeople,
   getPersonImages,
@@ -348,8 +349,12 @@ export default function PeoplePage() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {people.map((person) => (
+            <VirtualizedGrid
+              items={people}
+              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              estimateRowHeight={360}
+              getKey={(person) => person.id}
+              renderItem={(person) => (
                 <PersonCard
                   key={person.id}
                   person={person}
@@ -358,8 +363,8 @@ export default function PeoplePage() {
                     queryClient.invalidateQueries({ queryKey: ["people"] })
                   }
                 />
-              ))}
-            </div>
+              )}
+            />
           </div>
         )}
       </div>
@@ -420,8 +425,12 @@ export default function PeoplePage() {
               )}
 
               {selectedPersonQuery.data && (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                  {selectedPersonQuery.data.images.map((img) => {
+                <VirtualizedGrid
+                  items={selectedPersonQuery.data.images}
+                  className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4"
+                  estimateRowHeight={330}
+                  getKey={(img) => img.media_id}
+                  renderItem={(img) => {
                     const faceIds = img.faces.map((face) => face.id);
                     const imageSrc = resolveMediaUrl(
                       img.thumbnail_url,
@@ -488,8 +497,8 @@ export default function PeoplePage() {
                         </div>
                       </article>
                     );
-                  })}
-                </div>
+                  }}
+                />
               )}
             </div>
           </div>

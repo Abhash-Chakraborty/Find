@@ -69,6 +69,7 @@ def _run(
     image_vec: np.ndarray,
     caption: str | None,
     objects: list,
+    ocr_text: str,
     text_map: dict,
 ) -> tuple[np.ndarray, MagicMock]:
     """
@@ -84,7 +85,7 @@ def _run(
     from find_api.workers.processors import generate_hybrid_embedding
 
     fake_image = MagicMock(spec=PILImage.Image)
-    metadata = {"caption": caption, "objects": objects}
+    metadata = {"caption": caption, "objects": objects, "ocr_text": ocr_text}
     embedder = _build_mock_embedder(image_vec, text_map)
 
     # Build a fake module whose get_clip_embedder() returns our mock embedder.
@@ -107,6 +108,7 @@ def _run(
 IMG_VEC = _make_image_vec(1)
 CAP_VEC = _make_text_vec(2)
 OBJ_VEC = _make_text_vec(3)
+OCR_VEC = _make_text_vec(4)
 EMPTY_VEC = _make_text_vec(99)  # what "" would produce — should NEVER appear
 
 
@@ -124,6 +126,7 @@ class TestHybridEmbeddingSignalSelection:
             image_vec=IMG_VEC,
             caption="",
             objects=[],
+            ocr_text="",
             text_map={"": EMPTY_VEC},  # should NOT be called
         )
 
@@ -140,6 +143,7 @@ class TestHybridEmbeddingSignalSelection:
             image_vec=IMG_VEC,
             caption="a sunny beach",
             objects=[],
+            ocr_text="",
             text_map=text_map,
         )
 
@@ -158,6 +162,7 @@ class TestHybridEmbeddingSignalSelection:
             image_vec=IMG_VEC,
             caption="",
             objects=[{"class": "cat"}, {"class": "dog"}],
+            ocr_text="",
             text_map=text_map,
         )
 
@@ -179,6 +184,7 @@ class TestHybridEmbeddingSignalSelection:
             image_vec=IMG_VEC,
             caption="a cat on a mat",
             objects=[{"class": "cat"}],
+            ocr_text="",
             text_map=text_map,
         )
 
@@ -199,6 +205,7 @@ class TestHybridEmbeddingEdgeCases:
             image_vec=IMG_VEC,
             caption="   ",
             objects=[],
+            ocr_text="",
             text_map={"   ": EMPTY_VEC, "": EMPTY_VEC},
         )
         embedder.embed_text.assert_not_called()
@@ -210,6 +217,7 @@ class TestHybridEmbeddingEdgeCases:
             image_vec=IMG_VEC,
             caption=None,  # metadata.get("caption") returns None
             objects=[],
+            ocr_text="",
             text_map={},
         )
         embedder.embed_text.assert_not_called()
@@ -221,6 +229,7 @@ class TestHybridEmbeddingEdgeCases:
             image_vec=IMG_VEC,
             caption="",
             objects=[{"label": "cat"}, {"name": "dog"}, {}],  # all missing "class"
+            ocr_text="",
             text_map={},
         )
         embedder.embed_text.assert_not_called()
@@ -232,6 +241,7 @@ class TestHybridEmbeddingEdgeCases:
             image_vec=IMG_VEC,
             caption="",
             objects=[{"class": "   "}, {"class": "\n\t"}],
+            ocr_text="",
             text_map={"detected objects: ": EMPTY_VEC},
         )
         embedder.embed_text.assert_not_called()
@@ -245,6 +255,7 @@ class TestHybridEmbeddingEdgeCases:
             image_vec=IMG_VEC,
             caption="",
             objects=[{"class": "cat"}, {"class": "cat"}, {"class": "cat"}],
+            ocr_text="",
             text_map=text_map,
         )
         # objects_text must contain "cat" once
@@ -258,10 +269,42 @@ class TestHybridEmbeddingEdgeCases:
             image_vec=IMG_VEC,
             caption="caption text",
             objects=[{"class": "car"}],
+            ocr_text="",
             text_map=text_map,
         )
         norm = float(np.linalg.norm(result))
         assert abs(norm - 1.0) < 1e-5, f"Expected unit norm, got {norm}"
+
+    def test_zero_vector_output_stays_finite(self):
+        """A degenerate all-zero embedding path must not produce NaN values."""
+        zero_vec = np.zeros(DIM, dtype=np.float32)
+        result, _ = _run(
+            image_vec=zero_vec,
+            caption="",
+            objects=[],
+            ocr_text="",
+            text_map={},
+        )
+
+        assert np.all(np.isfinite(result))
+        np.testing.assert_allclose(result, zero_vec, atol=1e-6)
+
+    def test_invalid_text_vector_falls_back_to_finite_embedding(self):
+        """NaN/inf text vectors must not poison the hybrid embedding."""
+        invalid_vec = np.array(
+            [np.nan, np.inf, -np.inf, 0, 0, 0, 0, 0],
+            dtype=np.float32,
+        )
+        result, _ = _run(
+            image_vec=IMG_VEC,
+            caption="bad text",
+            objects=[],
+            ocr_text="",
+            text_map={"bad text": invalid_vec},
+        )
+
+        assert np.all(np.isfinite(result))
+        np.testing.assert_allclose(result, IMG_VEC, atol=1e-6)
 
 
 class TestBiasRemoval:
@@ -287,8 +330,14 @@ class TestBiasRemoval:
         img_b = np.zeros(DIM, dtype=np.float32)
         img_b[1] = 1.0
 
-        result_a, _ = _run(img_a, caption="", objects=[], text_map={})
-        result_b, _ = _run(img_b, caption="", objects=[], text_map={})
+        result_a, _ = _run(
+            img_a,
+            caption="",
+            objects=[],
+            ocr_text="",
+            text_map={},
+        )
+        result_b, _ = _run(img_b, caption="", objects=[], ocr_text="", text_map={})
 
         cosine = float(np.dot(result_a, result_b))
         # Without the fix, cosine ≈ 0.5 (shared empty-string vector pulled both)
@@ -318,7 +367,13 @@ class TestBiasRemoval:
         }
 
         for caption, objects in scenarios:
-            _, embedder = _run(IMG_VEC, caption, objects, all_text_maps)
+            _, embedder = _run(
+                IMG_VEC,
+                caption,
+                objects,
+                "",
+                all_text_maps,
+            )
 
             # Check every individual call to embed_text
             for single_call in embedder.embed_text.call_args_list:
@@ -332,3 +387,27 @@ class TestBiasRemoval:
                     assert (
                         "" not in args
                     ), f"Empty string found in embed_text list call: {args}"
+
+    def test_ocr_present_uses_weighted_hybrid(self):
+        """When OCR text is present, weighted fusion should include OCR signal."""
+        objects_text = "detected objects: cat"
+        text_map = {
+            "a cat poster": CAP_VEC,
+            objects_text: OBJ_VEC,
+            "meeting calendar text": OCR_VEC,
+        }
+        result, embedder = _run(
+            image_vec=IMG_VEC,
+            caption="a cat poster",
+            objects=[{"class": "cat"}],
+            ocr_text="meeting calendar text",
+            text_map=text_map,
+        )
+
+        expected = _unit(
+            (IMG_VEC * 0.40) + (CAP_VEC * 0.25) + (OBJ_VEC * 0.15) + (OCR_VEC * 0.20)
+        )
+        np.testing.assert_allclose(result, expected, atol=1e-5)
+        embedder.embed_text.assert_called_once_with(
+            ["a cat poster", objects_text, "meeting calendar text"]
+        )

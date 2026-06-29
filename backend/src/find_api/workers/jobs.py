@@ -10,7 +10,11 @@ import numpy as np
 from rq import get_current_job
 
 from find_api.core.database import SessionLocal
-from find_api.core.queue import clear_clustering_job_state, enqueue_clustering_job
+from find_api.core.queue import (
+    clear_clustering_job_state,
+    clear_feedback_ranking_job_state,
+    enqueue_clustering_job,
+)
 from find_api.core.storage import get_file, upload_thumbnail
 from find_api.core.model_manager import get_model_manager
 from find_api.core.config import settings
@@ -18,6 +22,9 @@ from find_api.models.media import Media
 from find_api.services.query_cache import invalidate_query_cache
 from find_api.utils.exif import extract_exif_data
 from find_api.utils.errors import sanitize_error
+
+from sqlalchemy import func
+from find_api.models.feedback import GeneralFeedback
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +274,11 @@ def cluster_images():
         # Step 1: Read data — no DB mutations yet.
         media_rows = (
             db.query(Media.id, Media.vector)
-            .filter(Media.status == "indexed", Media.vector.isnot(None))
+            .filter(
+                Media.status == "indexed",
+                Media.vector.isnot(None),
+                Media.is_hidden.is_(False),
+            )
             .all()
         )
         # Step 2: Validate minimum size BEFORE touching anything.
@@ -370,6 +381,67 @@ def cluster_images():
         db.close()
 
 
+def process_feedback_ranking():
+    """
+    Background job to compute tiny ranking boosts
+    from accumulated local feedback.
+    """
+
+    db = SessionLocal()
+
+    try:
+        logger.info("Starting feedback ranking update...")
+
+        media_items = db.query(Media).filter(Media.status == "indexed").all()
+
+        feedback_scores = (
+            db.query(
+                GeneralFeedback.media_id,
+                func.avg(GeneralFeedback.rating).label("avg_rating"),
+            )
+            .filter(
+                GeneralFeedback.feedback_type == "search_rating",
+            )
+            .group_by(GeneralFeedback.media_id)
+            .all()
+        )
+
+        score_map = {media_id: avg_rating for media_id, avg_rating in feedback_scores}
+
+        for media in media_items:
+            avg_rating = score_map.get(media.id)
+
+            boost = 0.0
+
+            # tiny boost for liked images
+            if media.liked:
+                boost += 0.02
+
+            # tiny adjustment from ratings
+            if avg_rating is not None:
+                boost += (float(avg_rating) - 3.0) * 0.01
+
+            # keep semantic search dominant
+            boost = max(min(boost, 0.05), -0.05)
+
+            media.ranking_boost = boost
+
+        db.commit()
+
+        logger.info("Feedback ranking update complete")
+
+        return {"status": "success"}
+
+    except Exception as e:
+        logger.error("Feedback ranking failed: %s", e)
+        db.rollback()
+        raise
+
+    finally:
+        clear_feedback_ranking_job_state()
+        db.close()
+
+
 def cluster_faces():
     """
     Background job to cluster all detected faces into person groups.
@@ -393,7 +465,10 @@ def cluster_faces():
         # Step 1: Load all faces that have embeddings.
         # Check BEFORE changing assignments so names are not lost on no-op runs.
         face_rows = (
-            db.query(Face.id, Face.embedding).filter(Face.embedding.isnot(None)).all()
+            db.query(Face.id, Face.embedding)
+            .join(Media, Media.id == Face.media_id)
+            .filter(Face.embedding.isnot(None), Media.is_hidden.is_(False))
+            .all()
         )
 
         # Need at least 2 faces to cluster
@@ -494,15 +569,15 @@ def cluster_faces():
                 db.flush()
             person_records[label] = person
 
-        # Step 6: Link each face to its Person
-        for face_id, label in zip(face_ids, labels):
-            if int(label) == -1:
-                continue
-            person = person_records[int(label)]
-            db.query(Face).filter(Face.id == face_id).update(
-                {Face.person_id: person.id},
-                synchronize_session=False,
-            )
+        # Step 6: Link each face to its Person in a single bulk write rather
+        # than one UPDATE round-trip per face.
+        face_person_mappings = [
+            {"id": face_id, "person_id": person_records[int(label)].id}
+            for face_id, label in zip(face_ids, labels)
+            if int(label) != -1
+        ]
+        if face_person_mappings:
+            db.bulk_update_mappings(Face, face_person_mappings)
 
         assigned_person_ids = (
             db.query(Face.person_id).filter(Face.person_id.isnot(None)).distinct()
