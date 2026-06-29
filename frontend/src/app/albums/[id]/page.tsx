@@ -24,7 +24,9 @@ import {
   getAlbum,
   getAlbumAssets,
   removeAlbumAssets,
+  setArchive,
   toggleLike,
+  trashImage,
   updateAlbum,
 } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
@@ -35,6 +37,7 @@ export default function AlbumDetailPage() {
   const queryClient = useQueryClient();
   const albumId = Number(params?.id);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
 
   const { data: album, isLoading: albumLoading } = useQuery({
     queryKey: ["album", albumId],
@@ -91,7 +94,32 @@ export default function AlbumDetailPage() {
     onError: () => toast.error("Couldn't update favorite"),
   });
 
-  const items = assetsData?.items ?? [];
+  const archiveMutation = useMutation({
+    mutationFn: (mediaId: number) => setArchive(mediaId, true),
+    onSuccess: ({ id }) => {
+      setRemovedIds((cur) => new Set(cur).add(id));
+      queryClient.invalidateQueries({ queryKey: ["album-assets", albumId] });
+      queryClient.invalidateQueries({ queryKey: ["archive"] });
+      toast.success("Archived");
+    },
+    onError: () => toast.error("Couldn't archive"),
+  });
+
+  const trashMutation = useMutation({
+    mutationFn: (mediaId: number) => trashImage(mediaId),
+    onSuccess: ({ id }) => {
+      setRemovedIds((cur) => new Set(cur).add(id));
+      queryClient.invalidateQueries({ queryKey: ["album-assets", albumId] });
+      queryClient.invalidateQueries({ queryKey: ["trash"] });
+      toast.success("Moved to trash");
+    },
+    onError: () => toast.error("Couldn't move to trash"),
+  });
+
+  // Assets archived/trashed from the viewer leave the album view immediately
+  // (they also fall out of the browsable query on refetch).
+  const allItems = assetsData?.items ?? [];
+  const items = allItems.filter((item) => !removedIds.has(item.id));
   const favoriteIds = new Set(
     items.filter((item) => item.liked).map((item) => item.id),
   );
@@ -227,6 +255,8 @@ export default function AlbumDetailPage() {
           onClose={() => setViewerIndex(null)}
           favoriteIds={favoriteIds}
           onToggleFavorite={(id) => favoriteMutation.mutate(id)}
+          onArchive={(id) => archiveMutation.mutate(id)}
+          onTrash={(id) => trashMutation.mutate(id)}
         />
       )}
     </main>

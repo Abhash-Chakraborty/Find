@@ -22,6 +22,9 @@ const api = vi.hoisted(() => ({
   removeAlbumAssets: vi.fn(),
   updateAlbum: vi.fn(),
   deleteAlbum: vi.fn(),
+  toggleLike: vi.fn(),
+  setArchive: vi.fn(),
+  trashImage: vi.fn(),
   getSharedLinks: vi.fn(),
   createSharedLink: vi.fn(),
   deleteSharedLink: vi.fn(),
@@ -110,5 +113,30 @@ describe("AlbumDetailPage viewer", () => {
     renderPage();
     await screen.findByTestId("open-asset-10");
     expect(screen.queryByTestId("asset-viewer")).toBeNull();
+  });
+
+  it("archives the viewed asset and closes the viewer", async () => {
+    api.setArchive.mockResolvedValue({ id: 10, is_archived: true });
+    renderPage();
+
+    fireEvent.click(await screen.findByTestId("open-asset-10"));
+    await screen.findByTestId("asset-viewer");
+    fireEvent.click(screen.getByTestId("viewer-archive"));
+
+    await waitFor(() => expect(api.setArchive).toHaveBeenCalledWith(10, true));
+    await waitFor(() =>
+      expect(screen.queryByTestId("asset-viewer")).toBeNull(),
+    );
+  });
+
+  it("moves the viewed asset to trash and closes the viewer", async () => {
+    api.trashImage.mockResolvedValue({ id: 10, deleted_at: "2026-06-29T00:00:00+00:00" });
+    renderPage();
+
+    fireEvent.click(await screen.findByTestId("open-asset-10"));
+    await screen.findByTestId("asset-viewer");
+    fireEvent.click(screen.getByTestId("viewer-trash"));
+
+    await waitFor(() => expect(api.trashImage).toHaveBeenCalledWith(10));
   });
 });
