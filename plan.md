@@ -244,7 +244,9 @@ A **fast, lightweight, open-source** Find that:
   - [x] completed — **Move-into-archive/trash from the gallery.** Added bulk **Archive** + **Move to trash** actions to the gallery selection action bar (optimistic removal from the main view, invalidate gallery/archive/trash queries). Completes the loop — items can be moved in, not just viewed on their pages. *verified: `pnpm vitest run gallery-cards` — 7 passed (incl. 2 new); full frontend suite 186 passed, 0 regressions.*
 - **Stage 4.5 — Activity/log surface** · Lane · Owner: ___ — [ ] todo — The functional archive/log surface Find lacks; define + implement.
 - **Stage 4.6 — API contract publish**
-  - [ ] todo — Regenerate OpenAPI + TS client; hand to Phase 3 consumers.
+  - [>] in-progress — Regenerate OpenAPI + TS client; hand to Phase 3 consumers.
+    - [x] completed — **OpenAPI schema verified.** Booted the real app and confirmed all 14 new routes register in `app.openapi()` (70 paths total): timeline buckets, albums + membership, shared-links + public share, archive/trash/restore/empty-trash, per-image archive/trash/restore, `/config/hardware`. This is an integration check the mocked unit tests can't give (catches a router that imports but fails at app construction or isn't wired). The Phase 3 frontend already consumes these via the hand-written `frontend/src/lib/api.ts` client (typed, `tsc`-clean).
+    - [ ] todo — Optionally generate a codegen TS client from the schema (current client is hand-written + typechecked, so not blocking).
 
 ### PHASE 5 — Settings Panel & Hardware Acceleration  *(core of the speed/low-end goal)*
 **Goal:** one settings panel for all config, plus a hardware-accel layer that uses the GPU when available and **falls back to CPU automatically** on any platform. *(~2–4 weeks)*
