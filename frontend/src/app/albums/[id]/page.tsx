@@ -15,8 +15,10 @@ import {
 import { ArrowLeft, ImageIcon, Loader2, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
 import { toast } from "sonner";
 import { AlbumShareLinks } from "@/components/album-share-links";
+import { AssetViewer } from "@/components/asset-viewer";
 import {
   deleteAlbum,
   getAlbum,
@@ -31,6 +33,7 @@ export default function AlbumDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const albumId = Number(params?.id);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   const { data: album, isLoading: albumLoading } = useQuery({
     queryKey: ["album", albumId],
@@ -141,25 +144,33 @@ export default function AlbumDetailPage() {
         )}
 
         <ul className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
-          {items.map((item) => (
+          {items.map((item, index) => (
             <li
               key={item.id}
               data-testid={`album-asset-${item.id}`}
               className="group relative aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)]"
             >
-              {/* biome-ignore lint/a11y/useAltText: album tile */}
-              <img
-                src={
-                  resolveMediaUrl(
-                    item.thumbnail_url,
-                    item.minio_key,
-                    item.id,
-                    true,
-                  ) ?? undefined
-                }
-                alt={item.filename}
-                className="h-full w-full object-cover"
-              />
+              <button
+                type="button"
+                aria-label={`Open ${item.filename}`}
+                data-testid={`open-asset-${item.id}`}
+                onClick={() => setViewerIndex(index)}
+                className="block h-full w-full"
+              >
+                {/* biome-ignore lint/a11y/useAltText: album tile */}
+                <img
+                  src={
+                    resolveMediaUrl(
+                      item.thumbnail_url,
+                      item.minio_key,
+                      item.id,
+                      true,
+                    ) ?? undefined
+                  }
+                  alt={item.filename}
+                  className="h-full w-full object-cover"
+                />
+              </button>
               <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 p-1 opacity-0 transition group-hover:opacity-100">
                 <button
                   type="button"
@@ -191,6 +202,19 @@ export default function AlbumDetailPage() {
           </p>
         )}
       </div>
+
+      {viewerIndex !== null && items[viewerIndex] && (
+        <AssetViewer
+          assets={items.map((item) => ({
+            id: item.id,
+            thumbnailUrl: `/api/image/${item.id}/thumbnail`,
+            originalUrl: `/api/image/${item.id}`,
+          }))}
+          index={viewerIndex}
+          onIndexChange={setViewerIndex}
+          onClose={() => setViewerIndex(null)}
+        />
+      )}
     </main>
   );
 }
