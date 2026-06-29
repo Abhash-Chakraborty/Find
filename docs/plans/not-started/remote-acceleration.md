@@ -35,15 +35,15 @@ These constraints must not be violated by any implementation that follows this d
 
 The following is based on reading actual documentation and source discussions, not assumptions.
 
-### 3.1 Immich — Remote Machine Learning
+### 3.1 A popular self-hosted photo manager — Remote Machine Learning
 
-Immich ([docs](https://docs.immich.app/guides/remote-machine-learning/), [architecture](https://docs.immich.app/developer/architecture/)) runs its ML pipeline as a separate Python/FastAPI container (`immich-machine-learning`) on port 3003. The main server communicates with it over HTTP, sending "the text or image payload" per request. Models are loaded in ONNX format for broad hardware compatibility and cached in memory after first load.
+A popular self-hosted photo manager (its remote-ML guide, its architecture docs) runs its ML pipeline as a separate Python/FastAPI container (`external-machine-learning`) on port 3003. The main server communicates with it over HTTP, sending "the text or image payload" per request. Models are loaded in ONNX format for broad hardware compatibility and cached in memory after first load.
 
-**To point at a remote ML server:** administrators go to Machine Learning Settings → Add URL (e.g., `http://ip:port`). Multiple URLs can be added; Immich tries them sequentially and temporarily skips unreachable ones. The old `IMMICH_MACHINE_LEARNING_URL` environment variable is deprecated in favour of the UI-based config.
+**To point at a remote ML server:** administrators go to Machine Learning Settings → Add URL (e.g., `http://ip:port`). Multiple URLs can be added; A popular self-hosted photo manager tries them sequentially and temporarily skips unreachable ones. The old `MACHINE_LEARNING_URL` environment variable is deprecated in favour of the UI-based config.
 
-**Critical finding:** The Immich documentation explicitly states that *"as an internal service, the machine learning container has no security measures whatsoever."* It relies entirely on network-level security (VPN, firewall, private LAN). Image previews are sent to the remote container. No bearer tokens, no TLS enforced by the service itself.
+**Critical finding:** The A popular self-hosted photo manager documentation explicitly states that *"as an internal service, the machine learning container has no security measures whatsoever."* It relies entirely on network-level security (VPN, firewall, private LAN). Image previews are sent to the remote container. No bearer tokens, no TLS enforced by the service itself.
 
-**Lesson for Find:** Immich's zero-auth approach works when the ML server is truly internal. For Find, where the user is explicitly choosing to send images to a remote endpoint (possibly over the internet), we must do better than zero auth. But the URL-based configuration and sequential fallback pattern are worth adopting.
+**Lesson for Find:** the photo manager's zero-auth approach works when the ML server is truly internal. For Find, where the user is explicitly choosing to send images to a remote endpoint (possibly over the internet), we must do better than zero auth. But the URL-based configuration and sequential fallback pattern are worth adopting.
 
 ### 3.2 Ollama — Pluggable Local Inference Endpoint
 
@@ -55,7 +55,7 @@ Ollama ([API docs](https://docs.ollama.com/api/introduction)) serves models at `
 
 ### 3.3 PhotoPrism — Local-First with Optional Remote ML
 
-PhotoPrism ([architecture](https://docs.photoprism.app/developer-guide/vision/service/setup/)) runs all ML in a single container by default. Its newer Vision service is designed as a decoupled microservice that can optionally run on a separate machine with a GPU. Like Immich, it uses no built-in auth on the ML microservice — it expects the service to be on a trusted network.
+PhotoPrism ([architecture](https://docs.photoprism.app/developer-guide/vision/service/setup/)) runs all ML in a single container by default. Its newer Vision service is designed as a decoupled microservice that can optionally run on a separate machine with a GPU. Like that project, it uses no built-in auth on the ML microservice — it expects the service to be on a trusted network.
 
 **Lesson for Find:** The "default local, optional remote" pattern has clear prior art in the photo management space. The precedent is consistent across tools.
 
@@ -130,8 +130,8 @@ The global toggle is a clear, auditable boundary. Finer granularity can follow o
 
 ### 4.4 Authentication
 
-**Why Immich's zero-auth approach is insufficient for Find:**  
-Immich's ML container is explicitly documented as "internal with no security measures." It is designed to be on a trusted internal network. Find's remote mode is explicitly for users reaching across networks — from mobile to desktop, from home to VPS. On those paths, relying on the network alone is insufficient.
+**Why the photo manager's zero-auth approach is insufficient for Find:**  
+the photo manager's ML container is explicitly documented as "internal with no security measures." It is designed to be on a trusted internal network. Find's remote mode is explicitly for users reaching across networks — from mobile to desktop, from home to VPS. On those paths, relying on the network alone is insufficient.
 
 **Chosen approach: Static bearer token with minimum entropy**
 
@@ -278,7 +278,7 @@ All endpoints except `GET /api/ml/health` require `Authorization: Bearer <token>
 
 The server that handles these endpoints is a standard Find backend in `full` ML mode. No new server type is introduced; the existing worker's logic is exposed via these new routes.
 
-**Note on Immich's pattern:** Immich's ML server has no auth and no HTTPS. Find's ML API differs by requiring a bearer token on all write/inference endpoints. This is necessary because Find's remote mode is explicitly designed for cross-network use (unlike Immich's ML container, which is internal-only by design).
+**Note on the photo manager's pattern:** the photo manager's ML server has no auth and no HTTPS. Find's ML API differs by requiring a bearer token on all write/inference endpoints. This is necessary because Find's remote mode is explicitly designed for cross-network use (unlike the photo manager's ML container, which is internal-only by design).
 
 ---
 
@@ -400,10 +400,10 @@ Requires acknowledgment per-session; cannot be permanently dismissed.
 
 | Question | Answer |
 |----------|--------|
-| Should Find support only self-hosted endpoints, or also a hosted demo mode? | Self-hosted only in this design. A hosted demo requires a separate design with separate consent. Immich, Ollama, and PhotoPrism all follow the self-hosted-only pattern for ML inference. |
+| Should Find support only self-hosted endpoints, or also a hosted demo mode? | Self-hosted only in this design. A hosted demo requires a separate design with separate consent. Leading self-hosted photo tools all follow the self-hosted-only pattern for ML inference. |
 | What exact data is sent for each remote feature? | Full image bytes for detection, captioning, OCR, and image embedding during indexing. Search query text for query embedding when remote search is enabled. 768-d float vectors only for clustering. EXIF stripped before image transmission if the option is enabled. See §4.2. |
-| Can remote processing happen per-library or per-image rather than globally? | Global on/off in v1. Per-granularity overrides deferred — consistent with how Immich handles remote ML (global URL setting, not per-album). |
-| How should authentication work for a user-owned backend? | 256-bit bearer token in `Authorization` header, required on all inference endpoints. Network-layer security (Tailscale recommended) provides transport encryption. This is more secure than Immich's zero-auth ML container, appropriate given Find's explicit cross-network use case. |
+| Can remote processing happen per-library or per-image rather than globally? | Global on/off in v1. Per-granularity overrides deferred — consistent with how A popular self-hosted photo manager handles remote ML (global URL setting, not per-album). |
+| How should authentication work for a user-owned backend? | 256-bit bearer token in `Authorization` header, required on all inference endpoints. Network-layer security (Tailscale recommended) provides transport encryption. This is more secure than the photo manager's zero-auth ML container, appropriate given Find's explicit cross-network use case. |
 | How should mobile connect securely to desktop Find? | Tailscale Serve (recommended) — provides HTTPS with auto-provisioned TLS, WireGuard encryption, MagicDNS hostnames. Local LAN as fallback. Cloudflare Tunnel as a documented option with an explicit warning that Cloudflare decrypts traffic at its edge. |
 
 ---
@@ -426,8 +426,8 @@ Implementation issues will be opened only after this design is reviewed and acce
 
 ## Sources
 
-- [Immich Architecture Documentation](https://docs.immich.app/developer/architecture/)
-- [Immich Remote Machine Learning Guide](https://docs.immich.app/guides/remote-machine-learning/)
+- [A popular self-hosted photo manager Architecture Documentation]((removed))
+- [A popular self-hosted photo manager Remote Machine Learning Guide]((removed))
 - [Ollama API Introduction](https://docs.ollama.com/api/introduction)
 - [PhotoPrism Vision Service Setup](https://docs.photoprism.app/developer-guide/vision/service/setup/)
 - [Tailscale: Self-Host a Local AI Stack](https://tailscale.com/blog/self-host-a-local-ai-stack)
