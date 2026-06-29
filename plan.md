@@ -23,6 +23,7 @@ Each step carries one label so the program is manageable at a glance:
 > When you pick up a step, set it to `[~] working` and put your agent id in the lane `Owner:`. Only mark `[x] completed` after the relevant build/test passes and you've noted the result.
 
 ### 0.2 Tactics & overhead control
+- **YAGNI (You Aren't Gonna Need It).** Build only what a checked step requires — no speculative abstractions, unused config, or features not in §3/§4 (full rule in §5). When in doubt, do less.
 - **Reuse before rewrite.** Prefer adapting existing Find code over new code. Prefer reading the reference project for behavior over reinventing it.
 - **Copy with the terminal, never by pasting into context.** For assets, icons, fonts, design tokens, fixtures, and any file that transfers *verbatim*, use `cp`/`rsync`/`git` commands (see §0.6). Do **not** read a binary or large file into the model context just to recreate it — that burns tokens for no benefit.
 - **Read narrowly.** When you must understand reference logic, read the specific file/function, not whole directories. Use `grep`/glob to locate, then read the minimum.
@@ -99,7 +100,7 @@ Because Find is **open-source, not proprietary**, both paths are clean. Choose p
 - **Path A — relicense Find to AGPL-3.0 (RECOMMENDED).** Adopt AGPL-3.0 for Find (or at least the derived parts). Then you may **freely copy, port, and modify** the reference project's UI and code blocks. Obligations: keep it AGPL-3.0, offer source to network users (already true for an open-source project), and **retain the reference project's copyright/license notices** in files that are genuinely derived. This makes "open-source reuse, no extra license problem" *true as described*. It is **one decision**, after which §0.3 step 1 (verbatim) and step 2 (port) are both fully permitted.
 - **Path B — keep Find MIT, strict clean-room.** Agents read the reference **only** to extract *behavioral specs* (what it does, not its source text). A separate set of agents implements from specs without copying code blocks. Keeps Find MIT but is slower and forbids the "use its code blocks" approach.
 
-> **Default assumption for this plan: Path A.** Phases below are written for Path A (free reuse + attribution). If Path B is chosen, every "port" step gains a spec-extraction sub-step and verbatim copies of code (not assets) are disallowed.
+> **DECISION (recorded):** **Path A is chosen.** Find has been relicensed to **AGPL-3.0** (`LICENSE` now holds the AGPL-3.0 text; `NOTICE` records Find's copyright; `backend/pyproject.toml` and `frontend/package.json` declare `AGPL-3.0-only`; README updated). Reference reuse (verbatim assets + ported logic) is therefore **permitted**, subject to retaining attribution headers + the `Derived-From` commit trailer on genuinely-derived files. If Path B is ever reconsidered, every "port" step gains a spec-extraction sub-step and verbatim code copies are disallowed.
 
 **Attribution convention (Path A):** derived files get a header:
 ```
@@ -259,25 +260,71 @@ A **fast, lightweight, open-source** Find that:
 - **Stage 8.2 — Desktop shell** · Lane · Owner: ___ — [ ] todo — Tauri shell reusing the React web UI (builds on Find's existing `src-tauri`); verify on low-spec hardware.
 - **Stage 8.3 — Mobile spike** · Lane · Owner: ___ — [ ] todo — Decide RN vs Flutter for Find; using the reference Flutter app as a feature spec, scaffold upload + timeline read. *(Foundation only.)*
 
-### PHASE 9 — Reference Removal, Integration, QA & Rollout
-**Goal:** remove the reference copy, prove independence, ship. *(~2–3 weeks)*
+### PHASE 9 — Reference Removal & Integration
+**Goal:** remove the reference copy, prove independence, integrate. *(~1–2 weeks)*
 
 - **Stage 9.1 — Reference removal** · Owner: ___
   - [ ] todo — Confirm no reference source is committed (`git ls-files | grep -i` checks); confirm derived files carry attribution (Path A).
   - [ ] todo — **Delete `reference-app/` locally and replace with placeholder images** in any fixture/sample dirs that referenced it; confirm the app builds/runs without the reference present.
-- **Stage 9.2 — E2E** · Owner: ___ — [ ] todo — Cross-feature E2E (upload→timeline→album→share→archive→slideshow→settings/accel toggle).
-- **Stage 9.3 — Perf & a11y** · Owner: ___ — [ ] todo — Large-library perf budgets incl. **CPU-only/low-end**; accessibility pass on new UI.
-- **Stage 9.4 — Compliance close-out** · Owner: ___ — [ ] todo — Verify §1 license/attribution obligations satisfied; verify name-scrub CI is green.
-- **Stage 9.5 — Docs & rollout** · Owner: ___ — [ ] todo — User/dev docs (incl. hardware-accel guide), migration notes, changelog; staged merge of the overhaul branch to `main`; tag release.
+- **Stage 9.2 — Feature integration** · Owner: ___ — [ ] todo — Wire all phases together on one running build; resolve cross-lane seams; everything reachable from the new UI.
+- **Stage 9.3 — Compliance close-out** · Owner: ___ — [ ] todo — Verify §1 license/attribution obligations satisfied; verify name-scrub CI is green.
+- **Stage 9.4 — Docs** · Owner: ___ — [ ] todo — User/dev docs (incl. hardware-accel guide), migration notes, changelog.
+
+### PHASE 10 — Final Testing & Acceptance  *(the stop gate)*
+**Goal:** prove the whole overhaul is correct, fast, and complete — then ship. This phase is what tells an executing agent the work is *done*. *(~1–2 weeks)*
+
+- **Stage 10.1 — Full regression** · Owner: ___ — [ ] todo — Run the entire test suite (unit + integration + component) green: `uv run pytest backend/tests` and the frontend test command. Record counts.
+- **Stage 10.2 — End-to-end journeys** · Owner: ___ — [ ] todo — E2E across the full surface: upload → timeline browse/scrub → album → share link (open in incognito) → archive/favorite/trash/restore → slideshow → settings + accel toggle. All pass.
+- **Stage 10.3 — Performance acceptance** · Owner: ___ — [ ] todo — Every Appendix §E budget met on **both** a GPU profile **and** a CPU-only/low-end profile. No budget regressed.
+- **Stage 10.4 — Hardware-accel acceptance** · Owner: ___ — [ ] todo — `Auto`/`GPU`/`CPU` modes all verified; forced GPU-init failure **auto-falls back to CPU** with no crash, on each target platform (or CI matrix). Core workflow confirmed working with **zero GPU**.
+- **Stage 10.5 — Accessibility & security acceptance** · Owner: ___ — [ ] todo — a11y scan + manual keyboard/screen-reader pass clean on new UI; `/security-review` signed off for all sharing/auth/crypto.
+- **Stage 10.6 — Rollout** · Owner: ___ — [ ] todo — Staged merge of the overhaul branch to `main`; tag release.
 
 ---
 
 ## 5. Cross-Cutting Workstreams (run throughout)
+- **YAGNI (You Aren't Gonna Need It) — default discipline:** build only what a checked step in this plan requires. No speculative abstractions, config knobs, "future-proof" layers, or features not listed in §3/§4. Port the reference's behavior, not its every option. If something seems needed but isn't in the plan, add a `> PROPOSED:` note and get it into the plan before building it. Simplicity that ships beats generality that doesn't.
 - **Speed-first:** every UI/backend step records its effect on a low-end profile; regressions block merge.
 - **Security:** every sharing/auth/crypto change gets a `/security-review` before merge.
-- **Testing:** no step is `[x] completed` without tests + a green run noted.
+- **Testing (continuous — see §5.1):** no step is `[x] completed` without tests + a green run noted.
 - **Docs:** update `docs/` alongside each feature, not at the end.
 - **Name hygiene:** CI fails if the reference product name appears in tracked files or commit messages (§0.3).
+
+### 5.1 Testing Strategy (applies to every phase)
+Every feature lane owns its tests; the program owns the final gate (§Phase 10). Layers:
+- **Unit tests** — pure logic (justified-layout math, date bucketing, capability detection, accel-fallback selection, permission checks). Fast, run on every commit.
+- **Integration tests** — API + DB per feature: albums CRUD, share link lifecycle (expiry/password), archive/favorite/trash transitions, settings persistence, timeline window queries. Use Find's existing `backend/tests` pytest setup; add fixtures, not new frameworks.
+- **Component/UI tests** — React primitives + timeline/scrollbar/viewer behavior (rendering, virtualization, keyboard nav). Use the frontend's existing test runner; add Storybook visual snapshots (Phase 2.3) for regression.
+- **E2E tests** — full user journeys (Phase 10.2).
+- **Performance tests** — budgets in Appendix §E, measured on **both** a GPU profile and a **CPU-only/low-end** profile; a regression past budget blocks merge.
+- **Accessibility tests** — automated a11y scan + manual keyboard/screen-reader pass on new UI.
+- **Hardware-accel matrix** — for Phase 5: verify `Auto`/`GPU`/`CPU` each work, and that forced GPU-init failure **auto-falls back to CPU** without a crash, on each target platform (or a CI matrix approximation).
+
+**Per-step rule:** a step is only `[x] completed` when (a) its tests exist, (b) they pass, and (c) the command + result are noted inline (e.g. `verified: uv run pytest backend/tests/test_albums.py — 14 passed`).
+
+> **Test YAGNI too:** test the behaviors features actually have. Don't write tests for hypothetical inputs or unsupported paths — cover real journeys, edge cases that can occur, and the failure modes that matter (e.g. GPU-init failure → CPU fallback).
+
+---
+
+## 6. Definition of Done — GOAL COMPLETE  *(when the agent stops)*
+
+> **An executing agent stops only when EVERY box below is `[x] completed` and verified.** Until then, the goal is **not** achieved and work continues. This is the single authoritative completion signal for the whole initiative.
+
+**Goal status:** `[ ] NOT YET COMPLETE` → flip to `[x] GOAL COMPLETE` only when all criteria below hold.
+
+- [ ] **Features at parity** — timeline + fast scrollbar + segment preview, albums, sharing (links/partners), archive, favorites, trash, slideshow, plus Find's existing AI — all built, wired, and reachable in the new React UI.
+- [ ] **Settings panel** — one panel covers all configuration (Phase 5), persisted and validated.
+- [ ] **Hardware acceleration** — `Auto/GPU/CPU` works; **auto CPU fallback** verified; full core workflow runs with **zero GPU** on macOS, Linux, *nix, Windows, Android (or CI approximation), and a low-end profile.
+- [ ] **Speed** — all Appendix §E perf budgets met on GPU **and** CPU-only/low-end profiles; no regression.
+- [ ] **All tests green** — full unit + integration + component + E2E suites pass; commands + counts recorded (§10.1–10.2).
+- [ ] **Accessibility + security** — a11y pass clean; security review signed off (§10.5).
+- [ ] **License compliant (Path A)** — Find is AGPL-3.0; `LICENSE`/`NOTICE`/metadata correct; derived files carry attribution. *(Done — §G.)*
+- [ ] **Name fully scrubbed** — zero reference product-name mentions in any tracked file, branch, or commit; name-scrub CI green. *(Done for current tree — keep green.)*
+- [ ] **Reference removed** — `reference-app/` deleted and replaced with placeholders; app builds/runs without it (§9.1).
+- [ ] **Docs shipped** — user/dev docs + hardware-accel guide + migration notes + changelog updated (§9.4).
+- [ ] **Shipped** — overhaul branch merged to `main` and release tagged (§10.6).
+
+> When the last box is checked: set **Goal status → `[x] GOAL COMPLETE`**, add a final Change Log entry, and stop.
 
 ---
 
@@ -310,14 +357,15 @@ A **fast, lightweight, open-source** Find that:
 |---|---|---|---|---|---|
 | _Phase 7.1_ | | | | | |
 
-### §G — License & Attribution Record  *(one human decision — §1.2)*
-- [ ] Path chosen: **A (relicense AGPL-3.0, recommended)** / B (clean-room MIT).
-- [ ] If A: AGPL-3.0 applied; `LICENSES/`, `NOTICE`, attribution headers in place.
-- [ ] Trademark scrub confirmed (no reference product name in branch/README/plan/commits/shipped artifacts).
-> No reference-derived code merges until this is recorded.
+### §G — License & Attribution Record  *(decision recorded)*
+- [x] completed — Path chosen: **A (relicense to AGPL-3.0)**. Verified: `LICENSE` = AGPL-3.0 text; `NOTICE` records Find's copyright + derived-work attribution policy; `backend/pyproject.toml` and `frontend/package.json` = `AGPL-3.0-only`; README badge + License section updated.
+- [x] completed — Attribution convention defined (in-file header + `Derived-From: reference-app (AGPL-3.0)` commit trailer, no product name).
+- [x] completed — Trademark scrub: no reference product name in branch/README/plan/commits/any tracked file (verified `git grep`).
+> Reference-derived code may now merge under Path A, provided derived files carry attribution.
 
 ---
 
 ## Change Log
+- **v3 (draft):** **Path A executed** — Find relicensed to AGPL-3.0 (`LICENSE`, `NOTICE`, package metadata, README); §G marked done. Completed the trademark scrub (genericized the last prior-art mentions) so **zero** reference product-name mentions remain in any tracked file. Added a full **Testing Strategy (§5.1)** + dedicated **Phase 10 Final Testing & Acceptance**, and a **§6 Definition of Done / Goal-Complete** field that tells an executing agent exactly when to stop. Added **YAGNI** as a standing discipline (§0.2, §5, and a test-YAGNI note). Renumbered §5/§6 into order.
 - **v2 (draft):** reframed as an open-source initiative. License section rewritten: Find is MIT, reference is AGPL-3.0; copyleft means reuse requires **Path A (relicense to AGPL, recommended)** or **Path B (clean-room, keep MIT)** — modifying/renaming does not bypass copyright. Scrubbed the reference product name throughout (now "the reference project" / `reference-app/`). Added §0.1 status labels and §0.6 copy-paste procedures. Refocused on **speed + low-end/cross-platform** support. Added **Phase 5 (settings panel + hardware-accel with auto CPU fallback)**. Added **Phase 9.1 reference-removal + placeholder** step. Branch renamed to `feat/app-overhaul`.
 - v1 (draft): initial multi-phase plan.
