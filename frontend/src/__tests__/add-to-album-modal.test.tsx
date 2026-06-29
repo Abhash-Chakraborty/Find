@@ -129,4 +129,11 @@ describe("AddToAlbumModal", () => {
     fireEvent.click(screen.getByTestId("add-to-album-close"));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("closes on Escape", async () => {
+    api.getAlbums.mockResolvedValue({ albums: [], total: 0 });
+    const { onClose } = renderModal();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
+  });
 });

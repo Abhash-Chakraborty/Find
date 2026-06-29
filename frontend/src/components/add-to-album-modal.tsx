@@ -9,7 +9,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { addAlbumAssets, createAlbum, getAlbums } from "@/lib/api";
 
@@ -26,6 +26,20 @@ export function AddToAlbumModal({
 }: AddToAlbumModalProps) {
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState("");
+
+  // Close on Escape, matching the AssetViewer's modal keyboard behavior.
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["albums"],
