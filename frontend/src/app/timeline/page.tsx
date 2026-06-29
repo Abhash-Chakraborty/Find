@@ -22,9 +22,10 @@ import { buildScrubberLayout, offsetToSegment } from "@/lib/timeline-scrubber";
 export default function TimelinePage() {
   const queryClient = useQueryClient();
   const [likedOnly, setLikedOnly] = useState(false);
-  const { buckets, assets, total, isLoadingBuckets, loadBucket } = useTimeline({
-    liked: likedOnly || undefined,
-  });
+  const { buckets, assets, total, isLoadingBuckets, isError, loadBucket } =
+    useTimeline({
+      liked: likedOnly || undefined,
+    });
   const [scrollOffset, setScrollOffset] = useState(0);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   // Local favorite overrides for instant feedback (the per-bucket cache isn't
@@ -128,7 +129,13 @@ export default function TimelinePage() {
         </div>
       )}
 
-      {!isLoadingBuckets && total === 0 && (
+      {!isLoadingBuckets && isError && (
+        <p data-testid="timeline-error" role="alert">
+          Couldn't load the timeline. Please try again.
+        </p>
+      )}
+
+      {!isLoadingBuckets && !isError && total === 0 && (
         <p data-testid="timeline-empty">No photos yet.</p>
       )}
 

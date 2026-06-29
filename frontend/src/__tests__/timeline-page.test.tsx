@@ -83,6 +83,16 @@ describe("TimelinePage", () => {
     );
   });
 
+  it("shows an error state when the bucket fetch fails", async () => {
+    api.getTimelineBuckets.mockRejectedValue(new Error("boom"));
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("timeline-error")).toBeInTheDocument(),
+    );
+    // The empty state must not also render on error.
+    expect(screen.queryByTestId("timeline-empty")).toBeNull();
+  });
+
   it("loads the first bucket and renders its assets as grid cells", async () => {
     api.getTimelineBuckets.mockResolvedValue({
       buckets: [{ timeBucket: "2026-03-01", count: 2 }],

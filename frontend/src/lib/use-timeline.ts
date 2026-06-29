@@ -32,6 +32,8 @@ export interface UseTimelineResult {
   assets: TimelineAsset[];
   total: number;
   isLoadingBuckets: boolean;
+  /** True when the bucket-counts query failed. */
+  isError: boolean;
   /** Ensure a bucket's assets are loaded (idempotent). */
   loadBucket: (timeBucket: string) => void;
   loadedBucketKeys: string[];
@@ -44,7 +46,11 @@ export function useTimeline(options: {
   const order = options.order ?? "newest";
   const liked = options.liked;
 
-  const { data: bucketData, isLoading: isLoadingBuckets } = useQuery({
+  const {
+    data: bucketData,
+    isLoading: isLoadingBuckets,
+    isError,
+  } = useQuery({
     queryKey: ["timeline-buckets", order, liked ?? null],
     queryFn: () => getTimelineBuckets({ order, liked }),
   });
@@ -106,6 +112,7 @@ export function useTimeline(options: {
     assets,
     total,
     isLoadingBuckets,
+    isError,
     loadBucket,
     loadedBucketKeys: Object.keys(loaded),
   };
