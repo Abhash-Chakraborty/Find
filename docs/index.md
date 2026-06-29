@@ -2,6 +2,11 @@
 
 This directory is organized by document purpose and implementation status.
 
+## Project
+
+- [Changelog](../CHANGELOG.md) - notable changes per release.
+- [Migration Notes](../MIGRATION.md) - upgrade steps (DB migrations + env vars).
+
 ## Plan Status
 
 ### Complete

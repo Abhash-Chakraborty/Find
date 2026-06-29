@@ -296,7 +296,8 @@ A **fast, lightweight, open-source** Find that:
 - **Stage 9.3 — Compliance close-out** · Owner: ___ — [ ] todo — Verify §1 license/attribution obligations satisfied; verify name-scrub CI is green.
 - **Stage 9.4 — Docs** · Owner: ___ — [>] in-progress — User/dev docs (incl. hardware-accel guide), migration notes, changelog.
   - [x] completed — **Hardware-acceleration guide** shipped (`docs/guides/hardware-acceleration.md`): modes (auto/gpu/cpu), detection + auto-CPU-fallback, `/api/config/hardware`, configuration, CPU-only deployments, troubleshooting. Linked from `docs/index.md`; `ACCEL_MODE` documented in `.env.example` (with the legacy `USE_GPU` note).
-  - [ ] todo — Remaining: per-feature user/dev docs (timeline/albums/sharing/archive-trash), migration notes, changelog.
+  - [x] completed — **Migration notes + changelog.** `CHANGELOG.md` (Keep-a-Changelog, Unreleased/overhaul section) + `MIGRATION.md` (3 Alembic migrations to `head`, runtime normalizer note, `ACCEL_MODE` env var, non-breaking-change + accurate merge-point rollback notes). Linked both from `docs/index.md`.
+  - [ ] todo — Remaining: per-feature user/dev docs (timeline/albums/sharing/archive-trash deep-dives).
 
 ### PHASE 10 — Final Testing & Acceptance  *(the stop gate)*
 **Goal:** prove the whole overhaul is correct, fast, and complete — then ship. This phase is what tells an executing agent the work is *done*. *(~1–2 weeks)*
