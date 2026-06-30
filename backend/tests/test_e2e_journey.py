@@ -114,7 +114,10 @@ class TestFullJourney:
         # --- password-protected share -------------------------------------
         locked = client.post(
             "/api/shared-links",
-            json={"album_id": album["id"], "password": "s3cret"},  # pragma: allowlist secret
+            json={
+                "album_id": album["id"],
+                "password": "s3cret",
+            },  # pragma: allowlist secret
         ).json()
         lkey = locked["key"]
         # No password → 401.
@@ -122,7 +125,9 @@ class TestFullJourney:
         # Wrong password → 401.
         assert client.get(f"/api/public/shared/{lkey}?password=nope").status_code == 401
         # Correct password → 200.
-        unlocked = client.get(f"/api/public/shared/{lkey}?password=s3cret")  # pragma: allowlist secret
+        unlocked = client.get(
+            f"/api/public/shared/{lkey}?password=s3cret"
+        )  # pragma: allowlist secret
         assert unlocked.status_code == 200
         assert unlocked.json()["total"] == 3
 
