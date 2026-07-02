@@ -1,25 +1,34 @@
 # syntax=docker/dockerfile:1.7
 
-ARG BASE_IMAGE=nvidia/cuda:12.1.1-runtime-ubuntu22.04
+ARG BASE_IMAGE=python:3.12-slim
 ARG PYTHON_VERSION=3.12
-ARG UV_SYNC_EXTRAS="--extra ml"
+ARG UV_SYNC_EXTRAS=""
 FROM ${BASE_IMAGE}
-ARG UV_SYNC_EXTRAS="--extra ml"
+ARG PYTHON_VERSION=3.12
+ARG UV_SYNC_EXTRAS=""
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-dev \
-    build-essential \
-    libpq-dev \
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies.
+#
+# The set we need depends entirely on whether the ML extra is enabled:
+#   * ML build  (UV_SYNC_EXTRAS contains "ml") — needs a C toolchain to compile
+#     hdbscan and the OpenCV/X11 runtime libs for opencv + torch vision ops, plus
+#     a system python because the CUDA base image ships none.
+#   * Light build (UV_SYNC_EXTRAS empty) — runs on python:3.12-slim, which already
+#     has Python, and every base dependency installs from a prebuilt wheel. No
+#     compiler, no OpenCV libs. Installing them anyway pulled the whole gcc-14
+#     toolchain (~30 min apt) into an image that never uses it.
+#
+# So we branch: full set for ML, just curl (needed to fetch uv) for light.
+RUN set -eux; \
+    apt-get update; \
+    if echo "${UV_SYNC_EXTRAS}" | grep -q "ml"; then \
+      apt-get install -y --no-install-recommends \
+        python3 python3-dev build-essential libpq-dev \
+        libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 curl; \
+    else \
+      apt-get install -y --no-install-recommends curl; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*
 
 # Ensure "python" command exists when base image only provides python3
 RUN if ! command -v python >/dev/null 2>&1; then \

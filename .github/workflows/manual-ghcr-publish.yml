@@ -1,0 +1,128 @@
+name: Manual GHCR Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to publish"
+        required: true
+        default: "latest"
+      backend_flavor:
+        description: "Backend image flavor"
+        required: true
+        default: "light"
+        type: choice
+        options:
+          - light
+          - full-ml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Build and publish images from main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Prepare image names
+        id: names
+        shell: bash
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          BACKEND_FLAVOR: ${{ inputs.backend_flavor }}
+        run: |
+          owner="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          tag="${IMAGE_TAG}"
+          if [[ ! "${tag}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "image_tag may only contain letters, numbers, dots, underscores, and dashes." >&2
+            exit 1
+          fi
+          sha_tag="main-$(git rev-parse --short=12 HEAD)"
+          if [ "${BACKEND_FLAVOR}" = "full-ml" ]; then
+            backend_tags="ghcr.io/${owner}/find-backend:${tag}-full-ml,ghcr.io/${owner}/find-backend:${sha_tag}-full-ml,ghcr.io/${owner}/find-backend:full-ml"
+          else
+            backend_tags="ghcr.io/${owner}/find-backend:${tag},ghcr.io/${owner}/find-backend:${sha_tag},ghcr.io/${owner}/find-backend:latest"
+          fi
+          {
+            echo "backend_image=ghcr.io/${owner}/find-backend"
+            echo "web_image=ghcr.io/${owner}/find-web"
+            echo "backend_tags=${backend_tags}"
+            echo "web_tags=ghcr.io/${owner}/find-web:${tag},ghcr.io/${owner}/find-web:${sha_tag},ghcr.io/${owner}/find-web:latest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push lightweight backend image
+        if: inputs.backend_flavor == 'light'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BASE_IMAGE=python:3.12-slim
+            PYTHON_VERSION=3.12
+            UV_SYNC_EXTRAS=
+          tags: ${{ steps.names.outputs.backend_tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Find FastAPI backend, lightweight mock-mode image
+
+      - name: Build and push full ML backend image
+        if: inputs.backend_flavor == 'full-ml'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE=nvidia/cuda:12.1.1-runtime-ubuntu22.04
+            PYTHON_VERSION=3.12
+            UV_SYNC_EXTRAS=--extra ml
+          tags: ${{ steps.names.outputs.backend_tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Find FastAPI backend, full local ML image
+
+      - name: Build and push web image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: production
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            NEXT_PUBLIC_API_URL=http://localhost:8000
+            NEXT_PUBLIC_MINIO_URL=http://localhost:9200
+            NEXT_PUBLIC_MINIO_BUCKET=images
+          tags: ${{ steps.names.outputs.web_tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Find Next.js web UI
+
+      - name: Publish summary
+        shell: bash
+        env:
+          BACKEND_TAGS: ${{ steps.names.outputs.backend_tags }}
+          WEB_TAGS: ${{ steps.names.outputs.web_tags }}
+        run: |
+          echo "Published backend tags: ${BACKEND_TAGS}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Published web tags: ${WEB_TAGS}" >> "$GITHUB_STEP_SUMMARY"
