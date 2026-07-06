@@ -68,3 +68,4 @@ frontend vitest) with a clean `tsc --noEmit` and `ruff check`.
   derived files carry attribution and Find is distributed under AGPL-3.0
   (`NOTICE`).
 - See `MIGRATION.md` for upgrade steps (database migrations + new env var).
+- Added Locked Vault UI for hidden images (resolves #186).
