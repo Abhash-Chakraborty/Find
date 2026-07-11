@@ -9,9 +9,9 @@ loaders in find_api/ml/ are NOT modified by this module.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol
+from typing import Callable, Protocol
 
 
 class PackCategory(str, Enum):
@@ -87,7 +87,7 @@ class PackCache(Protocol):
     def install(
         self,
         pack: ModelPack,
-        on_progress: "callable[[PackProgress], None] | None" = None,
+        on_progress: Callable[[PackProgress], None] | None = None,
     ) -> None:
         """Download, verify, and atomically install a pack. Must support
         resume/retry and must never leave a partially-installed pack marked
