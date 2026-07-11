@@ -40,6 +40,12 @@ async def upload_images(
     Returns:
         List of created media records with job IDs
     """
+    if len(files) > settings.MAX_BULK_FILES:
+        raise HTTPException(
+            413,
+            f"Request contains more than {settings.MAX_BULK_FILES} files",
+        )
+
     results = []
 
     for file in files:
