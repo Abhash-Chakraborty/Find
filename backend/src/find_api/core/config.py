@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     MAX_BULK_FILES: int = 200
     MAX_BULK_TOTAL_SIZE_MB: int = 500
     MAX_BULK_COMPRESSION_RATIO: int = 100
+    MAX_IMAGE_PIXELS: int = 100_000_000
     WORKER_TIMEOUT: int = 600
     # Trashed assets older than this many days are eligible for permanent
     # auto-purge (via POST /trash/purge). 0 disables age-based purging.
