@@ -1,3 +1,4 @@
+import concurrent.futures
 import io
 import os
 import zipfile
@@ -112,6 +113,69 @@ class TestUploadInvalid:
     def test_missing_files_returns_422(self, client):
         response = client.post("/api/upload")
         assert response.status_code == 422
+
+
+class TestPixelLimitValidation:
+    """Image pixel-limit validation (thread-safe, Pillow ceiling-aware)."""
+
+    def test_pixel_limit_normal_image(self, client):
+        """Normal image within pixel limit should succeed."""
+        img = Image.new("RGB", (100, 100), color="red")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+
+        response = client.post(
+            "/api/upload",
+            files=[("files", ("normal.png", buf.getvalue(), "image/png"))],
+        )
+        assert response.status_code == 200
+        assert response.json()["results"][0]["status"] == "uploaded"
+
+    def test_pixel_limit_oversized_image(self, client):
+        """Image exceeding MAX_IMAGE_PIXELS should be rejected."""
+        from find_api.settings import settings
+
+        with patch("find_api.routers.upload.settings.MAX_IMAGE_PIXELS", 100):
+            img = Image.new("RGB", (50, 50), color="blue")
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+
+            response = client.post(
+                "/api/upload",
+                files=[("files", ("oversized.png", buf.getvalue(), "image/png"))],
+            )
+            assert response.status_code == 400
+            assert "exceeds pixel limit" in response.json()["detail"].lower()
+
+    def test_pixel_limit_concurrent_validation(self, client):
+        """Concurrent uploads should each validate independently without global mutation."""
+        import concurrent.futures
+
+        def upload_image(size):
+            img = Image.new("RGB", (size, size), color="green")
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+            return client.post(
+                "/api/upload",
+                files=[
+                    (
+                        "files",
+                        (f"image_{size}.png", buf.getvalue(), "image/png"),
+                    )
+                ],
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [executor.submit(upload_image, size) for size in [10, 50, 100]]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        assert all(r.status_code == 200 for r in results)
+        assert all(
+            r.json()["results"][0]["status"] == "uploaded" for r in results
+        )
 
 
 class TestBulkUpload:
