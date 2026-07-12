@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Lock } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import { getPublicSharedAlbum, type PublicSharedAlbum } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -110,33 +111,22 @@ export default function PublicSharedAlbumPage() {
         )}
         <p className="muted-copy mt-1 text-xs">{data.total} photos</p>
 
-        <ul className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
-          {data.items.map((item) => (
-            <li
-              key={item.id}
-              data-testid={`shared-asset-${item.id}`}
-              className="aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)]"
-            >
-              {item.url ? (
-                <a href={withBase(item.url)} target="_blank" rel="noreferrer">
-                  {/* biome-ignore lint/a11y/useAltText: shared tile */}
-                  <img
-                    src={withBase(item.thumbnail_url)}
-                    alt={item.filename}
-                    className="h-full w-full object-cover"
-                  />
-                </a>
-              ) : (
-                // biome-ignore lint/a11y/useAltText: shared tile (view-only)
-                <img
-                  src={withBase(item.thumbnail_url)}
-                  alt={item.filename}
-                  className="h-full w-full object-cover"
-                />
-              )}
-            </li>
-          ))}
-        </ul>
+        <TimelineMediaView
+          className="mt-6"
+          items={data.items}
+          getId={(item) => item.id}
+          getDate={(item) => item.created_at}
+          getWidth={(item) => item.width}
+          getHeight={(item) => item.height}
+          // Security boundary: both URLs come from the share response. The
+          // timeline adapter never synthesizes a private `/api/image` route.
+          getThumbnailUrl={(item) => withBase(item.thumbnail_url)}
+          getOriginalUrl={(item) => (item.url ? withBase(item.url) : null)}
+          getAlt={(item) => item.filename}
+          getItemTestId={(item) => `shared-asset-${item.id}`}
+          getOpenTestId={(item) => `open-shared-asset-${item.id}`}
+          empty={<p className="muted-copy mt-6">This album has no photos.</p>}
+        />
       </div>
     </main>
   );

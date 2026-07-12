@@ -30,6 +30,25 @@ const api = vi.hoisted(() => ({
   deleteSharedLink: vi.fn(),
 }));
 
+class FakeResizeObserver {
+  constructor(private callback: ResizeObserverCallback) {}
+
+  observe(target: Element) {
+    this.callback(
+      [
+        {
+          target,
+          contentRect: { width: 1000, height: 0 } as DOMRectReadOnly,
+        } as ResizeObserverEntry,
+      ],
+      this as unknown as ResizeObserver,
+    );
+  }
+
+  unobserve() {}
+  disconnect() {}
+}
+
 vi.mock("@/lib/api", () => api);
 vi.mock("@/lib/media", () => ({ resolveMediaUrl: (u: string) => u }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -80,6 +99,8 @@ beforeEach(() => {
     total: 2,
   });
   api.getSharedLinks.mockResolvedValue({ shared_links: [], total: 0 });
+  vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+  vi.stubGlobal("innerHeight", 5000);
   vi.stubGlobal(
     "Image",
     class {

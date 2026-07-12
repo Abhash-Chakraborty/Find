@@ -25,11 +25,22 @@ import { useTimeline } from "@/lib/use-timeline";
 
 export default function TimelinePage() {
   const queryClient = useQueryClient();
-  const [likedOnly, setLikedOnly] = useState(false);
-  const { buckets, assets, total, isLoadingBuckets, isError, loadBucket } =
-    useTimeline({
-      liked: likedOnly || undefined,
-    });
+  const [likedOnly, setLikedOnly] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("liked") === "true",
+  );
+  const {
+    buckets,
+    assets,
+    total,
+    isLoadingBuckets,
+    isError,
+    loadBucket,
+    loadedBucketKeys,
+  } = useTimeline({
+    liked: likedOnly || undefined,
+  });
   const [scrollOffset, setScrollOffset] = useState(0);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   // Local favorite overrides for instant feedback (the per-bucket cache isn't
@@ -41,6 +52,7 @@ export default function TimelinePage() {
   // per-bucket cache still holds them, so we hide them locally.
   const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const visibleAssets = useMemo(
     () => assets.filter((a) => !removedIds.has(a.id)),
@@ -91,10 +103,57 @@ export default function TimelinePage() {
     }
   }, [buckets, loadBucket]);
 
+  const nextBucket = useMemo(() => {
+    const loaded = new Set(loadedBucketKeys);
+    return buckets.find((bucket) => !loaded.has(bucket.timeBucket));
+  }, [buckets, loadedBucketKeys]);
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (
+      !sentinel ||
+      !nextBucket ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          loadBucket(nextBucket.timeBucket);
+        }
+      },
+      { rootMargin: "800px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loadBucket, nextBucket]);
+
   // When the user scrubs: load the target month's data AND scroll the grid to
   // it. The scrubber works in estimated-height space and the grid in real
   // layout space, so we bridge via a 0..1 fraction → window scroll position.
-  const scrubberLayout = buildScrubberLayout(buckets);
+  const scrubberLayout = useMemo(() => buildScrubberLayout(buckets), [buckets]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || scrubberLayout.totalHeight <= 0) {
+      return;
+    }
+    const update = () => {
+      const documentElement = document.documentElement;
+      const scrollable = Math.max(
+        1,
+        documentElement.scrollHeight - window.innerHeight,
+      );
+      const fraction = Math.min(1, Math.max(0, window.scrollY / scrollable));
+      const offset = fraction * scrubberLayout.totalHeight;
+      setScrollOffset(offset);
+      const segment = offsetToSegment(scrubberLayout, offset);
+      if (segment) loadBucket(segment.timeBucket);
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, [loadBucket, scrubberLayout]);
   const handleScrub = useCallback(
     (offset: number) => {
       setScrollOffset(offset);
@@ -115,21 +174,51 @@ export default function TimelinePage() {
   const viewerAssets = visibleAssets.map((a) => ({
     id: a.id,
     thumbnailUrl: a.thumbnailUrl,
-    originalUrl: `/api/image/${a.id}`,
+    originalUrl: `/api/image/${a.id}/original`,
+    alt: a.createdAt
+      ? `Photo from ${new Date(a.createdAt).toLocaleDateString()}`
+      : `Photo ${a.id}`,
   }));
 
   return (
-    <main className="timeline-page" style={{ position: "relative" }}>
-      <header>
-        <h1>Timeline</h1>
-        {!isLoadingBuckets && (
-          <p data-testid="timeline-total">{total} photos</p>
-        )}
+    <main
+      className="timeline-page page-surface"
+      style={{ position: "relative" }}
+    >
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--frost)] pb-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--blue)]">
+            Library
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold text-[color:var(--near-white)]">
+            Photos
+          </h1>
+          {!isLoadingBuckets && (
+            <p
+              data-testid="timeline-total"
+              className="mt-1 text-sm text-[color:var(--silver)]"
+            >
+              {total} photos
+            </p>
+          )}
+        </div>
         <button
           type="button"
           data-testid="timeline-favorites-toggle"
           aria-pressed={likedOnly}
-          onClick={() => setLikedOnly((v) => !v)}
+          onClick={() =>
+            setLikedOnly((current) => {
+              const next = !current;
+              if (typeof window !== "undefined") {
+                const url = new URL(window.location.href);
+                if (next) url.searchParams.set("liked", "true");
+                else url.searchParams.delete("liked");
+                window.history.replaceState(null, "", url);
+              }
+              return next;
+            })
+          }
+          className="frost-button px-4 py-2 text-sm font-medium"
         >
           {likedOnly ? "Showing favorites" : "Show favorites"}
         </button>
@@ -151,7 +240,7 @@ export default function TimelinePage() {
         <p data-testid="timeline-empty">No photos yet.</p>
       )}
 
-      <div style={{ display: "flex" }}>
+      <div className="flex gap-3" style={{ display: "flex" }}>
         <div ref={scrollRef} id="timeline-scroll-region" style={{ flex: 1 }}>
           <JustifiedGrid
             items={visibleAssets}
@@ -163,23 +252,39 @@ export default function TimelinePage() {
                 onClick={() => setViewerIndex(index)}
                 style={{ width: "100%", height: "100%", padding: 0, border: 0 }}
               >
-                {/* biome-ignore lint/a11y/useAltText: thumbnail tile */}
+                {/* biome-ignore lint/performance/noImgElement: authenticated API thumbnail */}
                 <img
                   src={asset.thumbnailUrl}
-                  alt=""
+                  alt={
+                    asset.createdAt
+                      ? `Photo from ${new Date(asset.createdAt).toLocaleDateString()}`
+                      : `Photo ${asset.id}`
+                  }
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
               </button>
             )}
           />
+          <div
+            ref={loadMoreRef}
+            className="grid min-h-16 place-items-center text-xs text-[color:var(--muted)]"
+            aria-live="polite"
+          >
+            {nextBucket ? "Loading more of your timeline…" : null}
+          </div>
         </div>
 
         {buckets.length > 0 && (
-          <TimelineScrubber
-            buckets={buckets}
-            scrollOffset={scrollOffset}
-            onScrub={handleScrub}
-          />
+          <aside
+            aria-label="Timeline navigation"
+            className="sticky top-[calc(var(--nav-height)+12px)] h-[calc(100dvh-var(--nav-height)-24px)] text-[color:var(--silver)]"
+          >
+            <TimelineScrubber
+              buckets={buckets}
+              scrollOffset={scrollOffset}
+              onScrub={handleScrub}
+            />
+          </aside>
         )}
       </div>
 

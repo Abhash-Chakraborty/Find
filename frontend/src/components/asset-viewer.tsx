@@ -277,11 +277,11 @@ export function AssetViewer({
       onPointerCancel={endPan}
       onDoubleClick={onDoubleClick}
     >
-      {/* biome-ignore lint/a11y/useAltText: decorative full-screen media */}
+      {/* biome-ignore lint/performance/noImgElement: authenticated originals and share-scoped media bypass the Next optimizer. */}
       <img
         data-testid="viewer-image"
         src={src}
-        alt=""
+        alt={active.alt ?? `Photo ${active.id}`}
         draggable={false}
         style={{
           position: "absolute",

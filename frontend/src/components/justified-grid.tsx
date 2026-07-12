@@ -42,6 +42,7 @@ interface JustifiedGridProps<T extends JustifiedGridItem> {
 const DEFAULT_TARGET_ROW_HEIGHT = 235;
 const DEFAULT_GAP = 8;
 const DEFAULT_OVERSCAN_PX = 600;
+const SSR_FALLBACK_WIDTH = 1024;
 
 // Use layout effect in the browser, plain effect during SSR to avoid warnings.
 const useIsomorphicLayoutEffect =
@@ -110,7 +111,10 @@ export function JustifiedGrid<T extends JustifiedGridItem>({
   const layout = useMemo(
     () =>
       computeJustifiedLayout(items, {
-        containerWidth,
+        // Render a deterministic first layout during SSR/jsdom instead of an
+        // empty grid. ResizeObserver replaces this with the real width before
+        // paint in normal browsers.
+        containerWidth: containerWidth || SSR_FALLBACK_WIDTH,
         targetRowHeight,
         gap,
       }),

@@ -11,13 +11,14 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ImagePreviewModal,
   type PreviewMedia,
 } from "@/components/image-preview-modal";
 import { FeedbackActions } from "@/components/person-feedback-actions";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
   getPeople,
@@ -189,6 +190,7 @@ export default function PeoplePage() {
   const queryClient = useQueryClient();
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [previewMedia, setPreviewMedia] = useState<PreviewMedia | null>(null);
+  const personTimelineScrollRef = useRef<HTMLDivElement | null>(null);
 
   const {
     data: people,
@@ -411,7 +413,10 @@ export default function PeoplePage() {
               )}
             </div>
 
-            <div className="max-h-[calc(90dvh-76px)] overflow-y-auto bg-[hsl(var(--background))] p-6">
+            <div
+              ref={personTimelineScrollRef}
+              className="max-h-[calc(90dvh-76px)] overflow-y-auto bg-[hsl(var(--background))] p-6"
+            >
               {selectedPersonQuery.isLoading && (
                 <div className="flex items-center justify-center py-24">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -425,77 +430,46 @@ export default function PeoplePage() {
               )}
 
               {selectedPersonQuery.data && (
-                <VirtualizedGrid
+                <TimelineMediaView
                   items={selectedPersonQuery.data.images}
-                  className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4"
-                  estimateRowHeight={330}
-                  getKey={(img) => img.media_id}
-                  renderItem={(img) => {
+                  scrollContainerRef={personTimelineScrollRef}
+                  getId={(img) => img.media_id}
+                  getDate={() => null}
+                  getThumbnailUrl={(img) =>
+                    resolveMediaUrl(img.thumbnail_url, null, img.media_id, true)
+                  }
+                  getOriginalUrl={(img) =>
+                    `/api/image/${img.media_id}/original`
+                  }
+                  getAlt={(img) => img.filename}
+                  getOpenLabel={(img) => `Preview ${img.filename}`}
+                  onOpenItem={(img) =>
+                    setPreviewMedia({
+                      id: img.media_id,
+                      filename: img.filename,
+                    })
+                  }
+                  renderItemActions={(img) => {
                     const faceIds = img.faces.map((face) => face.id);
-                    const imageSrc = resolveMediaUrl(
-                      img.thumbnail_url,
-                      null,
-                      img.media_id,
-                      true,
-                    );
-
                     return (
-                      <article
-                        key={img.media_id}
-                        className="frost-panel card-hover group overflow-hidden rounded-3xl border border-[var(--frost)]"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedPersonId === null) return;
+                          wrongPersonMutation.mutate({
+                            personId: selectedPersonId,
+                            faceIds,
+                          });
+                        }}
+                        disabled={
+                          faceIds.length === 0 || wrongPersonMutation.isPending
+                        }
+                        className="frost-button px-3 py-2 text-xs font-medium disabled:opacity-50"
                       >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPreviewMedia({
-                              id: img.media_id,
-                              filename: img.filename,
-                            })
-                          }
-                          className="block w-full text-left"
-                          aria-label={`Preview ${img.filename}`}
-                        >
-                          <div className="relative aspect-square overflow-hidden bg-[color:var(--surface-soft)]">
-                            {imageSrc ? (
-                              <Image
-                                src={imageSrc}
-                                alt={img.filename}
-                                fill
-                                className="object-cover transition-transform duration-300 group-hover:scale-105"
-                                sizes="(max-width: 768px) 50vw, 25vw"
-                                unoptimized
-                              />
-                            ) : null}
-                          </div>
-                        </button>
-                        <div className="space-y-3 border-t border-[var(--frost-soft)] bg-[color:var(--surface-soft)] p-3">
-                          <p className="text-xs text-[color:var(--silver)]">
-                            {img.faces.length}{" "}
-                            {img.faces.length === 1 ? "face" : "faces"} detected
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (selectedPersonId === null) {
-                                return;
-                              }
-                              wrongPersonMutation.mutate({
-                                personId: selectedPersonId,
-                                faceIds,
-                              });
-                            }}
-                            disabled={
-                              faceIds.length === 0 ||
-                              wrongPersonMutation.isPending
-                            }
-                            className="frost-button w-full justify-center px-3 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {wrongPersonMutation.isPending
-                              ? "Saving..."
-                              : "Wrong person"}
-                          </button>
-                        </div>
-                      </article>
+                        {wrongPersonMutation.isPending
+                          ? "Saving…"
+                          : "Wrong person"}
+                      </button>
                     );
                   }}
                 />

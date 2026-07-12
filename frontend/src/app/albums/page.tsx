@@ -104,7 +104,7 @@ export default function AlbumsPage() {
                       src={
                         resolveMediaUrl(album.cover_thumbnail_url) ?? undefined
                       }
-                      alt=""
+                      alt={`Cover for ${album.name}`}
                       className="h-full w-full object-cover"
                     />
                   )}

@@ -2,8 +2,8 @@
 
 import axios from "axios";
 import { useState } from "react";
-import { api } from "@/lib/api";
 import { vaultStore } from "@/store/vaultStore";
+import { unlockVault } from "./vault-client";
 
 export function VaultUnlock() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -29,16 +29,18 @@ export function VaultUnlock() {
     setIsSubmitting(true);
 
     try {
-      const response = await api.post<{ session_token: string }>(
-        "/api/vault/unlock",
-        {
-          passphrase,
-        },
-      );
-      vaultStore.getState().unlock(response.data.session_token);
+      const sessionToken = await unlockVault(passphrase);
+      vaultStore.getState().unlock(sessionToken);
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         setErrorMessage("Incorrect vault passphrase.");
+      } else if (axios.isAxiosError(error) && error.response?.status === 400) {
+        const detail = error.response.data?.detail;
+        setErrorMessage(
+          typeof detail === "string"
+            ? detail
+            : "Use at least 8 characters for a new vault passphrase.",
+        );
       } else {
         setErrorMessage(
           "Vault could not be unlocked right now. Please try again.",

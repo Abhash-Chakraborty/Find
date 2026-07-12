@@ -5,6 +5,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 // Create axios instance with proper configuration
 export const api: AxiosInstance = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -210,9 +211,101 @@ export interface JobStatus {
 }
 
 export interface AppConfig {
-  ml_mode: "full" | "mock";
+  ml_mode: "disabled" | "full" | "mock" | "remote";
   accel_mode?: AccelMode;
 }
+
+export interface AccountUser {
+  id: number;
+  username: string;
+  display_name: string | null;
+  role: "admin" | "member";
+}
+
+export interface AuthState {
+  mode: "local" | "shared";
+  user: AccountUser | null;
+}
+
+export interface AuthStatus {
+  mode: "local" | "shared";
+  setup_available: boolean;
+}
+
+export interface AccountSession {
+  id: number;
+  created_at: string | null;
+  expires_at: string;
+  current: boolean;
+}
+
+export const getAuthStatus = async (): Promise<AuthStatus> => {
+  const response = await api.get<AuthStatus>("/api/auth/status");
+  return response.data;
+};
+
+export const getCurrentAccount = async (): Promise<AuthState> => {
+  const response = await api.get<AuthState>("/api/auth/me");
+  return response.data;
+};
+
+export const setupAccount = async (params: {
+  username: string;
+  display_name?: string;
+  password: string;
+}): Promise<{ user: AccountUser }> => {
+  const response = await api.post<{ user: AccountUser }>(
+    "/api/auth/setup",
+    params,
+  );
+  return response.data;
+};
+
+export const loginAccount = async (params: {
+  username: string;
+  password: string;
+}): Promise<{ user: AccountUser }> => {
+  const response = await api.post<{ user: AccountUser }>(
+    "/api/auth/login",
+    params,
+  );
+  return response.data;
+};
+
+export const logoutAccount = async (): Promise<void> => {
+  await api.post("/api/auth/logout");
+};
+
+export const updateAccountProfile = async (params: {
+  username?: string;
+  display_name?: string;
+}): Promise<{ user: AccountUser }> => {
+  const response = await api.patch<{ user: AccountUser }>(
+    "/api/auth/profile",
+    params,
+  );
+  return response.data;
+};
+
+export const changeAccountPassword = async (params: {
+  current_password: string;
+  new_password: string;
+}): Promise<void> => {
+  await api.post("/api/auth/password", params);
+};
+
+export const getAccountSessions = async (): Promise<AccountSession[]> => {
+  const response = await api.get<{ sessions: AccountSession[] }>(
+    "/api/auth/sessions",
+  );
+  return response.data.sessions;
+};
+
+export const revokeAccountSession = async (
+  sessionId: number,
+): Promise<void> => {
+  await api.delete(`/api/auth/sessions/${sessionId}`);
+};
 
 export type AccelMode = "auto" | "gpu" | "cpu";
 
@@ -245,7 +338,36 @@ export const getHardwareReport = async (): Promise<HardwareReport> => {
 
 export interface AppSettings {
   accel_mode: AccelMode;
+  ai_enabled: boolean;
+  map_enabled: boolean;
+  ml_mode: "disabled" | "full" | "mock" | "remote";
+  supported_ml_modes: string[];
 }
+
+export interface RuntimeConfig {
+  build_profile: "no-ai" | "mock" | "cpu" | "nvidia" | "development" | string;
+  supported_modes: string[];
+  configured_mode: "disabled" | "mock" | "full" | "remote";
+  configured_accel_mode: AccelMode;
+  ai_enabled: boolean;
+  map_enabled: boolean;
+  applied_mode: "disabled" | "mock" | "full" | "unavailable";
+  installed_features: string[];
+  restart_required: boolean;
+  unavailable_reason: string | null;
+  worker: {
+    health: {
+      state: "healthy" | "stale" | "unknown" | "unavailable";
+      age_seconds: number | null;
+    };
+    applied: Record<string, unknown> | null;
+  };
+}
+
+export const getRuntimeConfig = async (): Promise<RuntimeConfig> => {
+  const response = await api.get<RuntimeConfig>("/api/config/runtime");
+  return response.data;
+};
 
 export const getSettings = async (): Promise<AppSettings> => {
   const response = await api.get<AppSettings>("/api/settings");
@@ -256,6 +378,49 @@ export const updateSettings = async (
   patch: Partial<AppSettings>,
 ): Promise<AppSettings> => {
   const response = await api.put<AppSettings>("/api/settings", patch);
+  return response.data;
+};
+
+export interface MapMarker {
+  id: number;
+  lat: number;
+  lon: number;
+  filename: string;
+  created_at: string | null;
+  thumbnail_url: string;
+  ratio: number | null;
+  liked: boolean;
+}
+
+export interface MapMarkersResponse {
+  enabled: boolean;
+  markers: MapMarker[];
+  total: number;
+}
+
+export interface MapMarkerFilters {
+  includeArchived?: boolean;
+  liked?: boolean;
+  west?: number;
+  south?: number;
+  east?: number;
+  north?: number;
+}
+
+/** Load private, account-scoped photo coordinates from the local API. */
+export const getMapMarkers = async (
+  filters: MapMarkerFilters = {},
+): Promise<MapMarkersResponse> => {
+  const response = await api.get<MapMarkersResponse>("/api/map/markers", {
+    params: {
+      include_archived: filters.includeArchived || undefined,
+      liked: filters.liked,
+      west: filters.west,
+      south: filters.south,
+      east: filters.east,
+      north: filters.north,
+    },
+  });
   return response.data;
 };
 

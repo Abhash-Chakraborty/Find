@@ -15,6 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { AlbumShareLinks } from "@/components/album-share-links";
 import { AssetViewer } from "@/components/asset-viewer";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import {
   deleteAlbum,
   getAlbum,
@@ -25,14 +26,12 @@ import {
   trashImage,
   updateAlbum,
 } from "@/lib/api";
-import { resolveMediaUrl } from "@/lib/media";
 
 export default function AlbumDetailPage() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const albumId = Number(params?.id);
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
 
   const { data: album, isLoading: albumLoading } = useQuery({
@@ -173,41 +172,25 @@ export default function AlbumDetailPage() {
           </div>
         )}
 
-        {!assetsLoading && items.length === 0 && (
-          <p data-testid="album-empty" className="muted-copy">
-            This album has no photos yet.
-          </p>
-        )}
-
-        <ul className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
-          {items.map((item, index) => (
-            <li
-              key={item.id}
-              data-testid={`album-asset-${item.id}`}
-              className="group relative aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)]"
-            >
-              <button
-                type="button"
-                aria-label={`Open ${item.filename}`}
-                data-testid={`open-asset-${item.id}`}
-                onClick={() => setViewerIndex(index)}
-                className="block h-full w-full"
-              >
-                {/* biome-ignore lint/a11y/useAltText: album tile */}
-                <img
-                  src={
-                    resolveMediaUrl(
-                      item.thumbnail_url,
-                      item.minio_key,
-                      item.id,
-                      true,
-                    ) ?? undefined
-                  }
-                  alt={item.filename}
-                  className="h-full w-full object-cover"
-                />
-              </button>
-              <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 p-1 opacity-0 transition group-hover:opacity-100">
+        {!assetsLoading && (
+          <TimelineMediaView
+            items={items}
+            getId={(item) => item.id}
+            getDate={(item) => item.created_at}
+            getWidth={(item) => item.width}
+            getHeight={(item) => item.height}
+            getThumbnailUrl={(item) => `/api/image/${item.id}/thumbnail`}
+            getOriginalUrl={(item) => `/api/image/${item.id}/original`}
+            getAlt={(item) => item.filename}
+            getItemTestId={(item) => `album-asset-${item.id}`}
+            getOpenTestId={(item) => `open-asset-${item.id}`}
+            empty={
+              <p data-testid="album-empty" className="muted-copy">
+                This album has no photos yet.
+              </p>
+            }
+            renderItemActions={(item) => (
+              <>
                 <button
                   type="button"
                   aria-label="Set as cover"
@@ -226,10 +209,22 @@ export default function AlbumDetailPage() {
                 >
                   <Trash2 size={14} />
                 </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </>
+            )}
+            renderViewer={({ viewerAssets, index, onIndexChange, onClose }) => (
+              <AssetViewer
+                assets={viewerAssets}
+                index={index}
+                onIndexChange={onIndexChange}
+                onClose={onClose}
+                favoriteIds={favoriteIds}
+                onToggleFavorite={(id) => favoriteMutation.mutate(id)}
+                onArchive={(id) => archiveMutation.mutate(id)}
+                onTrash={(id) => trashMutation.mutate(id)}
+              />
+            )}
+          />
+        )}
 
         {!album && !albumLoading && (
           <p className="muted-copy">
@@ -238,23 +233,6 @@ export default function AlbumDetailPage() {
           </p>
         )}
       </div>
-
-      {viewerIndex !== null && items[viewerIndex] && (
-        <AssetViewer
-          assets={items.map((item) => ({
-            id: item.id,
-            thumbnailUrl: `/api/image/${item.id}/thumbnail`,
-            originalUrl: `/api/image/${item.id}`,
-          }))}
-          index={viewerIndex}
-          onIndexChange={setViewerIndex}
-          onClose={() => setViewerIndex(null)}
-          favoriteIds={favoriteIds}
-          onToggleFavorite={(id) => favoriteMutation.mutate(id)}
-          onArchive={(id) => archiveMutation.mutate(id)}
-          onTrash={(id) => trashMutation.mutate(id)}
-        />
-      )}
     </main>
   );
 }

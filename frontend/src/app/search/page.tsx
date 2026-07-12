@@ -7,12 +7,10 @@ import {
   Loader2,
   Search as SearchIcon,
 } from "lucide-react";
-import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FeedbackRating } from "@/components/feedback-rating";
 import { ImagePreviewModal } from "@/components/image-preview-modal";
-import { StatusIndicator } from "@/components/status-indicator";
-import { VirtualizedGrid } from "@/components/virtualized-grid";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import { type SearchResult, searchImages, submitSearchRating } from "@/lib/api";
 import { MINIO_URL_REFRESH_INTERVAL_MS, resolveMediaUrl } from "@/lib/media";
 
@@ -26,7 +24,6 @@ const examples = [
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [activeQuery, setActiveQuery] = useState("");
-  const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
   const [allResults, setAllResults] = useState<SearchResult[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [currentSkip, setCurrentSkip] = useState(0);
@@ -75,7 +72,6 @@ export default function SearchPage() {
     const trimmedQuery = query.trim();
     if (trimmedQuery) {
       clearedRef.current = false;
-      setSelectedMediaId(null);
       setAllResults([]);
       setHasMore(false);
       setCurrentSkip(0);
@@ -107,28 +103,6 @@ export default function SearchPage() {
       setIsLoadingMore(false);
     }
   };
-
-  const results = allResults;
-  const selectedIndex = useMemo(() => {
-    if (selectedMediaId === null) {
-      return -1;
-    }
-    return results.findIndex((result) => result.media_id === selectedMediaId);
-  }, [results, selectedMediaId]);
-  const selectedMedia = selectedIndex >= 0 ? results[selectedIndex] : null;
-
-  const goToAdjacent = useCallback(
-    (direction: -1 | 1) => {
-      if (selectedIndex < 0) {
-        return;
-      }
-      const next = results[selectedIndex + direction];
-      if (next) {
-        setSelectedMediaId(next.media_id);
-      }
-    },
-    [results, selectedIndex],
-  );
 
   return (
     <div className="page-shell">
@@ -179,7 +153,6 @@ export default function SearchPage() {
                   clearedRef.current = true;
                   setQuery("");
                   searchMutation.reset();
-                  setSelectedMediaId(null);
                   setActiveQuery("");
                   setAllResults([]);
                   setHasMore(false);
@@ -200,7 +173,6 @@ export default function SearchPage() {
                 onClick={() => {
                   clearedRef.current = false;
                   setQuery(example);
-                  setSelectedMediaId(null);
                   setAllResults([]);
                   setHasMore(false);
                   setCurrentSkip(0);
@@ -264,85 +236,59 @@ export default function SearchPage() {
               </p>
             </div>
 
-            <VirtualizedGrid
+            <TimelineMediaView
               items={allResults}
-              className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
-              estimateRowHeight={330}
-              gap={12}
-              getKey={(result) => result.media_id}
-              renderItem={(result) => {
-                const imageSrc = resolveMediaUrl(
+              getId={(result) => result.media_id}
+              getDate={(result) => result.metadata.created_at}
+              getWidth={(result) => result.metadata.width}
+              getHeight={(result) => result.metadata.height}
+              getThumbnailUrl={(result) =>
+                resolveMediaUrl(
                   result.metadata.thumbnail_url ?? result.metadata.url,
                   result.metadata.minio_key,
                   result.media_id,
                   !result.metadata.thumbnail_url,
-                );
-
+                )
+              }
+              getOriginalUrl={(result) =>
+                `/api/image/${result.media_id}/original`
+              }
+              getAlt={(result) => result.metadata.filename}
+              getOpenLabel={(result) => `Preview ${result.metadata.filename}`}
+              renderItemActions={(result) => (
+                <div className="flex items-center gap-2 text-white">
+                  <span className="rounded-full bg-black/70 px-2 py-1 text-xs font-semibold">
+                    {Math.round(result.similarity * 100)}%
+                  </span>
+                  <FeedbackRating
+                    label=""
+                    onRate={(rating) =>
+                      submitSearchRating(result.media_id, rating)
+                    }
+                  />
+                </div>
+              )}
+              renderViewer={({ items, index, onIndexChange, onClose }) => {
+                const result = items[index];
+                if (!result) return null;
                 return (
-                  <article
-                    key={result.media_id}
-                    className="frost-panel card-hover group relative overflow-hidden rounded-2xl text-left"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMediaId(result.media_id)}
-                      className="block w-full text-left"
-                      aria-label={`Preview ${result.metadata.filename}`}
-                    >
-                      <div className="relative aspect-square overflow-hidden bg-[color:var(--surface-soft)]">
-                        {imageSrc ? (
-                          <Image
-                            src={imageSrc}
-                            alt={result.metadata.filename}
-                            fill
-                            className="object-cover transition duration-500 group-hover:scale-[1.035]"
-                            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 16vw"
-                            unoptimized
-                          />
-                        ) : (
-                          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-[color:var(--muted)]">
-                            <ImageOff className="h-7 w-7" />
-                            <span className="text-xs">No preview</span>
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent opacity-70 transition-opacity group-hover:opacity-95" />
-                        <span className="absolute right-3 top-3 rounded-full border border-[var(--frost)] bg-[color:var(--overlay)] px-2.5 py-1 text-xs font-medium text-white backdrop-blur-md">
-                          {Math.round(result.similarity * 100)}%
-                        </span>
-                        <StatusIndicator
-                          status={result.metadata.status}
-                          className="absolute bottom-3 right-3"
-                        />
-                      </div>
-
-                      <div className="space-y-3 p-3">
-                        <p className="truncate text-xs font-medium text-[color:var(--near-white)]">
-                          {result.metadata.filename}
-                        </p>
-                        {result.metadata.caption && (
-                          <p className="line-clamp-2 text-xs leading-5 text-[color:var(--silver)]">
-                            {result.metadata.caption}
-                          </p>
-                        )}
-                        <div className="flex flex-wrap items-center gap-2">
-                          {typeof result.metadata.cluster_id === "number" && (
-                            <span className="accent-badge status-default">
-                              Cluster {result.metadata.cluster_id}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-
-                    <div className="px-3 pb-3">
-                      <FeedbackRating
-                        label=""
-                        onRate={(rating) =>
-                          submitSearchRating(result.media_id, rating)
-                        }
-                      />
-                    </div>
-                  </article>
+                  <ImagePreviewModal
+                    media={{
+                      ...result.metadata,
+                      id: result.media_id,
+                    }}
+                    onClose={onClose}
+                    onPrevious={() => onIndexChange(index - 1)}
+                    onNext={() => onIndexChange(index + 1)}
+                    hasPrevious={index > 0}
+                    hasNext={index < items.length - 1}
+                    onDeleted={(mediaId) => {
+                      setAllResults((current) =>
+                        current.filter((item) => item.media_id !== mediaId),
+                      );
+                      onClose();
+                    }}
+                  />
                 );
               }}
             />
@@ -369,25 +315,6 @@ export default function SearchPage() {
           </div>
         )}
       </div>
-
-      {selectedMedia && (
-        <ImagePreviewModal
-          media={{
-            ...selectedMedia.metadata,
-            id: selectedMedia.media_id,
-          }}
-          onClose={() => setSelectedMediaId(null)}
-          onPrevious={() => goToAdjacent(-1)}
-          onNext={() => goToAdjacent(1)}
-          hasPrevious={selectedIndex > 0}
-          hasNext={selectedIndex >= 0 && selectedIndex < results.length - 1}
-          onDeleted={(mediaId) => {
-            if (selectedMediaId === mediaId) {
-              setSelectedMediaId(null);
-            }
-          }}
-        />
-      )}
     </div>
   );
 }

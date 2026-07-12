@@ -11,12 +11,13 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ImagePreviewModal,
   type PreviewMedia,
 } from "@/components/image-preview-modal";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
   type ClusterDetail,
@@ -85,6 +86,7 @@ export default function ClustersPage() {
   const [clusterJobId, setClusterJobId] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
   const [clusterLabelDraft, setClusterLabelDraft] = useState("");
+  const clusterTimelineScrollRef = useRef<HTMLDivElement | null>(null);
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ["clusters"],
     queryFn: getClusters,
@@ -565,7 +567,10 @@ export default function ClustersPage() {
               </p>
             </div>
 
-            <div className="max-h-[calc(90dvh-88px)] overflow-y-auto p-6">
+            <div
+              ref={clusterTimelineScrollRef}
+              className="max-h-[calc(90dvh-88px)] overflow-y-auto p-6"
+            >
               {selectedClusterQuery.isLoading && (
                 <div className="flex items-center justify-center py-24">
                   <Loader2 className="h-8 w-8 animate-spin text-[color:var(--silver)]" />
@@ -643,63 +648,32 @@ export default function ClustersPage() {
                     </div>
                   )}
 
-                  <VirtualizedGrid
+                  <TimelineMediaView
                     items={filteredMembers}
-                    className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
-                    estimateRowHeight={360}
-                    getKey={(member) => member.id}
-                    renderItem={(member) => {
-                      const imageSrc = resolveMediaUrl(
+                    scrollContainerRef={clusterTimelineScrollRef}
+                    getId={(member) => member.id}
+                    getDate={() => null}
+                    getThumbnailUrl={(member) =>
+                      resolveMediaUrl(
                         member.thumbnail_url ?? member.url,
                         null,
                         member.id,
                         !member.thumbnail_url,
-                      );
-
-                      return (
-                        <button
-                          type="button"
-                          key={member.id}
-                          onClick={() =>
-                            setPreviewMedia({
-                              id: member.id,
-                              filename: member.filename,
-                              url: member.url,
-                              caption: member.caption,
-                            })
-                          }
-                          className="frost-panel card-hover overflow-hidden rounded-3xl text-left"
-                          aria-label={`Preview ${member.filename}`}
-                        >
-                          <div className="relative aspect-[4/3] bg-[color:var(--surface-soft)]">
-                            {imageSrc ? (
-                              <Image
-                                src={imageSrc}
-                                alt={member.filename}
-                                fill
-                                className="object-cover"
-                                sizes="(max-width: 768px) 100vw, 33vw"
-                                unoptimized
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[color:var(--muted)]">
-                                <ImageOff className="h-6 w-6" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="space-y-2 p-4">
-                            <p className="truncate text-sm font-medium text-[color:var(--near-white)]">
-                              {member.filename}
-                            </p>
-                            {member.caption && (
-                              <p className="line-clamp-2 text-sm leading-6 text-[color:var(--silver)]">
-                                {member.caption}
-                              </p>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    }}
+                      )
+                    }
+                    getOriginalUrl={(member) =>
+                      `/api/image/${member.id}/original`
+                    }
+                    getAlt={(member) => member.filename}
+                    getOpenLabel={(member) => `Preview ${member.filename}`}
+                    onOpenItem={(member) =>
+                      setPreviewMedia({
+                        id: member.id,
+                        filename: member.filename,
+                        url: member.url,
+                        caption: member.caption,
+                      })
+                    }
                   />
                 </div>
               )}

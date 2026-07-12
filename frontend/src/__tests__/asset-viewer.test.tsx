@@ -74,6 +74,39 @@ describe("AssetViewer", () => {
     );
   });
 
+  it("uses descriptive asset text and a safe fallback for image alternatives", () => {
+    const assets = [
+      { ...ASSETS[0], alt: "Sunset above the mountain ridge" },
+      ASSETS[1],
+    ];
+    const { rerender } = render(
+      <AssetViewer
+        assets={assets}
+        index={0}
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("viewer-image")).toHaveAttribute(
+      "alt",
+      "Sunset above the mountain ridge",
+    );
+
+    rerender(
+      <AssetViewer
+        assets={assets}
+        index={1}
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("viewer-image")).toHaveAttribute(
+      "alt",
+      "Photo 1",
+    );
+  });
+
   it("swaps to the original once it preloads", () => {
     renderViewer(1);
     // The active original preload is created; fire its onload.

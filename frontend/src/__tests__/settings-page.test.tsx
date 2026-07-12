@@ -10,21 +10,30 @@
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import SettingsPage from "@/app/settings/page";
 import type { AppSettings, HardwareReport } from "@/lib/api";
 
-const { getSettings, updateSettings, getHardwareReport } = vi.hoisted(() => ({
-  getSettings: vi.fn(),
-  updateSettings: vi.fn(),
-  getHardwareReport: vi.fn(),
-}));
+const { getSettings, updateSettings, getHardwareReport, getRuntimeConfig } =
+  vi.hoisted(() => ({
+    getSettings: vi.fn(),
+    updateSettings: vi.fn(),
+    getHardwareReport: vi.fn(),
+    getRuntimeConfig: vi.fn(),
+  }));
 
 vi.mock("@/lib/api", () => ({
   getSettings,
   updateSettings,
   getHardwareReport,
+  getRuntimeConfig,
 }));
 
 const REPORT: HardwareReport = {
@@ -62,8 +71,29 @@ afterEach(() => {
 });
 
 describe("SettingsPage", () => {
+  const settings = (overrides: Partial<AppSettings> = {}): AppSettings => ({
+    accel_mode: "auto",
+    ai_enabled: true,
+    map_enabled: false,
+    ml_mode: "full",
+    supported_ml_modes: ["disabled", "mock", "full"],
+    ...overrides,
+  });
+
+  const prepareRuntime = () => {
+    getRuntimeConfig.mockResolvedValue({
+      build_profile: "cpu",
+      applied_mode: "full",
+      ai_enabled: true,
+      restart_required: false,
+      unavailable_reason: null,
+      worker: { health: { state: "healthy", age_seconds: 1 }, applied: null },
+    });
+  };
+
   it("loads the persisted accel mode and selects it", async () => {
-    getSettings.mockResolvedValue({ accel_mode: "cpu" } satisfies AppSettings);
+    prepareRuntime();
+    getSettings.mockResolvedValue(settings({ accel_mode: "cpu" }));
     getHardwareReport.mockResolvedValue(REPORT);
     renderPage();
 
@@ -76,11 +106,10 @@ describe("SettingsPage", () => {
   });
 
   it("persists a changed mode via updateSettings", async () => {
-    getSettings.mockResolvedValue({ accel_mode: "auto" } satisfies AppSettings);
+    prepareRuntime();
+    getSettings.mockResolvedValue(settings());
     getHardwareReport.mockResolvedValue(REPORT);
-    updateSettings.mockResolvedValue({
-      accel_mode: "gpu",
-    } satisfies AppSettings);
+    updateSettings.mockResolvedValue(settings({ accel_mode: "gpu" }));
     renderPage();
 
     await waitFor(() =>
@@ -97,7 +126,8 @@ describe("SettingsPage", () => {
   });
 
   it("shows a save error when the update fails", async () => {
-    getSettings.mockResolvedValue({ accel_mode: "auto" } satisfies AppSettings);
+    prepareRuntime();
+    getSettings.mockResolvedValue(settings());
     getHardwareReport.mockResolvedValue(REPORT);
     updateSettings.mockRejectedValue(new Error("boom"));
     renderPage();
@@ -112,6 +142,54 @@ describe("SettingsPage", () => {
 
     await waitFor(() =>
       expect(screen.getByTestId("settings-save-error")).toBeInTheDocument(),
+    );
+  });
+
+  it("requires an explicit opt-in before enabling EXIF location storage", async () => {
+    prepareRuntime();
+    getSettings.mockResolvedValue(settings());
+    getHardwareReport.mockResolvedValue(REPORT);
+    updateSettings.mockResolvedValue(settings({ map_enabled: true }));
+    renderPage();
+
+    const mapSwitch = await screen.findByRole("switch", {
+      name: /enable private photo map/i,
+    });
+    await waitFor(() => expect(mapSwitch).toBeEnabled());
+    expect(mapSwitch).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(mapSwitch);
+
+    await waitFor(() =>
+      expect(updateSettings).toHaveBeenCalledWith({ map_enabled: true }),
+    );
+  });
+
+  it("controls AI jobs and reports the installed artifact", async () => {
+    prepareRuntime();
+    getSettings.mockResolvedValue(settings({ ai_enabled: true }));
+    updateSettings.mockResolvedValue(settings({ ai_enabled: false }));
+    renderPage();
+
+    expect(await screen.findByText("cpu")).toBeInTheDocument();
+    const aiSwitch = screen.getByRole("switch", {
+      name: /enable local ai processing/i,
+    });
+    fireEvent.click(aiSwitch);
+    await waitFor(() =>
+      expect(updateSettings).toHaveBeenCalledWith({ ai_enabled: false }),
+    );
+  });
+
+  it("switches directly to any AI mode installed in the artifact", async () => {
+    prepareRuntime();
+    getSettings.mockResolvedValue(settings({ ml_mode: "mock" }));
+    updateSettings.mockResolvedValue(settings({ ml_mode: "full" }));
+    renderPage();
+
+    const mode = await screen.findByLabelText(/processing mode/i);
+    fireEvent.change(mode, { target: { value: "full" } });
+    await waitFor(() =>
+      expect(updateSettings).toHaveBeenCalledWith({ ml_mode: "full" }),
     );
   });
 });

@@ -9,8 +9,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import { emptyTrash, getTrash, restoreImage } from "@/lib/api";
-import { resolveMediaUrl } from "@/lib/media";
 
 export default function TrashPage() {
   const queryClient = useQueryClient();
@@ -76,44 +76,40 @@ export default function TrashPage() {
           </p>
         )}
 
-        {!isLoading && !isError && items.length === 0 && (
-          <p data-testid="trash-empty" className="muted-copy">
-            Trash is empty.
-          </p>
-        )}
-
-        <ul className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              data-testid={`trash-item-${item.id}`}
-              className="group relative aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)]"
-            >
-              {/* biome-ignore lint/a11y/useAltText: trash tile */}
-              <img
-                src={
-                  resolveMediaUrl(
-                    item.thumbnail_url,
-                    item.minio_key,
-                    item.id,
-                    true,
-                  ) ?? undefined
-                }
-                alt={item.filename}
-                className="h-full w-full object-cover opacity-70"
-              />
+        {!isLoading && !isError && (
+          <TimelineMediaView
+            items={items}
+            getId={(item) => item.id}
+            getDate={(item) => item.created_at}
+            getWidth={(item) => item.width}
+            getHeight={(item) => item.height}
+            getThumbnailUrl={(item) => `/api/image/${item.id}/thumbnail`}
+            getOriginalUrl={(item) => `/api/image/${item.id}/original`}
+            getAlt={(item) => item.filename}
+            getItemTestId={(item) => `trash-item-${item.id}`}
+            getOpenTestId={(item) => `open-trash-${item.id}`}
+            empty={
+              <p data-testid="trash-empty" className="muted-copy">
+                Trash is empty.
+              </p>
+            }
+            renderItemActions={(item) => (
               <button
                 type="button"
                 aria-label="Restore image"
                 data-testid={`restore-${item.id}`}
                 onClick={() => restoreMutation.mutate(item.id)}
-                className="absolute bottom-1 right-1 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-xs text-white opacity-0 transition group-hover:opacity-100"
+                disabled={
+                  restoreMutation.isPending &&
+                  restoreMutation.variables === item.id
+                }
+                className="flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-xs text-white disabled:opacity-50"
               >
                 <RotateCcw size={12} /> Restore
               </button>
-            </li>
-          ))}
-        </ul>
+            )}
+          />
+        )}
       </div>
     </main>
   );
