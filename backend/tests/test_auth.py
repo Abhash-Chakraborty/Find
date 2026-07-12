@@ -121,6 +121,11 @@ class TestSetup:
         assert "token" in data
         assert "expires_at" in data
 
+    def test_setup_sets_httponly_session_cookie(self, client):
+        _setup_admin(client)
+        cookie = client.cookies.get("find_session")
+        assert cookie
+
     def test_setup_only_once(self, client):
         _setup_admin(client)
         resp = client.post(
@@ -203,6 +208,12 @@ class TestLogin:
         assert resp.status_code == 200
         assert resp.json()["user"]["username"] == ADMIN_USERNAME
 
+    def test_httponly_cookie_works_on_me_endpoint(self, client):
+        _setup_admin(client)
+        resp = client.get("/api/auth/me")
+        assert resp.status_code == 200
+        assert resp.json()["user"]["username"] == ADMIN_USERNAME
+
     def test_me_returns_local_mode_without_token(self, client):
         resp = client.get("/api/auth/me")
         assert resp.status_code == 200
@@ -221,6 +232,82 @@ class TestLogin:
         me = client.get("/api/auth/me", headers=headers)
         # In shared mode the token no longer resolves → 401
         assert me.status_code == 401
+
+    def test_logout_clears_cookie_session(self, client):
+        _setup_admin(client)
+        assert client.get("/api/auth/me").status_code == 200
+        assert client.post("/api/auth/logout").status_code == 200
+        assert client.get("/api/auth/me").status_code == 401
+
+
+class TestAccountSettings:
+    def test_auth_status_reports_local_then_shared(self, client):
+        local = client.get("/api/auth/status")
+        assert local.json() == {"mode": "local", "setup_available": True}
+        _setup_admin(client)
+        shared = client.get("/api/auth/status")
+        assert shared.json() == {"mode": "shared", "setup_available": False}
+
+    def test_profile_update_changes_current_account(self, client):
+        _setup_admin(client)
+        response = client.patch(
+            "/api/auth/profile",
+            json={"username": "owner", "display_name": "Find Owner"},
+        )
+        assert response.status_code == 200
+        assert response.json()["user"]["username"] == "owner"
+        assert response.json()["user"]["display_name"] == "Find Owner"
+
+    def test_profile_rejects_duplicate_username(self, client, db):
+        _setup_admin(client)
+        from find_api.core.auth import hash_password
+        from find_api.models.user import User
+
+        db.add(
+            User(
+                username="taken",
+                display_name="Taken",
+                password_hash=hash_password("anotherpass"),
+                role="member",
+            )
+        )
+        db.commit()
+        response = client.patch("/api/auth/profile", json={"username": "taken"})
+        assert response.status_code == 409
+
+    def test_password_change_rotates_sessions(self, client):
+        data = _setup_admin(client)
+        old_token = data["token"]
+        second = _login(client).json()["token"]
+        response = client.post(
+            "/api/auth/password",
+            json={
+                "current_password": ADMIN_PASSWORD,
+                "new_password": "new-secure-password",
+            },
+        )
+        assert response.status_code == 200
+        assert (
+            client.get("/api/auth/me", headers=_auth_header(old_token)).status_code
+            == 401
+        )
+        assert (
+            client.get("/api/auth/me", headers=_auth_header(second)).status_code == 401
+        )
+        assert client.get("/api/auth/me").status_code == 200
+        assert _login(client, password="new-secure-password").status_code == 200
+
+    def test_sessions_can_be_listed_and_revoked(self, client):
+        _setup_admin(client)
+        sessions = client.get("/api/auth/sessions")
+        assert sessions.status_code == 200
+        assert len(sessions.json()["sessions"]) == 1
+        current = sessions.json()["sessions"][0]
+        assert current["current"] is True
+        revoked = client.delete(f"/api/auth/sessions/{current['id']}")
+        assert revoked.status_code == 200
+        assert revoked.json()["current"] is True
+        assert client.get("/api/auth/me").status_code == 401
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +499,7 @@ class TestSecurityProperties:
 
     def test_unauthenticated_cannot_list_join_requests(self, client):
         _setup_admin(client)
+        client.cookies.clear()
         resp = client.get("/api/auth/join-requests")
         assert resp.status_code in (401, 403)
 

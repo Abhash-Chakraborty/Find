@@ -4,12 +4,20 @@ Local mode (no admin) is permissive; shared mode gates writes to admins. The
 hardware report reflects the persisted accel-mode preference once set.
 """
 
+from unittest.mock import patch
+
+from find_api.core.config import settings
+
 
 class TestSettingsLocalMode:
     def test_get_defaults_to_env(self, client):
         body = client.get("/api/settings").json()
         # Env default is "auto" (no row persisted yet).
         assert body["accel_mode"] == "auto"
+        assert body["ai_enabled"] is True
+        assert body["map_enabled"] is False
+        assert body["ml_mode"] == settings.ML_MODE
+        assert "disabled" in body["supported_ml_modes"]
 
     def test_put_persists_and_reads_back(self, client):
         put = client.put("/api/settings", json={"accel_mode": "cpu"})
@@ -48,3 +56,55 @@ class TestSettingsLocalMode:
             client.put("/api/settings", json={"accel_mode": "turbo"}).status_code == 422
         )
         assert client.get("/api/settings").json()["accel_mode"] == "auto"
+
+    def test_ai_and_map_preferences_persist_together(self, client):
+        response = client.put(
+            "/api/settings",
+            json={"ai_enabled": False, "map_enabled": True},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["accel_mode"] == "auto"
+        assert body["ai_enabled"] is False
+        assert body["map_enabled"] is True
+        assert body["ml_mode"] == settings.ML_MODE
+        assert "disabled" in body["supported_ml_modes"]
+        assert client.get("/api/config").json()["ai_enabled"] is False
+        assert client.get("/api/config").json()["map_enabled"] is True
+
+    def test_installed_ai_mode_can_be_changed_from_settings(self, client):
+        with patch("find_api.core.runtime_profile.settings.FIND_BUILD_PROFILE", "cpu"):
+            response = client.put("/api/settings", json={"ml_mode": "full"})
+        assert response.status_code == 200
+        assert response.json()["ml_mode"] == "full"
+        assert client.get("/api/config").json()["configured_ml_mode"] == "full"
+
+    def test_uninstalled_ai_mode_is_rejected(self, client):
+        with patch(
+            "find_api.core.runtime_profile.settings.FIND_BUILD_PROFILE", "no-ai"
+        ):
+            response = client.put("/api/settings", json={"ml_mode": "full"})
+        assert response.status_code == 422
+
+    def test_runtime_endpoint_reports_worker_applied_state(self, client):
+        worker_process = {
+            "process": "worker",
+            "updated_at": 1,
+            "runtime": {"applied_mode": "mock", "preferences_source": "database"},
+        }
+        with (
+            patch(
+                "find_api.routers.config.get_worker_process_status",
+                return_value=worker_process,
+            ),
+            patch(
+                "find_api.routers.config.get_worker_runtime_status",
+                return_value=worker_process["runtime"],
+            ),
+        ):
+            body = client.get("/api/config/runtime").json()
+
+        assert body["build_profile"]
+        assert body["installed_features"]
+        assert body["worker"]["applied"]["applied_mode"] == "mock"
+        assert body["worker"]["health"]["state"] in {"healthy", "stale"}

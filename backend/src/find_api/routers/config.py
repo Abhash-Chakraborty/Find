@@ -12,14 +12,22 @@ from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_admin_user, get_required_user
 from find_api.core.hardware import detect_capabilities, resolve_execution
+from find_api.core.runtime_profile import (
+    ACCEL_MODE_KEY,
+    AI_ENABLED_KEY,
+    MAP_ENABLED_KEY,
+    ML_MODE_KEY,
+    get_worker_process_status,
+    get_worker_runtime_status,
+    load_runtime_preferences,
+    resolve_runtime,
+    worker_health,
+)
 from find_api.models.app_setting import AppSetting
 from find_api.models.user import User
 
 router = APIRouter()
 
-# The persisted-settings key for the hardware-acceleration mode. Kept narrow on
-# purpose (YAGNI): only settings the UI actually exposes + persists live here.
-ACCEL_MODE_KEY = "accel_mode"
 _VALID_ACCEL_MODES = ("auto", "gpu", "cpu")
 
 
@@ -34,16 +42,49 @@ def _effective_accel_mode(db: Session) -> str:
     return get_setting(db, ACCEL_MODE_KEY, settings.ACCEL_MODE)
 
 
+def _runtime_resolution(db: Session):
+    return resolve_runtime(load_runtime_preferences(db))
+
+
 @router.get("/config")
 def get_app_config(db: Session = Depends(get_db)):
     """
     Return safe public application configuration
     """
 
+    runtime = _runtime_resolution(db)
     return {
-        "ml_mode": settings.ML_MODE,
-        "accel_mode": _effective_accel_mode(db),
+        "ml_mode": runtime.applied_mode,
+        "configured_ml_mode": runtime.configured_mode,
+        "accel_mode": runtime.configured_accel_mode,
+        "ai_enabled": runtime.ai_enabled,
+        "map_enabled": runtime.map_enabled,
+        "build_profile": runtime.build_profile,
+        "supported_ml_modes": list(runtime.supported_modes),
     }
+
+
+@router.get("/config/runtime")
+def get_runtime_config(db: Session = Depends(get_db)):
+    """Report installed capabilities, desired state, and worker-applied state."""
+    runtime = _runtime_resolution(db)
+    report = detect_capabilities()
+    plan = resolve_execution(runtime.configured_accel_mode, report)
+    worker_process = get_worker_process_status()
+    payload = runtime.to_worker_status(source="database")
+    payload.update(
+        {
+            "hardware": {
+                "capabilities": report.to_dict(),
+                "resolved": plan.to_dict(),
+            },
+            "worker": {
+                "health": worker_health(worker_process),
+                "applied": get_worker_runtime_status(),
+            },
+        }
+    )
+    return payload
 
 
 @router.get("/config/hardware")
@@ -54,7 +95,7 @@ def get_hardware_capabilities(db: Session = Depends(get_db)):
     whether the chosen mode resolves to GPU or has fallen back to CPU. The mode
     is the persisted preference when set, else the env default.
     """
-    mode = _effective_accel_mode(db)
+    mode = load_runtime_preferences(db).accel_mode
     report = detect_capabilities()
     plan = resolve_execution(mode, report)
     return {
@@ -65,11 +106,37 @@ def get_hardware_capabilities(db: Session = Depends(get_db)):
 
 
 class SettingsResponse(BaseModel):
-    accel_mode: str
+    accel_mode: Literal["auto", "gpu", "cpu"]
+    ai_enabled: bool
+    map_enabled: bool
+    ml_mode: Literal["disabled", "full", "mock", "remote"]
+    supported_ml_modes: list[str]
 
 
 class SettingsUpdate(BaseModel):
     accel_mode: Optional[Literal["auto", "gpu", "cpu"]] = None
+    ai_enabled: Optional[bool] = None
+    map_enabled: Optional[bool] = None
+    ml_mode: Optional[Literal["disabled", "full", "mock", "remote"]] = None
+
+
+def _settings_response(db: Session) -> SettingsResponse:
+    preferences = load_runtime_preferences(db)
+    return SettingsResponse(
+        accel_mode=preferences.accel_mode,
+        ai_enabled=preferences.ai_enabled,
+        map_enabled=preferences.map_enabled,
+        ml_mode=preferences.ml_mode,
+        supported_ml_modes=list(resolve_runtime(preferences).supported_modes),
+    )
+
+
+def _upsert_setting(db: Session, key: str, value: str) -> None:
+    row = db.query(AppSetting).filter(AppSetting.key == key).first()
+    if row is None:
+        db.add(AppSetting(key=key, value=value))
+    else:
+        row.value = value
 
 
 @router.get("/settings", response_model=SettingsResponse)
@@ -82,7 +149,7 @@ def get_settings(
     Readable by any authenticated user (or anyone in local mode) so the
     settings panel can show the saved values.
     """
-    return SettingsResponse(accel_mode=_effective_accel_mode(db))
+    return _settings_response(db)
 
 
 @router.put("/settings", response_model=SettingsResponse)
@@ -102,11 +169,24 @@ def update_settings(
         # Defensive: Literal already constrains this, but guard the raw write.
         if request.accel_mode not in _VALID_ACCEL_MODES:
             raise HTTPException(422, "accel_mode must be one of auto, gpu, cpu")
-        row = db.query(AppSetting).filter(AppSetting.key == ACCEL_MODE_KEY).first()
-        if row is None:
-            db.add(AppSetting(key=ACCEL_MODE_KEY, value=request.accel_mode))
-        else:
-            row.value = request.accel_mode
+        _upsert_setting(db, ACCEL_MODE_KEY, request.accel_mode)
+
+    if request.ai_enabled is not None:
+        _upsert_setting(db, AI_ENABLED_KEY, str(request.ai_enabled).lower())
+
+    if request.map_enabled is not None:
+        _upsert_setting(db, MAP_ENABLED_KEY, str(request.map_enabled).lower())
+
+    if request.ml_mode is not None:
+        modes = resolve_runtime(load_runtime_preferences(db)).supported_modes
+        if request.ml_mode not in modes:
+            raise HTTPException(
+                422,
+                f"ML mode '{request.ml_mode}' is not installed in this artifact",
+            )
+        _upsert_setting(db, ML_MODE_KEY, request.ml_mode)
+
+    if request.model_fields_set:
         db.commit()
 
-    return SettingsResponse(accel_mode=_effective_accel_mode(db))
+    return _settings_response(db)

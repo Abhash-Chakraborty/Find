@@ -11,6 +11,7 @@ import logging
 from find_api.core.config import settings
 from find_api.core.hardware import current_torch_device
 from find_api.core.model_manager import get_model_manager
+from find_api.core.runtime_profile import current_accel_mode
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class ObjectDetector:
         """
         try:
             config_key = (
-                f"model={settings.YOLO_MODEL}|accel={settings.ACCEL_MODE}|"
+                f"model={settings.YOLO_MODEL}|accel={current_accel_mode()}|"
                 f"half={settings.YOLO_HALF}"
             )
             with self.manager.use_model(

@@ -1,5 +1,6 @@
 import io
 import hashlib
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from PIL import Image
@@ -87,6 +88,10 @@ def test_analyze_image_backfills_missing_thumbnail(db):
 
     with (
         patch("find_api.workers.jobs.SessionLocal", return_value=db),
+        patch(
+            "find_api.workers.jobs._begin_worker_runtime",
+            return_value=(SimpleNamespace(applied_mode="full"), None),
+        ),
         patch("find_api.workers.jobs.get_current_job", return_value=None),
         patch("find_api.workers.jobs.get_file", return_value=data),
         patch(
@@ -136,6 +141,10 @@ def test_analyze_image_keeps_existing_thumbnail(db):
 
     with (
         patch("find_api.workers.jobs.SessionLocal", return_value=db),
+        patch(
+            "find_api.workers.jobs._begin_worker_runtime",
+            return_value=(SimpleNamespace(applied_mode="full"), None),
+        ),
         patch("find_api.workers.jobs.get_current_job", return_value=None),
         patch("find_api.workers.jobs.get_file", return_value=data),
         patch("find_api.workers.jobs.upload_thumbnail") as upload_thumb,
@@ -155,6 +164,44 @@ def test_analyze_image_keeps_existing_thumbnail(db):
     assert result["status"] == "success"
     assert updated.thumbnail_key == "thumbnails/ab/existing.webp"
     upload_thumb.assert_not_called()
+
+
+def test_analyze_image_metadata_only_mode_never_imports_ai_pipeline(db):
+    data = _image_bytes(size=(64, 48))
+    file_hash = hashlib.sha256(data).hexdigest()
+    media = Media(
+        file_hash=file_hash,
+        minio_key="images/ab/metadata-only.png",
+        thumbnail_key="thumbnails/ab/existing.webp",
+        filename="metadata-only.png",
+        content_type="image/png",
+        file_size=len(data),
+        status="pending",
+    )
+    db.add(media)
+    db.commit()
+    db.refresh(media)
+    media_id = media.id
+
+    with (
+        patch("find_api.workers.jobs.SessionLocal", return_value=db),
+        patch("find_api.workers.jobs.get_current_job", return_value=None),
+        patch("find_api.workers.jobs.get_file", return_value=data),
+        patch("find_api.core.runtime_profile.settings.FIND_BUILD_PROFILE", "no-ai"),
+        patch("find_api.core.runtime_profile.settings.ML_MODE", "disabled"),
+        patch("find_api.core.runtime_profile.settings.AI_ENABLED", False),
+        patch("find_api.workers.jobs.enqueue_clustering_job") as enqueue_cluster,
+    ):
+        result = analyze_image(media_id)
+
+    updated = db.query(Media).filter(Media.id == media_id).one()
+    assert result["mode"] == "disabled"
+    assert updated.status == "indexed"
+    assert updated.vector is None
+    assert updated.metadata_json["ai_disabled"] is True
+    assert updated.width == 64
+    assert updated.height == 48
+    enqueue_cluster.assert_not_called()
 
 
 def test_generate_thumbnail_for_media_backfills_without_full_analysis(db):

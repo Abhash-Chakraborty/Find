@@ -11,6 +11,14 @@ from find_api.core.config import settings
 from find_api.workers.jobs import cluster_images
 
 
+def _full_runtime():
+    """Unit tests mock inference, so explicitly model a CPU/full artifact."""
+    return patch(
+        "find_api.workers.jobs._begin_worker_runtime",
+        return_value=(SimpleNamespace(applied_mode="full"), None),
+    )
+
+
 def _make_media_row(media_id: int = 1, vector: list[float] | None = None):
     """Return a minimal object matching the columns `cluster_images` reads."""
     return SimpleNamespace(
@@ -30,6 +38,7 @@ class TestClusteringJobEdgeCases:
 
         with (
             patch("find_api.workers.jobs.SessionLocal", return_value=mock_db),
+            _full_runtime(),
             patch("find_api.workers.jobs.clear_clustering_job_state"),
             patch("find_api.ml.clusterer.get_image_clusterer") as mock_clusterer,
         ):
@@ -55,6 +64,7 @@ class TestClusteringJobEdgeCases:
 
         with (
             patch("find_api.workers.jobs.SessionLocal", return_value=mock_db),
+            _full_runtime(),
             patch("find_api.workers.jobs.clear_clustering_job_state"),
             patch("find_api.ml.clusterer.get_image_clusterer") as mock_clusterer,
         ):
@@ -83,6 +93,7 @@ class TestClusteringJobEdgeCases:
 
         with (
             patch("find_api.workers.jobs.SessionLocal", return_value=mock_db),
+            _full_runtime(),
             patch("find_api.workers.jobs.clear_clustering_job_state"),
             patch(
                 "find_api.ml.clusterer.get_image_clusterer",
@@ -128,6 +139,7 @@ class TestClusteringJobEdgeCases:
 
         with (
             patch("find_api.workers.jobs.SessionLocal", return_value=mock_db),
+            _full_runtime(),
             patch("find_api.workers.jobs.clear_clustering_job_state"),
             patch(
                 "find_api.ml.clusterer.get_image_clusterer",

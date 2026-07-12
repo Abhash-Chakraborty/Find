@@ -12,6 +12,7 @@ import logging
 from find_api.core.config import settings
 from find_api.core.hardware import current_torch_device
 from find_api.core.model_manager import get_model_manager
+from find_api.core.runtime_profile import current_accel_mode
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class ImageCaptioner:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
-            config_key = f"model={settings.BLIP_MODEL}|accel={settings.ACCEL_MODE}"
+            config_key = f"model={settings.BLIP_MODEL}|accel={current_accel_mode()}"
             with self.manager.use_model(
                 "florence-2", self._load_model, config_key=config_key
             ) as bundle:
@@ -127,7 +128,7 @@ class ImageCaptioner:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
-            config_key = f"model={settings.BLIP_MODEL}|accel={settings.ACCEL_MODE}"
+            config_key = f"model={settings.BLIP_MODEL}|accel={current_accel_mode()}"
             with self.manager.use_model(
                 "florence-2", self._load_model, config_key=config_key
             ) as bundle:

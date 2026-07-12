@@ -44,8 +44,21 @@ class Settings(BaseSettings):
         "queue.db",
     )
 
+    # Runtime/build profile. Docker images set this explicitly so the API can
+    # distinguish installed capabilities from hardware that merely exists on
+    # the host. ``development`` keeps source checkouts backwards compatible.
+    FIND_BUILD_PROFILE: Literal[
+        "development", "no-ai", "mock", "cpu", "nvidia"
+    ] = "development"
+
     # ML Models
-    ML_MODE: Literal["full", "mock", "remote"] = "full"
+    ML_MODE: Literal["disabled", "full", "mock", "remote"] = "full"
+    # Instance-wide kill switch. The persisted dashboard preference overrides
+    # this value at job boundaries; it never installs a missing runtime.
+    AI_ENABLED: bool = True
+    # GPS extraction is privacy-sensitive and therefore opt-in. The persisted
+    # dashboard preference overrides this value at job boundaries.
+    MAP_ENABLED: bool = False
     REMOTE_ML_URL: Optional[str] = None
     REMOTE_ML_API_KEY: Optional[str] = None
     REMOTE_ML_STRIP_EXIF: bool = True
@@ -128,24 +141,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_remote_ml_config(self):
-        """Require remote ML settings when remote mode is enabled."""
-        if self.ML_MODE.lower() != "remote":
+        """Require explicit self-hosted endpoint credentials for remote mode."""
+        if self.ML_MODE != "remote":
             return self
-
         if not self.REMOTE_ML_URL or not self.REMOTE_ML_URL.strip():
-            raise ValueError(
-                "ML_MODE=remote requires REMOTE_ML_URL. "
-                "Set REMOTE_ML_URL to a reachable self-hosted Find ML server "
-                "or change ML_MODE to full or mock."
-            )
-
+            raise ValueError("ML_MODE=remote requires REMOTE_ML_URL")
         if not self.REMOTE_ML_API_KEY or not self.REMOTE_ML_API_KEY.strip():
-            raise ValueError(
-                "ML_MODE=remote requires REMOTE_ML_API_KEY. "
-                "Set REMOTE_ML_API_KEY to a bearer token shared with your remote ML server "
-                "or change ML_MODE to full or mock."
-            )
-
+            raise ValueError("ML_MODE=remote requires REMOTE_ML_API_KEY")
         return self
 
     @model_validator(mode="after")

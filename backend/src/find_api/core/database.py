@@ -147,6 +147,18 @@ def init_db():
                 conn.execute(
                     text(
                         "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
                         "ADD COLUMN IF NOT EXISTS duplicate_of INTEGER"
                     )
                 )
@@ -244,6 +256,18 @@ def init_db():
                     text(
                         "CREATE INDEX IF NOT EXISTS ix_media_deleted_at "
                         "ON media (deleted_at)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_latitude "
+                        "ON media (latitude)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_longitude "
+                        "ON media (longitude)"
                     )
                 )
                 conn.execute(

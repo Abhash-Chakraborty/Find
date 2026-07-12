@@ -128,6 +128,8 @@ def test_loaded_models_endpoint(client):
     assert "mock_test_model" in body["loaded_models"]
     assert body["processes"]["api"]["loaded_models"] == ["mock_test_model"]
     assert "ttl_seconds" in body
+    assert body["worker_runtime"] is None
+    assert body["worker_health"]["state"] == "unavailable"
 
 
 def test_loaded_models_endpoint_includes_worker_snapshot(client):
@@ -170,3 +172,4 @@ def test_loaded_models_endpoint_includes_worker_snapshot(client):
         body["processes"]["worker"]["failed_models"]["florence-2"]["error"]
         == "load failed"
     )
+    assert body["worker_health"]["state"] == "stale"

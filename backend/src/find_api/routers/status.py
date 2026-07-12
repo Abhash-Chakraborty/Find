@@ -11,6 +11,7 @@ from find_api.core.config import settings
 from find_api.core.dependencies import get_admin_user, get_required_user
 from find_api.core.model_manager import get_model_manager
 from find_api.core.queue import get_job, get_redis_connection
+from find_api.core.runtime_profile import worker_health
 from find_api.models.user import User
 
 router = APIRouter()
@@ -52,10 +53,13 @@ def get_loaded_models(_admin: Optional[User] = Depends(get_admin_user)):
         }
     )
 
+    worker_status = process_status.get("worker")
     return {
         "loaded_models": loaded_models,
         "processes": process_status,
         "ttl_seconds": settings.ML_MODEL_IDLE_TTL_SECONDS,
+        "worker_runtime": worker_status.get("runtime") if worker_status else None,
+        "worker_health": worker_health(worker_status),
     }
 
 

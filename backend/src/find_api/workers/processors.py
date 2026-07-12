@@ -9,8 +9,8 @@ from typing import Any, Dict, List
 import numpy as np
 from PIL import Image
 
-from find_api.core.config import settings
 from find_api.core.model_manager import ModelUnavailableError
+from find_api.core.runtime_profile import current_ml_mode
 from find_api.ml.mock_embedder import get_mock_embedder
 from find_api.utils.errors import sanitize_error
 
@@ -76,7 +76,8 @@ def extract_image_metadata(
     """
     Run all ML models to extract metadata from image
     """
-    if settings.ML_MODE.lower() == "mock":
+    mode = current_ml_mode()
+    if mode == "mock":
         if on_stage:
             on_stage("generating mock metadata")
         logger.info("Using mock image metadata extractor")
@@ -93,6 +94,8 @@ def extract_image_metadata(
                 "embedding": {"status": "pending", "error": None},
             },
         }
+    if mode != "full":
+        raise RuntimeError(f"AI metadata extraction is unavailable in mode '{mode}'.")
 
     metadata = {
         "stage_status": {
@@ -193,9 +196,12 @@ def generate_hybrid_embedding(
     them as a deterministic non-zero vector that would introduce a
     systematic bias across all images lacking that signal.
     """
-    if settings.ML_MODE.lower() == "mock":
+    mode = current_ml_mode()
+    if mode == "mock":
         logger.info("Using mock embedding generator")
         return get_mock_embedder().embed_metadata(image, metadata)
+    if mode != "full":
+        raise RuntimeError(f"AI embedding generation is unavailable in mode '{mode}'.")
 
     try:
         logger.info("Generating CLIP embedding...")
@@ -327,8 +333,8 @@ def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
 
     # Mock mode - skip face detection entirely
     # This keeps light/mock mode working without downloading face models
-    if settings.ML_MODE.lower() == "mock":
-        logger.info("Mock mode: skipping face detection for media %s", media_id)
+    if current_ml_mode() != "full":
+        logger.info("Non-full AI mode: skipping face detection for media %s", media_id)
         return 0
 
     # Real mode - run actual face detection

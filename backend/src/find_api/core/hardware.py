@@ -174,10 +174,12 @@ def current_torch_device() -> str:
     Live helper used by the ML modules. Never raises — degrades to "cpu".
     Honors the legacy ``USE_GPU=false`` as a hard CPU pin for back-compat.
     """
-    # Imported lazily to avoid a hard dependency at module import.
+    # Imported lazily to avoid a hard dependency at module import. A worker
+    # job may bind a persisted dashboard preference for its lifetime.
     from find_api.core.config import settings
+    from find_api.core.runtime_profile import current_accel_mode
 
-    mode: AccelMode = getattr(settings, "ACCEL_MODE", "auto")
+    mode = current_accel_mode()
     # Back-compat: an explicit USE_GPU=False forces CPU regardless of mode.
     if getattr(settings, "USE_GPU", True) is False and mode == "auto":
         return "cpu"

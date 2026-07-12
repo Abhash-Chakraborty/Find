@@ -81,6 +81,10 @@ class Media(Base):
     width = Column(Integer)
     height = Column(Integer)
     exif_json = Column(JSON)  # EXIF data
+    # Optional local-only GPS coordinates. They are populated only when the
+    # operator enables map metadata; no reverse-geocoding service is contacted.
+    latitude = Column(Float, nullable=True, index=True)
+    longitude = Column(Float, nullable=True, index=True)
 
     # AI-generated metadata
     metadata_json = Column(JSON)  # Contains: caption, objects, ocr_text, faces, etc.

@@ -578,6 +578,28 @@ def get_image_thumbnail(
     return RedirectResponse(url=url)
 
 
+@router.get("/image/{media_id}/original")
+def get_image_original(
+    media_id: int,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
+):
+    """Return a scoped redirect to the original image object.
+
+    Viewer components need a media response rather than the JSON detail route.
+    Keeping this behind the same auth/IDOR checks also avoids exposing the
+    object-store key or making the bucket public.
+    """
+    media = _load_public_media_or_404(db, media_id)
+    if not can_access_media(media, user):
+        raise HTTPException(404, "Image not found")
+    try:
+        url = get_file_url(media.minio_key)
+    except Exception as exc:
+        raise HTTPException(500, "Could not generate image URL") from exc
+    return RedirectResponse(url=url)
+
+
 @router.post("/thumbnails/backfill")
 def backfill_missing_thumbnails(
     limit: int = Query(100, ge=1, le=1000),

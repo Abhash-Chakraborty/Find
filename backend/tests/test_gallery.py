@@ -140,6 +140,20 @@ class TestGalleryResponseShape:
         assert response.status_code == 307
         assert response.headers["location"] == "http://fake/images/test/legacy.jpg"
 
+    def test_original_route_redirects_to_scoped_object(self, client, db):
+        media = _seed(db, filename="viewer.jpg", status="indexed")
+
+        with patch(
+            "find_api.routers.gallery.get_file_url",
+            side_effect=lambda key: f"http://fake/{key}",
+        ):
+            response = client.get(
+                f"/api/image/{media.id}/original", follow_redirects=False
+            )
+
+        assert response.status_code == 307
+        assert response.headers["location"] == "http://fake/images/test/viewer.jpg"
+
     def test_backfill_missing_thumbnails_enqueues_thumbnail_only_jobs(self, client, db):
         existing = _seed(db, filename="existing.jpg", status="indexed")
         missing_a = _seed(db, filename="missing-a.jpg", status="indexed")
@@ -345,11 +359,15 @@ class TestGalleryFiltering:
         thumbnail_response = client.get(
             f"/api/image/{hidden.id}/thumbnail", follow_redirects=False
         )
+        original_response = client.get(
+            f"/api/image/{hidden.id}/original", follow_redirects=False
+        )
         like_response = client.post(f"/api/image/{hidden.id}/like")
         reprocess_response = client.post(f"/api/image/{hidden.id}/reprocess")
 
         assert detail_response.status_code == 404
         assert thumbnail_response.status_code == 404
+        assert original_response.status_code == 404
         assert like_response.status_code == 404
         assert reprocess_response.status_code == 404
 
