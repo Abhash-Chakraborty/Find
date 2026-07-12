@@ -211,8 +211,13 @@ export interface JobStatus {
 }
 
 export interface AppConfig {
-  ml_mode: "disabled" | "full" | "mock" | "remote";
-  accel_mode?: AccelMode;
+  ml_mode: "disabled" | "full" | "mock" | "unavailable";
+  configured_ml_mode: "disabled" | "full" | "mock" | "remote";
+  accel_mode: AccelMode;
+  ai_enabled: boolean;
+  map_enabled: boolean;
+  build_profile: "no-ai" | "mock" | "cpu" | "nvidia" | "development" | string;
+  supported_ml_modes: string[];
 }
 
 export interface AccountUser {
