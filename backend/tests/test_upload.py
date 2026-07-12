@@ -162,9 +162,7 @@ class TestPixelLimitValidation:
             return size
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [
-                executor.submit(validate_image, size) for size in [10, 50, 100]
-            ]
+            futures = [executor.submit(validate_image, size) for size in [10, 50, 100]]
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
         assert sorted(results) == [10, 50, 100]
