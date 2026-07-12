@@ -1,6 +1,17 @@
+x-light-backend: &light-backend
+  image: find-light-backend
+  pull_policy: never
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+    args:
+      BASE_IMAGE: python:3.12-slim
+      PYTHON_VERSION: "3.12"
+      UV_SYNC_EXTRAS: ""
+
 services:
   db:
-    image: ankane/pgvector:latest
+    image: pgvector/pgvector:0.8.4-pg16-bookworm
     container_name: find-light-db
     # Local-only defaults for contributor setup. Override via .env for anything else.
     environment:
@@ -19,7 +30,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.9-alpine3.21
     command: redis-server --loglevel warning
     container_name: find-light-redis
     ports:
@@ -33,7 +44,7 @@ services:
       retries: 5
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: find-light-minio
     command: server /data --console-address ":9001"
     # Local-only defaults for contributor setup. Never reuse these credentials in production.
@@ -52,14 +63,7 @@ services:
       retries: 3
 
   api:
-    image: find-light-backend
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        BASE_IMAGE: python:3.12-slim
-        PYTHON_VERSION: "3.12"
-        UV_SYNC_EXTRAS: ""
+    <<: *light-backend
     container_name: find-light-api
     command: uvicorn find_api.main:app --host 0.0.0.0 --port 8000 --log-level warning
     ports:
@@ -92,7 +96,7 @@ services:
     restart: unless-stopped
 
   worker:
-    image: find-light-backend
+    <<: *light-backend
     container_name: find-light-worker
     command: rq worker --worker-class ${RQ_WORKER_CLASS:-rq.worker.worker_classes.SimpleWorker} --url redis://redis:6379 high default low
     environment:

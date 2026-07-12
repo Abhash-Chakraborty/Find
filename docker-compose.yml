@@ -1,7 +1,18 @@
+x-full-backend: &full-backend
+  image: find-backend
+  pull_policy: never
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+    args:
+      BASE_IMAGE: ${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}
+      PYTHON_VERSION: ${BACKEND_PYTHON_VERSION:-3.12}
+      UV_SYNC_EXTRAS: "--extra ml"
+
 services:
   # PostgreSQL Database with pgvector
   db:
-    image: ankane/pgvector:latest
+    image: pgvector/pgvector:0.8.4-pg16-bookworm
     container_name: find-db
     environment:
       POSTGRES_DB: find
@@ -22,7 +33,7 @@ services:
 
   # Redis for job queue
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.9-alpine3.21
     command: redis-server --loglevel warning --requirepass ${REDIS_PASSWORD:-find-redis-dev}
     container_name: find-redis
     hostname: redis
@@ -39,7 +50,7 @@ services:
 
   # MinIO for object storage
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: find-minio
     command: server /data --console-address ":9001"
     environment:
@@ -60,13 +71,7 @@ services:
 
   # FastAPI Backend
   api:
-    image: find-backend
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}
-        PYTHON_VERSION: ${BACKEND_PYTHON_VERSION:-3.12}
+    <<: *full-backend
     container_name: find-api
     command: uvicorn find_api.main:app --host 0.0.0.0 --port 8000 --log-level warning
     ports:
@@ -108,7 +113,7 @@ services:
 
   # RQ Worker for background ML processing
   worker:
-    image: find-backend
+    <<: *full-backend
     container_name: find-worker
     command: rq worker --worker-class ${RQ_WORKER_CLASS:-rq.worker.worker_classes.SimpleWorker} --url ${REDIS_URL:-redis://:find-redis-dev@redis:6379} high default low
     environment:
