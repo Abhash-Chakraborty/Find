@@ -4,14 +4,37 @@ All notable changes to Find are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project is
 distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
-## [Unreleased] — App overhaul (`feat/app-overhaul`)
+## [1.1.0] — 2026-07-13
 
-A large feature overhaul bringing reference-grade browsing, albums, sharing,
-archive/trash, and a hardware-acceleration layer. All changes below are on the
-`feat/app-overhaul` branch and verified by the test suites (backend pytest +
-frontend vitest) with a clean `tsc --noEmit` and `ruff check`.
+A product and platform overhaul bringing timeline-first browsing, account and
+vault management, a private offline map, modular AI artifacts, and a polished
+responsive application shell.
 
 ### Added
+
+**Application shell and account**
+- Responsive sidebar/top bar, focus-safe mobile navigation, global search
+  shortcut, theme persistence, and consistent route-level spacing.
+- Setup, login, profile, password rotation, active-session listing, and session
+  revocation backed by secure HTTP-only session cookies.
+
+**Private map and vault**
+- Opt-in EXIF GPS retention with an account-scoped offline MapLibre view using
+  bundled Natural Earth geometry and no external tile or geocoding requests.
+- Explicit vault session locking, session-only decrypted thumbnails, timeline
+  browsing, full-screen preview, and rollback-safe restoration.
+
+**Modular runtime**
+- Separate no-AI, mock, CPU, and NVIDIA dependency artifacts. CPU/no-AI builds
+  do not install CUDA packages; the dashboard reports the installed artifact,
+  applied mode, worker health, and restart requirements.
+- Dashboard selection of disabled, mock, or full processing whenever that mode
+  is installed in the active artifact, without restarting or downloading a
+  different dependency stack.
+- Consolidated Compose topology: `compose.yml`, `compose.base.yml`, and explicit
+  `compose.no-ai.yml`, `compose.mock.yml`, and `compose.cpu.yml` profiles.
+- Tag-driven and manual GHCR publishing for immutable web images and all four
+  modular backend profiles.
 
 **Timeline**
 - Month-bucketed timeline API: `GET /api/timeline/buckets` (counts per month)

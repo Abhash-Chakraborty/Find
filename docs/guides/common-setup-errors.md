@@ -152,7 +152,7 @@ Expected ports:
 Use the light Docker stack for routine contributor work:
 
 ```bash
-docker compose -f docker-compose.light.yml up --build
+docker compose -f compose.mock.yml up --build
 ```
 
 - Use the full stack only when testing real ML inference, captions, OCR, search

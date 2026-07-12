@@ -31,7 +31,7 @@ Find is a local-first AI image intelligence app. Key paths:
 - `backend/src/find_api/` - FastAPI API, SQLAlchemy models, Redis/RQ jobs, MinIO helpers, and ML wrappers.
 - `frontend/src/app/` - Next.js App Router UI.
 - `frontend/src/lib/` - React Query API client, media URL helpers, and shared utilities.
-- `docker-compose.yml` - PostgreSQL/pgvector, Redis, MinIO, API, worker, and web orchestration.
+- `compose.yml` and `compose.*.yml` - modular PostgreSQL, storage, API, worker, web, and AI profiles.
 - `.env.example` - documented local configuration. Keep real `.env` files private.
 - `.github/workflows/ci.yml` - frontend and backend CI checks.
 
@@ -78,7 +78,7 @@ Run the API and worker separately when not using Docker.
 Prefer the light stack for routine UI, API, docs, and workflow work:
 
 ```bash
-docker compose -f docker-compose.light.yml up --build
+docker compose -f compose.mock.yml up --build
 ```
 
 Use the full stack only when the change needs real ML behavior.

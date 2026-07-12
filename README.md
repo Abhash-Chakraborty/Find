@@ -32,7 +32,7 @@ See the documentation index in [`docs/index.md`](./docs/index.md), the mobile di
 - Inspect full-resolution images with zoom, keyboard navigation, and slideshow
 - Share albums with scoped links and optional passwords/download controls
 - Organize media with favorites, archive, recoverable trash, and near-duplicate review
-- Protect hidden images in an encrypted local vault; full design alignment remains in progress
+- Protect hidden images in an encrypted local vault with explicit in-memory sessions, timeline browsing, preview, restore, and lock controls
 - Record local feedback for search, captions, objects, and people grouping
 
 ## Tech stack
@@ -43,16 +43,19 @@ See the documentation index in [`docs/index.md`](./docs/index.md), the mobile di
 
 ## Runtime profiles
 
-| Profile | Command | Intended use | ML behavior |
+| Artifact | Command | Included AI runtime | GPU/CUDA download |
 | --- | --- | --- | --- |
-| Light | `docker compose -f docker-compose.light.yml up --build` | UI, API, docs, contributor work, and low-resource smoke tests | Deterministic mock inference; no model downloads or GPU required |
-| Full | `docker compose up --build` | Real caption, OCR, detection, embedding, face, and search-quality validation | Downloads the configured local models and currently expects NVIDIA GPU support |
+| No AI | `docker compose -f compose.no-ai.yml up --build` | None; thumbnails, dimensions, EXIF, gallery, albums, vault, and maps remain available | No |
+| Mock | `docker compose -f compose.mock.yml up --build` | Deterministic test metadata/vectors | No |
+| CPU AI | `docker compose -f compose.cpu.yml up --build` | Real local captioning, OCR, detection, embeddings, faces, and clustering with CPU PyTorch/ONNX | No |
+| NVIDIA AI | `docker compose up --build` | Real local AI with CUDA PyTorch/ONNX providers | Yes |
 
-The full profile is intentionally much larger because it includes CUDA PyTorch,
-PaddleOCR/PaddlePaddle, ONNX Runtime, Florence-2, SigLIP, YOLO26 nano, and
-InsightFace. Use the light profile unless the change specifically needs real ML
-quality or hardware measurements. Model-size and CPU-only packaging improvements
-are tracked in GitHub issues rather than silently changing model behavior.
+The default `compose.yml` is the NVIDIA profile. Explicit profiles extend
+`compose.base.yml`, keeping application and data services centralized while
+each backend image installs only its selected dependency extra. Selecting a
+profile is a build/deployment choice;
+the dashboard can enable/disable installed AI and choose Auto/GPU/CPU, but it
+cannot install missing packages into a running container.
 
 ## Architecture
 
@@ -116,14 +119,27 @@ Services:
 Notes:
 
 - Current Docker setup is GPU-oriented and expects NVIDIA GPU access.
-- If no root `.env` is present, compose defaults support local demo startup.
+- Copy `.env.example` to `.env` before startup. Compose intentionally has no
+  embedded service-password fallback.
+
+For the same real local AI pipeline without CUDA or an NVIDIA runtime, use:
+
+```bash
+docker compose -f compose.cpu.yml up --build
+```
+
+For metadata-only operation with no AI dependencies or model downloads, use:
+
+```bash
+docker compose -f compose.no-ai.yml up --build
+```
 
 ### Option B: fast contributor mode (recommended for most work)
 
 For UI, API, upload, gallery, search, clustering, docs, and workflow changes, use the light stack:
 
 ```bash
-docker compose -f docker-compose.light.yml up --build
+docker compose -f compose.mock.yml up --build
 ```
 
 This runs the same app flow with `ML_MODE=mock`, a Python slim backend image, and no GPU/model cache mount. It avoids downloading Florence-2, SigLIP, PaddleOCR, YOLO, CUDA PyTorch, and related model weights, so first-time setup is much smaller and faster.
@@ -142,7 +158,7 @@ Find ships two runtime modes that serve different purposes. Choosing the wrong o
 ### Mock mode (light stack)
 
 ```bash
-docker compose -f docker-compose.light.yml up --build
+docker compose -f compose.mock.yml up --build
 ```
 
 `ML_MODE=mock` is set automatically. The worker skips all model loading and instead records:
@@ -199,6 +215,34 @@ The worker loads Florence-2 (captioning), YOLOv10 (object detection), PaddleOCR 
 
 First run of the full stack downloads Florence-2, SigLIP, PaddleOCR, and YOLO weights (several GB). Models are cached in the `model_cache` Docker volume and reused on subsequent runs.
 
+## Controlling AI from the dashboard
+
+The account/settings dashboard persists four instance-wide runtime choices:
+
+- `ai_enabled` turns the installed AI pipeline on or off.
+- `ml_mode` switches between the modes already present in the artifact. CPU and
+  NVIDIA builds can move directly between disabled, mock, and full local AI;
+  lightweight builds never pretend that missing model packages are available.
+- `accel_mode` selects `auto`, `gpu`, or `cpu`; unsupported GPU requests fall
+  back to CPU inside CPU/NVIDIA artifacts.
+- `map_enabled` opts in to retaining GPS coordinates from EXIF for the private map.
+
+Workers read all three values at the start of every job, so new jobs use the
+saved choice without mutating a worker's process environment. Inspect
+`GET /api/config/runtime` to compare the selected build/mode with the last state
+actually applied by a worker. If that endpoint says `restart_required: true`,
+start the CPU or NVIDIA compose artifact; a no-AI/mock image cannot become a
+full image through a toggle.
+
+Release tags (`v*`) publish immutable web images plus separate `no-ai`, `mock`,
+`cpu`, and `nvidia` backend images through `.github/workflows/publish.yml`.
+Manual runs can publish one selected profile without building unrelated AI
+dependencies.
+
+`ML_MODE=remote` is intentionally fail-closed for now: no remote inference
+adapter is installed, the runtime reports `unavailable`, and Find never sends
+private media to a remote service or silently falls back to local models.
+
 ### Option C: local development without Docker
 
 #### Prerequisites
@@ -225,7 +269,9 @@ uv sync --group dev
 uv run uvicorn find_api.main:app --reload
 ```
 
-Use `uv sync --group dev --extra ml` only when you need real local ML inference outside Docker.
+Use `uv sync --group dev --extra cpu` for real CPU inference outside Docker, or
+`uv sync --group dev --extra nvidia` for the locked CUDA build. The two extras
+are intentionally mutually exclusive.
 
 #### 3. Worker (separate terminal)
 
@@ -365,7 +411,7 @@ docker compose logs --tail=200 api
 
 - Model downloads happen on the first startup of the full stack.
 - Cached models are stored in the Docker volume mounted at `model_cache`.
-- Use `docker compose -f docker-compose.light.yml up --build` when you only need to test contributor changes without real ML inference.
+- Use `docker compose -f compose.mock.yml up --build` when you only need to test contributor changes without real ML inference.
 
 ### Docker disk usage
 
@@ -387,7 +433,7 @@ docker compose exec api sh -lc "rm -rf /root/.cache/uv"
 - Prefer the light stack for routine UI/API/docs work when you do not need real inference:
 
 ```bash
-docker compose -f docker-compose.light.yml up --build
+docker compose -f compose.mock.yml up --build
 ```
 
 ## Contribution quick start

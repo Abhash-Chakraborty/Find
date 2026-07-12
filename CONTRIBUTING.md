@@ -35,7 +35,7 @@ For repo-aware coding-agent and contributor guidance, start with [AGENTS.md](./A
 For most UI, API, docs, and workflow contributions, start with the light stack:
 
 ```bash
-docker compose -f docker-compose.light.yml up --build
+docker compose -f compose.mock.yml up --build
 ```
 
 This uses `ML_MODE=mock`, skips GPU access, and avoids downloading Florence-2, SigLIP, PaddleOCR, YOLO, and CUDA PyTorch assets. Upload, worker processing, gallery, search, and clustering still run end-to-end with deterministic mock metadata and vectors.
@@ -46,9 +46,15 @@ Use the full stack only when your change needs real ML inference:
 docker compose up --build
 ```
 
+On a machine without NVIDIA support, use the locked CPU-only AI artifact:
+
+```bash
+docker compose -f compose.cpu.yml up --build
+```
+
 ## Mock mode vs full ML mode
 
-The light stack (`docker-compose.light.yml`) runs with `ML_MODE=mock`. The worker
+The mock stack (`compose.mock.yml`) runs with `ML_MODE=mock`. The worker
 records real image dimensions and EXIF data but replaces all model outputs with
 deterministic stubs:
 
@@ -60,7 +66,7 @@ deterministic stubs:
 
 ### When the light stack is enough
 
-Use `docker-compose.light.yml` (mock mode) when your change involves:
+Use `compose.mock.yml` when your change involves:
 
 - Any frontend code (UI, layout, styling, components)
 - API routing, request/response shapes, validation, or error handling
@@ -98,7 +104,8 @@ uv sync --group dev
 uv run uvicorn find_api.main:app --reload
 ```
 
-Use `uv sync --group dev --extra ml` only when you need real local ML inference outside Docker.
+Use `uv sync --group dev --extra cpu` for real CPU inference outside Docker or
+`uv sync --group dev --extra nvidia` for CUDA. Do not enable both extras.
 
 Worker:
 
@@ -213,4 +220,5 @@ Useful labels:
 
 ## License
 
-By contributing, you agree your contributions are licensed under the [MIT License](./LICENSE).
+By contributing, you agree your contributions are licensed under the
+[GNU Affero General Public License v3.0](./LICENSE).

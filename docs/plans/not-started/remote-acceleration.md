@@ -10,7 +10,7 @@
 
 ## 1. Problem Statement
 
-Find's local-first design means all ML inference — YOLOv10 object detection, Florence-2 captioning, PaddleOCR, and SigLIP ViT-B-16 embeddings — runs on the user's machine. The total model weight is approximately 1.5 GB and the `docker-compose.yml` requests an NVIDIA GPU with `count: 1`. This creates two concrete friction points:
+Find's local-first design means all ML inference — YOLO object detection, Florence-2 captioning, PaddleOCR, and SigLIP ViT-B-16 embeddings — runs on the user's machine. The default `compose.yml` requests an NVIDIA GPU, while `compose.cpu.yml`, `compose.mock.yml`, and `compose.no-ai.yml` provide modular non-CUDA choices. Remote acceleration remains optional and user-controlled.
 
 - **GPU requirement:** Most consumer machines and all mobile devices cannot run the full ML stack at acceptable throughput.
 - **Mobile access:** A mobile client has no practical path to local ML inference. Without a remote endpoint, a mobile client is read-only at best.
