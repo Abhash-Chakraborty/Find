@@ -28,13 +28,31 @@ See the documentation index in [`docs/index.md`](./docs/index.md), the mobile di
 - Extract captions, detected objects, OCR text, EXIF metadata, and dimensions
 - Generate hybrid embeddings for semantic search
 - Automatically cluster related images after indexing completes
-- Browse gallery, inspect details, like/delete media, and review cluster members
+- Browse a virtualized timeline, gallery, albums, people, and clusters
+- Inspect full-resolution images with zoom, keyboard navigation, and slideshow
+- Share albums with scoped links and optional passwords/download controls
+- Organize media with favorites, archive, recoverable trash, and near-duplicate review
+- Protect hidden images in an encrypted local vault; full design alignment remains in progress
+- Record local feedback for search, captions, objects, and people grouping
 
 ## Tech stack
 
 - **Frontend:** Next.js 16, React 19, React Query, Tailwind CSS, Biome
 - **Backend:** FastAPI, SQLAlchemy, PostgreSQL + pgvector, Redis, RQ, MinIO
-- **ML pipeline:** YOLOv10, Florence-2, PaddleOCR, SigLIP (`open-clip`), HDBSCAN
+- **ML pipeline:** YOLO26 nano, Florence-2 base, PaddleOCR, SigLIP (`open-clip`), InsightFace, HDBSCAN
+
+## Runtime profiles
+
+| Profile | Command | Intended use | ML behavior |
+| --- | --- | --- | --- |
+| Light | `docker compose -f docker-compose.light.yml up --build` | UI, API, docs, contributor work, and low-resource smoke tests | Deterministic mock inference; no model downloads or GPU required |
+| Full | `docker compose up --build` | Real caption, OCR, detection, embedding, face, and search-quality validation | Downloads the configured local models and currently expects NVIDIA GPU support |
+
+The full profile is intentionally much larger because it includes CUDA PyTorch,
+PaddleOCR/PaddlePaddle, ONNX Runtime, Florence-2, SigLIP, YOLO26 nano, and
+InsightFace. Use the light profile unless the change specifically needs real ML
+quality or hardware measurements. Model-size and CPU-only packaging improvements
+are tracked in GitHub issues rather than silently changing model behavior.
 
 ## Architecture
 
@@ -80,7 +98,7 @@ This project is open for **GSSoC'26** contributions.
 
 ## Install and run
 
-### Option A: one-command demo stack (recommended)
+### Option A: full real-ML stack
 
 From repository root:
 
@@ -100,7 +118,7 @@ Notes:
 - Current Docker setup is GPU-oriented and expects NVIDIA GPU access.
 - If no root `.env` is present, compose defaults support local demo startup.
 
-### Option B: fast contributor mode
+### Option B: fast contributor mode (recommended for most work)
 
 For UI, API, upload, gallery, search, clustering, docs, and workflow changes, use the light stack:
 

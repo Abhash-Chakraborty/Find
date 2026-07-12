@@ -1,6 +1,7 @@
 {
   "name": "find-frontend",
   "version": "1.0.0",
+  "packageManager": "pnpm@11.3.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
@@ -50,20 +51,5 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.9.3",
     "vitest": "^4.1.6"
-  },
-  "pnpm": {
-    "overrides": {
-      "postcss": "^8.5.14"
-    },
-    "onlyBuiltDependencies": [
-      "sharp"
-    ],
-    "allowedDeprecatedVersions": {},
-    "allowBuild": [
-      "sharp"
-    ],
-    "allowBuilds": {
-      "sharp": true
-    }
   }
 }

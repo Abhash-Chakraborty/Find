@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy import text
@@ -17,7 +19,7 @@ SIMILARITY_THRESHOLD = 0.97
 def find_near_duplicate(
     db: Session,
     media_id: int,
-    embedding: list[float],
+    embedding: Iterable[float],
 ) -> int | None:
     """Query pgvector for a near-duplicate of a newly indexed image."""
     result = db.execute(
@@ -33,7 +35,9 @@ def find_near_duplicate(
         """
         ),
         {
-            "embedding": str(embedding),
+            # pgvector accepts JSON-style vectors. SQLAlchemy may return a NumPy
+            # array here, whose string form uses whitespace instead of commas.
+            "embedding": json.dumps([float(value) for value in embedding]),
             "media_id": media_id,
         },
     ).fetchone()

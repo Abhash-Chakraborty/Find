@@ -11,6 +11,10 @@ from find_api.core.storage_abstract import StorageBackend
 logger = logging.getLogger(__name__)
 
 
+class StorageNotInitializedError(RuntimeError):
+    """Raised when process-local storage has not been initialized yet."""
+
+
 def create_storage_backend() -> StorageBackend:
     """Factory function to create the appropriate storage backend"""
     backend_type = getattr(settings, "STORAGE_BACKEND", "minio").lower()
@@ -59,7 +63,7 @@ async def initialize_storage() -> None:
 def get_storage_instance() -> StorageBackend:
     """Get the global storage instance"""
     if _storage_instance is None:
-        raise RuntimeError(
+        raise StorageNotInitializedError(
             "Storage backend not initialized. Call initialize_storage() first."
         )
     return _storage_instance
