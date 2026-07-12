@@ -173,6 +173,57 @@ class TestPixelLimitValidation:
             Settings(MAX_IMAGE_PIXELS=PILLOW_MAX_IMAGE_PIXELS + 1)
 
 
+class TestMultipartUploadLimit:
+    """The multipart endpoint enforces MAX_BULK_FILES before ingestion."""
+
+    @staticmethod
+    def _files(count: int):
+        data = get_valid_image_bytes()
+        return [
+            ("files", (f"photo-{index}.png", data, "image/png"))
+            for index in range(count)
+        ]
+
+    def test_below_limit_proceeds(self, client):
+        with (
+            patch("find_api.routers.upload.settings.MAX_BULK_FILES", 3),
+            patch(
+                "find_api.routers.upload._ingest_image",
+                return_value={"status": "uploaded"},
+            ) as ingest,
+        ):
+            response = client.post("/api/upload", files=self._files(2))
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 2
+        assert ingest.call_count == 2
+
+    def test_exact_limit_proceeds(self, client):
+        with (
+            patch("find_api.routers.upload.settings.MAX_BULK_FILES", 3),
+            patch(
+                "find_api.routers.upload._ingest_image",
+                return_value={"status": "uploaded"},
+            ) as ingest,
+        ):
+            response = client.post("/api/upload", files=self._files(3))
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 3
+        assert ingest.call_count == 3
+
+    def test_above_limit_is_rejected_before_ingestion(self, client):
+        with (
+            patch("find_api.routers.upload.settings.MAX_BULK_FILES", 3),
+            patch("find_api.routers.upload._ingest_image") as ingest,
+        ):
+            response = client.post("/api/upload", files=self._files(4))
+
+        assert response.status_code == 413
+        assert response.json()["detail"] == "Request contains more than 3 files"
+        ingest.assert_not_called()
+
+
 class TestBulkUpload:
     """Bulk ZIP upload behavior."""
 
