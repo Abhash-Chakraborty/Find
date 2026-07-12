@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     REMOTE_ML_FEATURES: str = "embed,caption,detect,ocr,cluster"
     ML_MODEL_IDLE_TTL_SECONDS: int = 300
     ML_MAX_LOADED_MODELS: int = 5
+    MODEL_CACHE_DIR: str = ""
+    ML_OFFLINE_ONLY: bool = False
     CLIP_MODEL: str = "ViT-B-16-SigLIP"
     CLIP_PRETRAINED: str = "webli"
     BLIP_MODEL: str = "microsoft/Florence-2-base"
