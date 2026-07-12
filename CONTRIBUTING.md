@@ -154,6 +154,19 @@ uv run ruff format --check .
 uv run pytest tests/ -v
 ```
 
+### Line endings (Windows)
+
+The repository pins all text files to LF via `.gitattributes` (Biome enforces
+`lineEnding: "lf"`), so fresh clones work on any platform regardless of your
+`core.autocrlf` setting. If you cloned **before** the `.gitattributes` was
+added and `pnpm check` reports CRLF-only formatting errors, re-checkout your
+working tree once (stash or commit local work first — `git reset --hard`
+discards **all** uncommitted tracked changes, staged and unstaged alike):
+
+```bash
+git rm -rf --cached . && git reset --hard
+```
+
 ## Pull request format
 
 Each PR must:
