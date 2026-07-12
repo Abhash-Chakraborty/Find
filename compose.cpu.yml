@@ -1,0 +1,57 @@
+services:
+  db:
+    extends:
+      file: compose.base.yml
+      service: db
+  redis:
+    extends:
+      file: compose.base.yml
+      service: redis
+  minio:
+    extends:
+      file: compose.base.yml
+      service: minio
+  api:
+    extends:
+      file: compose.base.yml
+      service: api
+    image: find-backend:cpu
+    build:
+      args:
+        FIND_BUILD_PROFILE: cpu
+        UV_SYNC_EXTRAS: "--extra cpu"
+    environment:
+      FIND_BUILD_PROFILE: cpu
+      ML_MODE: full
+      AI_ENABLED: "${AI_ENABLED:-true}"
+      ACCEL_MODE: "${ACCEL_MODE:-cpu}"
+      USE_GPU: "false"
+    volumes:
+      - model_cache:/root/.cache
+  worker:
+    extends:
+      file: compose.base.yml
+      service: worker
+    image: find-backend:cpu
+    build:
+      args:
+        FIND_BUILD_PROFILE: cpu
+        UV_SYNC_EXTRAS: "--extra cpu"
+    environment:
+      FIND_BUILD_PROFILE: cpu
+      ML_MODE: full
+      AI_ENABLED: "${AI_ENABLED:-true}"
+      ACCEL_MODE: "${ACCEL_MODE:-cpu}"
+      USE_GPU: "false"
+    volumes:
+      - model_cache:/root/.cache
+  web:
+    extends:
+      file: compose.base.yml
+      service: web
+
+volumes:
+  db_data:
+  redis_data:
+  minio_data:
+  model_cache:
