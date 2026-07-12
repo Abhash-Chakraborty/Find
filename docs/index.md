@@ -21,6 +21,7 @@ This directory is organized by document purpose and implementation status.
 - [Desktop Framework Evaluation](plans/partial/desktop-tauri-vs-electron-adr.md) - Tauri spike exists, but release-grade packaging and updater decisions remain open.
 - [Personalization Research](plans/partial/personalization-research.md) - feedback collection exists; adaptive personalization is still planned.
 - [Vault Encryption Design](plans/partial/vault-encryption-design.md) - vault feature exists, but implementation still needs alignment with the full design note.
+- [Small-Team Authentication](plans/partial/small-team-authentication.md) - backend authentication foundations exist; frontend UI, deletion-request workflow, audit log, and Instance management UI remain planned.
 
 ### Not Started
 
@@ -31,7 +32,6 @@ This directory is organized by document purpose and implementation status.
 - [Desktop Runtime Quick Reference](plans/not-started/desktop-runtime-quick-reference.md)
 - [Mobile Strategy ADR](plans/not-started/mobile-strategy.md)
 - [Optional Self-Hosted Remote Acceleration](plans/not-started/remote-acceleration.md)
-- [Small-Team Authentication](plans/not-started/small-team-authentication.md)
 
 ## Guides
 

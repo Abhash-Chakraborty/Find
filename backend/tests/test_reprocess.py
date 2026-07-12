@@ -100,14 +100,14 @@ def _fresh_db():
 
 _ORIGINAL_GALLERY_MEDIA = gallery_module.Media
 
-test_app = FastAPI()
-test_app.include_router(gallery_module.router, prefix="/api")
-test_app.dependency_overrides[get_db] = get_test_db
+app_under_test = FastAPI()
+app_under_test.include_router(gallery_module.router, prefix="/api")
+app_under_test.dependency_overrides[get_db] = get_test_db
 # Gallery endpoints now depend on get_required_user; this minimal test app
 # has no users table, so force local (single-user) mode by returning None.
 from find_api.core.dependencies import get_required_user  # noqa: E402
 
-test_app.dependency_overrides[get_required_user] = lambda: None
+app_under_test.dependency_overrides[get_required_user] = lambda: None
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -140,7 +140,7 @@ def reset_db():
 
 @pytest.fixture()
 def client():
-    with TestClient(test_app) as c:
+    with TestClient(app_under_test) as c:
         yield c
 
 

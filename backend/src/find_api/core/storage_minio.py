@@ -203,11 +203,19 @@ class MinIOStorageBackend(StorageBackend):
                 base_path = parsed.path.rstrip("/")
                 if base_path:
                     signed_parsed = urlparse(base_url)
+                    signed_path = signed_parsed.path
+                    # A common endpoint value already includes the bucket
+                    # (for example /images). The SDK also includes the bucket
+                    # in signed paths, so only add a distinct proxy prefix.
+                    if signed_path == base_path or signed_path.startswith(
+                        f"{base_path}/"
+                    ):
+                        return base_url
                     base_url = urlunparse(
                         (
                             signed_parsed.scheme,
                             signed_parsed.netloc,
-                            base_path + signed_parsed.path,
+                            base_path + signed_path,
                             signed_parsed.params,
                             signed_parsed.query,
                             signed_parsed.fragment,

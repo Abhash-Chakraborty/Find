@@ -50,6 +50,29 @@ def fake_backend(monkeypatch):
     return backend
 
 
+def test_storage_facade_initializes_backend_inside_worker_process(monkeypatch):
+    """The first worker call initializes storage when app lifespan never ran."""
+    backend = FakeAsyncStorageBackend()
+    initialized = False
+
+    def get_instance():
+        if not initialized:
+            raise storage.StorageNotInitializedError(
+                "Storage backend not initialized. Call initialize_storage() first."
+            )
+        return backend
+
+    def initialize():
+        nonlocal initialized
+        initialized = True
+
+    monkeypatch.setattr(storage, "get_storage_instance", get_instance)
+    monkeypatch.setattr(storage, "init_storage", initialize)
+
+    assert storage.get_file("worker-image.jpg") == b"data:worker-image.jpg"
+    assert initialized is True
+
+
 @pytest.mark.asyncio
 async def test_sync_storage_facade_returns_values_inside_running_event_loop(
     fake_backend,
