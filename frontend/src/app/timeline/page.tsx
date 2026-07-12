@@ -16,6 +16,7 @@ import { AssetViewer } from "@/components/asset-viewer";
 import { JustifiedGrid } from "@/components/justified-grid";
 import { TimelineScrubber } from "@/components/timeline-scrubber";
 import { setArchive, toggleLike, trashImage } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media";
 import {
   buildScrubberLayout,
   offsetToSegment,
@@ -173,8 +174,11 @@ export default function TimelinePage() {
 
   const viewerAssets = visibleAssets.map((a) => ({
     id: a.id,
-    thumbnailUrl: a.thumbnailUrl,
-    originalUrl: `/api/image/${a.id}/original`,
+    thumbnailUrl:
+      resolveMediaUrl(a.thumbnailUrl, null, a.id, true) ?? a.thumbnailUrl,
+    originalUrl:
+      resolveMediaUrl(`/api/image/${a.id}/original`) ??
+      `/api/image/${a.id}/original`,
     alt: a.createdAt
       ? `Photo from ${new Date(a.createdAt).toLocaleDateString()}`
       : `Photo ${a.id}`,
@@ -254,7 +258,10 @@ export default function TimelinePage() {
               >
                 {/* biome-ignore lint/performance/noImgElement: authenticated API thumbnail */}
                 <img
-                  src={asset.thumbnailUrl}
+                  src={
+                    resolveMediaUrl(asset.thumbnailUrl, null, asset.id, true) ??
+                    asset.thumbnailUrl
+                  }
                   alt={
                     asset.createdAt
                       ? `Photo from ${new Date(asset.createdAt).toLocaleDateString()}`

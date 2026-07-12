@@ -266,6 +266,7 @@ export function AssetViewer({
       style={{
         position: "fixed",
         inset: 0,
+        zIndex: 100,
         background: "rgba(0,0,0,0.95)",
         overflow: "hidden",
         touchAction: "none",

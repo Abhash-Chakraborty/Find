@@ -3,7 +3,7 @@ Image captioning using Florence-2
 """
 
 import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoProcessor
 from PIL import Image
 import numpy as np
 from typing import Union
@@ -35,7 +35,7 @@ class ImageCaptioner:
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             trust_remote_code=True,
-            dtype=torch_dtype,
+            torch_dtype=torch_dtype,
             attn_implementation="eager",
         ).to(device)
 

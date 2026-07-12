@@ -10,6 +10,7 @@ import type {
 } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import type { MapMarker } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media";
 import styles from "./private-map.module.css";
 
 const LAND_SOURCE_URL = "/maps/ne_110m_land.geojson";
@@ -415,7 +416,9 @@ export function PrivateMap({
           );
 
           const image = document.createElement("img");
-          image.src = photo.thumbnail_url;
+          image.src =
+            resolveMediaUrl(photo.thumbnail_url, null, photo.id, true) ??
+            photo.thumbnail_url;
           image.alt = "";
           image.loading = "lazy";
           element.append(image);

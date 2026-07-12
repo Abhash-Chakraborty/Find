@@ -1314,7 +1314,10 @@ function GalleryPageContent() {
                       />
                     </button>
                     <a
-                      href={`/api/image/${item.id}/original`}
+                      href={
+                        resolveMediaUrl(`/api/image/${item.id}/original`) ??
+                        `/api/image/${item.id}/original`
+                      }
                       download={item.filename}
                       className="icon-button h-8 w-8"
                       aria-label="Download image"

@@ -21,6 +21,7 @@ import {
 import { AssetViewer } from "@/components/asset-viewer";
 import { JustifiedGrid } from "@/components/justified-grid";
 import { TimelineScrubber } from "@/components/timeline-scrubber";
+import { resolveMediaUrl } from "@/lib/media";
 import {
   actualOffsetToScrubberOffset,
   groupMediaByMonth,
@@ -36,6 +37,10 @@ import {
 import type { ViewerAsset } from "@/lib/viewer-preload";
 
 const SCROLL_ANCHOR_PX = 96;
+
+function resolveApiRoute(url: string | null | undefined) {
+  return url?.startsWith("/api/") ? resolveMediaUrl(url) : url;
+}
 
 export interface TimelineMediaViewerRenderProps<T> {
   items: T[];
@@ -133,14 +138,17 @@ export function TimelineMediaView<T>({
   const viewerAssets = useMemo<ViewerAsset[]>(
     () =>
       timelineItems.map((item) => {
-        const thumbnailUrl = getThumbnailUrl(item) ?? "";
+        const id = getId(item);
+        const rawThumbnailUrl = getThumbnailUrl(item);
+        const thumbnailUrl = resolveApiRoute(rawThumbnailUrl) ?? "";
+        const rawOriginalUrl = getOriginalUrl(item);
         return {
-          id: getId(item),
+          id,
           thumbnailUrl,
           alt: getAlt(item),
           // View-only shares deliberately fall back to their share-scoped
           // thumbnail; a private route is never synthesized here.
-          originalUrl: getOriginalUrl(item) ?? thumbnailUrl,
+          originalUrl: resolveApiRoute(rawOriginalUrl) ?? thumbnailUrl,
         };
       }),
     [getAlt, getId, getOriginalUrl, getThumbnailUrl, timelineItems],
@@ -305,7 +313,8 @@ export function TimelineMediaView<T>({
                   getKey={({ item }) => getId(item)}
                   renderItem={({ item }, index) => {
                     const timelineIndex = groupStartIndex + index;
-                    const thumbnailUrl = getThumbnailUrl(item);
+                    const rawThumbnailUrl = getThumbnailUrl(item);
+                    const thumbnailUrl = resolveApiRoute(rawThumbnailUrl);
                     return (
                       <article
                         data-testid={getItemTestId?.(item)}

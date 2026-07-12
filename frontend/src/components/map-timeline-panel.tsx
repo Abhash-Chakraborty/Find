@@ -4,6 +4,7 @@ import { CalendarDays, Images, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AssetViewer } from "@/components/asset-viewer";
 import type { MapMarker } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media";
 import { groupMediaByMonth } from "@/lib/media-timeline";
 import type { ViewerAsset } from "@/lib/viewer-preload";
 
@@ -26,8 +27,12 @@ export function MapTimelinePanel({ markers, onClose }: MapTimelinePanelProps) {
     () =>
       timelineMarkers.map((marker) => ({
         id: marker.id,
-        thumbnailUrl: marker.thumbnail_url,
-        originalUrl: `/api/image/${marker.id}/original`,
+        thumbnailUrl:
+          resolveMediaUrl(marker.thumbnail_url, null, marker.id, true) ??
+          marker.thumbnail_url,
+        originalUrl:
+          resolveMediaUrl(`/api/image/${marker.id}/original`) ??
+          `/api/image/${marker.id}/original`,
         alt: marker.filename,
       })),
     [timelineMarkers],
@@ -92,7 +97,14 @@ export function MapTimelinePanel({ markers, onClose }: MapTimelinePanelProps) {
                     >
                       {/* biome-ignore lint/performance/noImgElement: authenticated media is served by the local API. */}
                       <img
-                        src={marker.thumbnail_url}
+                        src={
+                          resolveMediaUrl(
+                            marker.thumbnail_url,
+                            null,
+                            marker.id,
+                            true,
+                          ) ?? marker.thumbnail_url
+                        }
                         alt={marker.filename}
                         loading="lazy"
                         className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.025]"

@@ -154,7 +154,9 @@ describe("MapPage", () => {
 
     fireEvent.click(screen.getByTestId("map-timeline-photo-1"));
     expect(screen.getByTestId("asset-viewer")).toBeInTheDocument();
-    await waitFor(() => expect(preloaded).toContain("/api/image/1/original"));
+    await waitFor(() =>
+      expect(preloaded).toContain("http://localhost:8000/api/image/1/original"),
+    );
   });
 
   it("renders a useful empty state without hiding the offline world map", async () => {
