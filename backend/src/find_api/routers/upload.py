@@ -214,25 +214,8 @@ def _get_zip_member_basename(member_name: str) -> str:
     return member_name.replace("\\", "/").split("/")[-1]
 
 
-def _ingest_image(
-    *,
-    filename: str,
-    content_type: Optional[str],
-    file_data: bytes,
-    db: Session,
-    uploader_user_id: Optional[int] = None,
-) -> dict:
-    """Create or reuse a media record from raw image bytes"""
-    detected_type = content_type or mimetypes.guess_type(filename)[0] or ""
-
-    if not detected_type.startswith("image/"):
-        raise HTTPException(400, f"File {filename} is not an image")
-
-    # Verify image content and protect against decompression bombs using
-    # request-local dimension validation instead of mutating process-wide
-    # Image.MAX_IMAGE_PIXELS, which is not thread-safe when concurrent
-    # uploads run in a thread pool (overlapping requests could weaken
-    # decompression-bomb protection). This check is done request-locally.
+def _verify_image_content(filename: str, file_data: bytes) -> None:
+    """Validate image bytes without mutating Pillow process-wide state."""
     try:
         with Image.open(io.BytesIO(file_data)) as img:
             width, height = img.size
@@ -249,6 +232,23 @@ def _ingest_image(
         raise HTTPException(400, f"File {filename} exceeds the safe pixel limit")
     except Exception:
         raise HTTPException(400, f"File {filename} is corrupted or not a valid image")
+
+
+def _ingest_image(
+    *,
+    filename: str,
+    content_type: Optional[str],
+    file_data: bytes,
+    db: Session,
+    uploader_user_id: Optional[int] = None,
+) -> dict:
+    """Create or reuse a media record from raw image bytes"""
+    detected_type = content_type or mimetypes.guess_type(filename)[0] or ""
+
+    if not detected_type.startswith("image/"):
+        raise HTTPException(400, f"File {filename} is not an image")
+
+    _verify_image_content(filename, file_data)
 
     file_size = len(file_data)
     max_size = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024

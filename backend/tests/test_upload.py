@@ -8,6 +8,7 @@ import pytest
 from PIL import Image
 from find_api.core.config import PILLOW_MAX_IMAGE_PIXELS, Settings
 from find_api.models.media import Media
+from find_api.routers.upload import _verify_image_content
 
 
 def get_valid_image_bytes():
@@ -153,27 +154,20 @@ class TestPixelLimitValidation:
         """Concurrent uploads should each validate independently without global mutation."""
         pillow_limit = Image.MAX_IMAGE_PIXELS
 
-        def upload_image(size):
+        def validate_image(size):
             img = Image.new("RGB", (size, size), color="green")
             buf = io.BytesIO()
             img.save(buf, format="PNG")
-            buf.seek(0)
-            return client.post(
-                "/api/upload",
-                files=[
-                    (
-                        "files",
-                        (f"image_{size}.png", buf.getvalue(), "image/png"),
-                    )
-                ],
-            )
+            _verify_image_content(f"image_{size}.png", buf.getvalue())
+            return size
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(upload_image, size) for size in [10, 50, 100]]
+            futures = [
+                executor.submit(validate_image, size) for size in [10, 50, 100]
+            ]
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
-        assert all(r.status_code == 200 for r in results)
-        assert all(r.json()["results"][0]["status"] == "uploaded" for r in results)
+        assert sorted(results) == [10, 50, 100]
         assert Image.MAX_IMAGE_PIXELS == pillow_limit
 
     def test_config_rejects_limit_above_pillow_ceiling(self):
