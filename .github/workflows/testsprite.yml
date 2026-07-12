@@ -61,7 +61,7 @@ jobs:
           steps.testsprite-secret.outputs.available == 'true' &&
           (github.event_name == 'pull_request' || github.event.inputs.base_url == '')
         run: |
-          docker compose -f docker-compose.light.yml up -d --build --wait --wait-timeout 240
+          docker compose -f compose.mock.yml up -d --build --wait --wait-timeout 240
 
       - name: Wait for local preview
         if: >
@@ -75,8 +75,8 @@ jobs:
             fi
             sleep 2
           done
-          docker compose -f docker-compose.light.yml ps
-          docker compose -f docker-compose.light.yml logs --tail=120
+          docker compose -f compose.mock.yml ps
+          docker compose -f compose.mock.yml logs --tail=120
           exit 1
 
       - name: Run TestSprite
@@ -89,4 +89,4 @@ jobs:
 
       - name: Stop local preview stack
         if: always()
-        run: docker compose -f docker-compose.light.yml down -v --remove-orphans
+        run: docker compose -f compose.mock.yml down -v --remove-orphans

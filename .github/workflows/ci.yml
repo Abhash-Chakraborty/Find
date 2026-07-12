@@ -7,17 +7,41 @@ name: CI
 #   frontend/**                     |      yes       |      no       |      no
 #   backend/**                      |      no        |      yes      |      no
 #   .github/workflows/**            |      yes       |      yes      |      yes
-#   docker-compose*.yml             |      yes       |      yes      |      yes
+#   compose*.yml                    |      yes       |      yes      |      yes
 #   root/shared non-doc config      |      yes       |      yes      |      no
 #   docs/**, *.md, ISSUE_TEMPLATE   |      no        |      no       |      no
 
 on:
+  workflow_dispatch:
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  reference-boundary:
+    name: Reference source boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Reject tracked reference source
+        shell: bash
+        run: |
+          if [[ -n "$(git ls-files -- 'reference-app/**' '@reference-app/**')" ]]; then
+            echo "Reference application source must stay local and untracked." >&2
+            exit 1
+          fi
+
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -40,7 +64,7 @@ jobs:
               - 'backend/**'
             shared:
               - '.github/workflows/**'
-              - 'docker-compose*.yml'
+              - 'compose*.yml'
 
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
         id: uncategorized
@@ -52,7 +76,7 @@ jobs:
               - '!frontend/**'
               - '!backend/**'
               - '!.github/workflows/**'
-              - '!docker-compose*.yml'
+              - '!compose*.yml'
               - '!docs/**'
               - '!**/*.md'
               - '!LICENSE'
@@ -193,13 +217,33 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        file:
+          - compose.yml
+          - compose.base.yml
+          - compose.no-ai.yml
+          - compose.mock.yml
+          - compose.cpu.yml
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
 
-      - name: Validate docker-compose.yml
-        run: docker compose config --quiet
+      - name: Validate ${{ matrix.file }}
+        run: docker compose --env-file .env.example -f "${{ matrix.file }}" config --quiet
 
-      - name: Validate docker-compose.light.yml
-        run: docker compose -f docker-compose.light.yml config --quiet
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
+        with:
+          fail-on-severity: high
