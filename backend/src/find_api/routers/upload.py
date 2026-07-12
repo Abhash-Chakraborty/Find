@@ -245,6 +245,8 @@ def _ingest_image(
             img.verify()
     except HTTPException:
         raise
+    except Image.DecompressionBombError:
+        raise HTTPException(400, f"File {filename} exceeds the safe pixel limit")
     except Exception:
         raise HTTPException(400, f"File {filename} is corrupted or not a valid image")
 

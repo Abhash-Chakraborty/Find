@@ -4,8 +4,13 @@ Application configuration using Pydantic settings
 
 import os
 from typing import Literal, Optional
+
+from PIL import Image
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+PILLOW_MAX_IMAGE_PIXELS = Image.MAX_IMAGE_PIXELS or 89_478_485
 
 
 class Settings(BaseSettings):
@@ -64,7 +69,7 @@ class Settings(BaseSettings):
     MAX_BULK_FILES: int = 200
     MAX_BULK_TOTAL_SIZE_MB: int = 500
     MAX_BULK_COMPRESSION_RATIO: int = 100
-    MAX_IMAGE_PIXELS: int = 100_000_000
+    MAX_IMAGE_PIXELS: int = PILLOW_MAX_IMAGE_PIXELS
     WORKER_TIMEOUT: int = 600
     # Trashed assets older than this many days are eligible for permanent
     # auto-purge (via POST /trash/purge). 0 disables age-based purging.
@@ -99,12 +104,24 @@ class Settings(BaseSettings):
         "ML_MAX_LOADED_MODELS",
         "SESSION_TTL_HOURS",
         "INVITE_TTL_HOURS",
+        "MAX_IMAGE_PIXELS",
     )
     @classmethod
     def validate_positive_int(cls, value: int, info):
         """Keep memory lifecycle settings positive so cleanup cannot be disabled accidentally."""
         if value <= 0:
             raise ValueError(f"{info.field_name} must be greater than 0")
+        return value
+
+    @field_validator("MAX_IMAGE_PIXELS")
+    @classmethod
+    def validate_image_pixel_ceiling(cls, value: int):
+        """Keep the request-local cap at or below Pillow's process ceiling."""
+        if value > PILLOW_MAX_IMAGE_PIXELS:
+            raise ValueError(
+                "MAX_IMAGE_PIXELS cannot exceed Pillow's built-in safety ceiling "
+                f"of {PILLOW_MAX_IMAGE_PIXELS} pixels"
+            )
         return value
 
     @model_validator(mode="after")

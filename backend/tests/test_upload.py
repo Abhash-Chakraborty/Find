@@ -4,7 +4,9 @@ import os
 import zipfile
 from unittest.mock import patch
 
+import pytest
 from PIL import Image
+from find_api.core.config import PILLOW_MAX_IMAGE_PIXELS, Settings
 from find_api.models.media import Media
 
 
@@ -134,8 +136,6 @@ class TestPixelLimitValidation:
 
     def test_pixel_limit_oversized_image(self, client):
         """Image exceeding MAX_IMAGE_PIXELS should be rejected."""
-        from find_api.settings import settings
-
         with patch("find_api.routers.upload.settings.MAX_IMAGE_PIXELS", 100):
             img = Image.new("RGB", (50, 50), color="blue")
             buf = io.BytesIO()
@@ -151,7 +151,7 @@ class TestPixelLimitValidation:
 
     def test_pixel_limit_concurrent_validation(self, client):
         """Concurrent uploads should each validate independently without global mutation."""
-        import concurrent.futures
+        pillow_limit = Image.MAX_IMAGE_PIXELS
 
         def upload_image(size):
             img = Image.new("RGB", (size, size), color="green")
@@ -173,9 +173,12 @@ class TestPixelLimitValidation:
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
         assert all(r.status_code == 200 for r in results)
-        assert all(
-            r.json()["results"][0]["status"] == "uploaded" for r in results
-        )
+        assert all(r.json()["results"][0]["status"] == "uploaded" for r in results)
+        assert Image.MAX_IMAGE_PIXELS == pillow_limit
+
+    def test_config_rejects_limit_above_pillow_ceiling(self):
+        with pytest.raises(ValueError, match="Pillow's built-in safety ceiling"):
+            Settings(MAX_IMAGE_PIXELS=PILLOW_MAX_IMAGE_PIXELS + 1)
 
 
 class TestBulkUpload:
