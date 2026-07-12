@@ -90,7 +90,7 @@ Check:
 
 ## Common causes
 
-* Florence-2 model failed to load
+* BLIP caption model failed to load
 * empty inference response
 * unsupported/corrupted image
 * model download interruption

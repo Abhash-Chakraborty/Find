@@ -30,7 +30,7 @@ degrades to "not available" rather than raising:
 - **ONNX Runtime execution providers** — CUDA, ROCm, CoreML (Apple), DirectML
   (Windows). Used by the face-detection pipeline (InsightFace / ONNX).
 - **PyTorch devices** — CUDA and MPS (Apple Metal). Used by the embedding
-  (open_clip / SigLIP), captioning (Florence-2), and object-detection (YOLO)
+  (open_clip / SigLIP), captioning (BLIP), and object-detection (YOLO)
   pipelines.
 - **CPU** — always present as the floor.
 

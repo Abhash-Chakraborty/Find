@@ -44,7 +44,7 @@ except Exception as e:
     logger.error(f"Failed to start model cleanup thread in worker: {e}")
 
 FACE_CLUSTER_NAME_MATCH_THRESHOLD = 0.72
-ANALYSIS_MODEL_NAMES = ("yolo", "florence-2", "paddleocr", "siglip", "insightface")
+ANALYSIS_MODEL_NAMES = ("yolo", "captioner", "paddleocr", "siglip", "insightface")
 
 
 def _begin_worker_runtime(db):

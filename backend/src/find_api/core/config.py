@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     ML_OFFLINE_ONLY: bool = False
     CLIP_MODEL: str = "ViT-B-16-SigLIP"
     CLIP_PRETRAINED: str = "webli"
-    BLIP_MODEL: str = "microsoft/Florence-2-base"
+    BLIP_MODEL: str = "Salesforce/blip-image-captioning-base"
     YOLO_MODEL: str = "yolo26n.pt"
     USE_GPU: bool = False
     YOLO_HALF: bool = True

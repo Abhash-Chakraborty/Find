@@ -36,7 +36,7 @@ mock = [
 cpu = [
   "torch==2.8.0",
   "torchvision==0.23.0",
-  "transformers==4.49.0",
+  "transformers==5.3.0",
   "open-clip-torch>=2.24.0",
   "opencv-python-headless==4.9.0.80",
   "ultralytics>=8.2.0",
@@ -52,7 +52,7 @@ cpu = [
 nvidia = [
   "torch==2.8.0",
   "torchvision==0.23.0",
-  "transformers==4.49.0",
+  "transformers==5.3.0",
   "open-clip-torch>=2.24.0",
   "opencv-python-headless==4.9.0.80",
   "ultralytics>=8.2.0",

@@ -39,7 +39,7 @@ See the documentation index in [`docs/index.md`](./docs/index.md), the mobile di
 
 - **Frontend:** Next.js 16, React 19, React Query, Tailwind CSS, Biome
 - **Backend:** FastAPI, SQLAlchemy, PostgreSQL + pgvector, Redis, RQ, MinIO
-- **ML pipeline:** YOLO26 nano, Florence-2 base, PaddleOCR, SigLIP (`open-clip`), InsightFace, HDBSCAN
+- **ML pipeline:** YOLO26 nano, BLIP image captioning, PaddleOCR, SigLIP (`open-clip`), InsightFace, HDBSCAN
 
 ## Runtime profiles
 
@@ -142,7 +142,7 @@ For UI, API, upload, gallery, search, clustering, docs, and workflow changes, us
 docker compose -f compose.mock.yml up --build
 ```
 
-This runs the same app flow with `ML_MODE=mock`, a Python slim backend image, and no GPU/model cache mount. It avoids downloading Florence-2, SigLIP, PaddleOCR, YOLO, CUDA PyTorch, and related model weights, so first-time setup is much smaller and faster.
+This runs the same app flow with `ML_MODE=mock`, a Python slim backend image, and no GPU/model cache mount. It avoids downloading BLIP, SigLIP, PaddleOCR, YOLO, CUDA PyTorch, and related model weights, so first-time setup is much smaller and faster.
 
 Light mode is deterministic but not AI-accurate:
 
@@ -187,7 +187,7 @@ Because mock vectors have no semantic content, search results are meaningless �
 docker compose up --build
 ```
 
-The worker loads Florence-2 (captioning), YOLOv10 (object detection), PaddleOCR (text extraction), and SigLIP via `open-clip` (semantic embeddings). All metadata and vectors reflect real model output.
+The worker loads BLIP (captioning), YOLOv10 (object detection), PaddleOCR (text extraction), and SigLIP via `open-clip` (semantic embeddings). All metadata and vectors reflect real model output.
 
 **Full ML mode is required when you are working on or reporting:**
 
@@ -213,7 +213,7 @@ The worker loads Florence-2 (captioning), YOLOv10 (object detection), PaddleOCR 
 | OCR missed text                  | ❌ No            | ✅ Required     |
 | ML pipeline performance          | ❌ No            | ✅ Required     |
 
-First run of the full stack downloads Florence-2, SigLIP, PaddleOCR, and YOLO weights (several GB). Models are cached in the `model_cache` Docker volume and reused on subsequent runs.
+First run of the full stack downloads BLIP, SigLIP, PaddleOCR, and YOLO weights (several GB). Models are cached in the `model_cache` Docker volume and reused on subsequent runs.
 
 ## Controlling AI from the dashboard
 
