@@ -114,6 +114,57 @@ class TestUploadInvalid:
         assert response.status_code == 422
 
 
+class TestMultipartUploadLimit:
+    """The multipart endpoint enforces MAX_BULK_FILES before ingestion."""
+
+    @staticmethod
+    def _files(count: int):
+        data = get_valid_image_bytes()
+        return [
+            ("files", (f"photo-{index}.png", data, "image/png"))
+            for index in range(count)
+        ]
+
+    def test_below_limit_proceeds(self, client):
+        with (
+            patch("find_api.routers.upload.settings.MAX_BULK_FILES", 3),
+            patch(
+                "find_api.routers.upload._ingest_image",
+                return_value={"status": "uploaded"},
+            ) as ingest,
+        ):
+            response = client.post("/api/upload", files=self._files(2))
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 2
+        assert ingest.call_count == 2
+
+    def test_exact_limit_proceeds(self, client):
+        with (
+            patch("find_api.routers.upload.settings.MAX_BULK_FILES", 3),
+            patch(
+                "find_api.routers.upload._ingest_image",
+                return_value={"status": "uploaded"},
+            ) as ingest,
+        ):
+            response = client.post("/api/upload", files=self._files(3))
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 3
+        assert ingest.call_count == 3
+
+    def test_above_limit_is_rejected_before_ingestion(self, client):
+        with (
+            patch("find_api.routers.upload.settings.MAX_BULK_FILES", 3),
+            patch("find_api.routers.upload._ingest_image") as ingest,
+        ):
+            response = client.post("/api/upload", files=self._files(4))
+
+        assert response.status_code == 413
+        assert response.json()["detail"] == "Request contains more than 3 files"
+        ingest.assert_not_called()
+
+
 class TestBulkUpload:
     """Bulk ZIP upload behavior."""
 
@@ -239,56 +290,3 @@ class TestBulkUpload:
         huge = next(r for r in results if r["filename"] == "huge.jpg")
         assert huge["status"] == "failed"
         assert "exceeds max upload size" in huge["error"].lower()
-
-    def test_bulk_upload_below_max_files(self, client):
-        """ZIP with file count below MAX_BULK_FILES should succeed."""
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
-            for i in range(5):
-                zf.writestr(f"image{i}.png", get_valid_image_bytes())
-        zip_buffer.seek(0)
-
-        response = client.post(
-            "/api/upload/bulk",
-            files=[("file", ("images.zip", zip_buffer.read(), "application/zip"))],
-        )
-        assert response.status_code == 200
-        results = response.json()["results"]
-        assert len(results) == 5
-        assert all(r["status"] == "uploaded" for r in results)
-
-    def test_bulk_upload_at_max_files(self, client):
-        """ZIP with exactly MAX_BULK_FILES should succeed."""
-        from find_api.settings import settings
-
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
-            for i in range(settings.MAX_BULK_FILES):
-                zf.writestr(f"image{i}.png", get_valid_image_bytes())
-        zip_buffer.seek(0)
-
-        response = client.post(
-            "/api/upload/bulk",
-            files=[("file", ("images.zip", zip_buffer.read(), "application/zip"))],
-        )
-        assert response.status_code == 200
-        results = response.json()["results"]
-        assert len(results) == settings.MAX_BULK_FILES
-        assert all(r["status"] == "uploaded" for r in results)
-
-    def test_bulk_upload_above_max_files(self, client):
-        """ZIP with file count exceeding MAX_BULK_FILES should be rejected."""
-        from find_api.settings import settings
-
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
-            for i in range(settings.MAX_BULK_FILES + 1):
-                zf.writestr(f"image{i}.png", get_valid_image_bytes())
-        zip_buffer.seek(0)
-
-        response = client.post(
-            "/api/upload/bulk",
-            files=[("file", ("images.zip", zip_buffer.read(), "application/zip"))],
-        )
-        assert response.status_code == 400
-        assert "files" in response.json()["detail"].lower() and "limit" in response.json()["detail"].lower()
