@@ -63,9 +63,7 @@ def test_not_implemented_pack_cache_raises_for_every_method():
         cache.remove(pack)
 
 
-@pytest.mark.parametrize(
-    "category", [c for c in PackCategory]
-)
+@pytest.mark.parametrize("category", [c for c in PackCategory])
 def test_all_pack_categories_constructible(category):
     pack = _sample_pack(pack_id=f"pack-{category.value}", category=category)
     assert pack.category == category
