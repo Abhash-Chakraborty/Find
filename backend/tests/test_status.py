@@ -170,3 +170,53 @@ def test_loaded_models_endpoint_includes_worker_snapshot(client):
         body["processes"]["worker"]["failed_models"]["florence-2"]["error"]
         == "load failed"
     )
+
+
+def test_model_footprint_endpoint_returns_report_without_paths(client, tmp_path):
+    """GET /api/status/models/footprint reports cache/loaded/device info and
+    never leaks filesystem paths, even though the endpoint is admin-gated."""
+    fake_redis = MagicMock()
+    fake_redis.scan_iter.return_value = []
+    fake_redis.get.return_value = None
+
+    with (
+        patch("find_api.core.model_footprint.get_model_manager") as mock_get_manager,
+        patch(
+            "find_api.core.queue.get_redis_connection",
+            return_value=fake_redis,
+        ),
+    ):
+        mock_manager = mock_get_manager.return_value
+        mock_manager.get_status.return_value = {
+            "process": "api",
+            "loaded_models": ["siglip"],
+            "in_flight": {},
+            "failed_models": {},
+            "max_loaded_models": 5,
+            "updated_at": 0,
+        }
+        mock_manager.last_used = {}
+
+        response = client.get("/api/status/models/footprint")
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert {m["key"] for m in body["models"]} == {
+        "siglip",
+        "florence-2",
+        "yolo",
+        "insightface",
+        "paddleocr",
+    }
+
+    siglip_entry = next(m for m in body["models"] if m["key"] == "siglip")
+    assert siglip_entry["loaded"] is True
+
+    for entry in body["models"]:
+        assert "path" not in entry["cache"]
+
+    assert set(body["packs"].keys()) == {"light", "full", "proposed_cpu"}
+    assert body["packs"]["light"]["total_count"] == 1
+    assert body["packs"]["full"]["total_count"] == 5
+    assert body["packs"]["proposed_cpu"]["status"] == "not_implemented"

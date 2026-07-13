@@ -106,3 +106,11 @@ Find runs PyTorch/library models in-process, leased through a singleton `ModelMa
 | Keep YOLO / Florence-2 / ModelManager | **S** (no-op) | No change. |
 
 **Cross-cutting risk:** any embedding model swap forces a re-embed/re-index of existing photos and faces; sequence behind a migration plan.
+
+## 7. Measuring current footprint
+
+Actual on-disk sizes, loaded state, and device for each model currently in
+Find are measured by
+[`model_footprint_report.py`](../../guides/model-footprint.md), not
+estimated by hand — run it before proposing pack sizes or installer
+download budgets.
