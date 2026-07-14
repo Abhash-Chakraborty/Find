@@ -26,10 +26,102 @@ interface PrivateMapProps {
 }
 
 type MapLibreModule = typeof import("maplibre-gl");
+type GeoJsonStyleSource = Extract<
+  StyleSpecification["sources"][string],
+  { type: "geojson" }
+>;
+type LandSourceData = GeoJsonStyleSource["data"];
 
 interface RenderedDomMarker {
   marker: MapLibreMarker;
   element: HTMLButtonElement;
+}
+
+interface LocalLandFeatureCollection {
+  features: Array<{
+    geometry?: {
+      type?: string;
+      coordinates?: unknown;
+    } | null;
+  }>;
+}
+
+function createLandOverlay(
+  container: HTMLDivElement,
+  map: MapLibreMap,
+  landData: LandSourceData,
+): { sync: () => void; remove: () => void } {
+  const namespace = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(namespace, "svg");
+  const path = document.createElementNS(namespace, "path");
+  svg.setAttribute("aria-hidden", "true");
+  svg.dataset.mapLandFallback = "true";
+  Object.assign(svg.style, {
+    position: "absolute",
+    inset: "0",
+    zIndex: "0",
+    width: "100%",
+    height: "100%",
+    overflow: "hidden",
+    pointerEvents: "none",
+  });
+  path.setAttribute("fill-rule", "evenodd");
+  path.setAttribute("stroke-width", "0.75");
+  path.setAttribute("vector-effect", "non-scaling-stroke");
+  svg.append(path);
+  container.append(svg);
+
+  const collection = landData as unknown as LocalLandFeatureCollection;
+  const sync = () => {
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    const commands: string[] = [];
+
+    const drawRing = (ring: unknown) => {
+      if (!Array.isArray(ring)) return;
+      let drewPoint = false;
+      for (const coordinate of ring) {
+        if (
+          !Array.isArray(coordinate) ||
+          typeof coordinate[0] !== "number" ||
+          typeof coordinate[1] !== "number"
+        ) {
+          continue;
+        }
+        const point = map.project([
+          coordinate[0],
+          Math.max(-85.0511, Math.min(85.0511, coordinate[1])),
+        ]);
+        commands.push(
+          `${drewPoint ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`,
+        );
+        drewPoint = true;
+      }
+      if (drewPoint) commands.push("Z");
+    };
+
+    for (const feature of collection.features ?? []) {
+      const geometry = feature.geometry;
+      if (!geometry || !Array.isArray(geometry.coordinates)) continue;
+      if (geometry.type === "Polygon") {
+        for (const ring of geometry.coordinates) drawRing(ring);
+      } else if (geometry.type === "MultiPolygon") {
+        for (const polygon of geometry.coordinates) {
+          if (!Array.isArray(polygon)) continue;
+          for (const ring of polygon) drawRing(ring);
+        }
+      }
+    }
+
+    const dark = isDarkMap();
+    path.setAttribute("d", commands.join(" "));
+    path.setAttribute("fill", dark ? "#172a36" : "#f4efe5");
+    path.setAttribute("stroke", dark ? "#355262" : "#b9c5c8");
+  };
+
+  sync();
+  return { sync, remove: () => svg.remove() };
 }
 
 export function mapMarkersToFeatureCollection(markers: readonly MapMarker[]) {
@@ -62,13 +154,14 @@ function isDarkMap(): boolean {
 export function buildOfflineMapStyle(
   markers: readonly MapMarker[],
   dark: boolean,
+  landData: LandSourceData = LAND_SOURCE_URL,
 ): StyleSpecification {
   return {
     version: 8,
     sources: {
       "offline-land": {
         type: "geojson",
-        data: LAND_SOURCE_URL,
+        data: landData,
       },
       [PHOTO_SOURCE_ID]: {
         type: "geojson",
@@ -273,9 +366,18 @@ export function PrivateMap({
     let disposed = false;
     let themeObserver: MutationObserver | null = null;
     let resizeObserver: ResizeObserver | null = null;
+    let landOverlay: ReturnType<typeof createLandOverlay> | null = null;
     const rendered = new Map<string, RenderedDomMarker>();
 
-    void import("maplibre-gl").then((maplibre) => {
+    void Promise.all([
+      import("maplibre-gl"),
+      fetch(LAND_SOURCE_URL, { cache: "force-cache" }).then((response) => {
+        if (!response.ok) {
+          throw new Error(`Bundled map returned ${response.status}`);
+        }
+        return response.json() as Promise<LandSourceData>;
+      }),
+    ]).then(([maplibre, landData]) => {
       if (disposed || !containerRef.current) {
         return;
       }
@@ -283,7 +385,7 @@ export function PrivateMap({
       maplibreRef.current = maplibre;
       const map = new maplibre.Map({
         container: containerRef.current,
-        style: buildOfflineMapStyle(markersRef.current, isDarkMap()),
+        style: buildOfflineMapStyle(markersRef.current, isDarkMap(), landData),
         center: [15, 20],
         zoom: 1.25,
         minZoom: 0.75,
@@ -296,6 +398,7 @@ export function PrivateMap({
         new maplibre.NavigationControl({ showCompass: false }),
         "top-left",
       );
+      landOverlay = createLandOverlay(container, map, landData);
 
       const chooseCluster = async (clusterId: number) => {
         const source = map.getSource(PHOTO_SOURCE_ID) as
@@ -450,20 +553,29 @@ export function PrivateMap({
           | undefined;
         source?.setData(mapMarkersToFeatureCollection(markersRef.current));
         applyMapPalette(map);
+        landOverlay?.sync();
         fitMarkers(map, maplibre, markersRef.current);
         syncMarkers();
       });
       map.on("idle", syncMarkers);
       map.on("moveend", syncMarkers);
+      map.on("moveend", () => landOverlay?.sync());
       map.on("zoomend", syncMarkers);
+      map.on("zoomend", () => landOverlay?.sync());
 
-      themeObserver = new MutationObserver(() => applyMapPalette(map));
+      themeObserver = new MutationObserver(() => {
+        applyMapPalette(map);
+        landOverlay?.sync();
+      });
       themeObserver.observe(document.documentElement, {
         attributes: true,
         attributeFilter: ["class", "data-theme"],
       });
 
-      resizeObserver = new ResizeObserver(() => map.resize());
+      resizeObserver = new ResizeObserver(() => {
+        map.resize();
+        landOverlay?.sync();
+      });
       resizeObserver.observe(container);
     });
 
@@ -471,6 +583,7 @@ export function PrivateMap({
       disposed = true;
       themeObserver?.disconnect();
       resizeObserver?.disconnect();
+      landOverlay?.remove();
       syncMarkersRef.current = () => {};
       for (const entry of rendered.values()) {
         entry.marker.remove();

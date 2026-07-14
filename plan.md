@@ -21,6 +21,9 @@
 - [x] GPU controls are unavailable when the installed modular artifact has no
   GPU runtime. No-AI builds keep import and organization functional without
   presenting clustering controls as usable.
+- [x] The private MapLibre map visibly renders bundled Natural Earth geometry
+  even when browser worker rendering omits GeoJSON fills; its main-thread SVG
+  fallback remains local and follows map pan, zoom, resize, and theme changes.
 - [x] Version metadata is aligned at `1.1.2` across web, API, and desktop.
 - [x] Verification passes: frontend 253 tests, production build with 20 routes,
   backend Ruff checks, and backend 517 passed / 5 skipped.

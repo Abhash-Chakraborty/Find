@@ -27,6 +27,8 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
 - Full-resolution previews, modal navigation URLs, body scroll containment,
   archive/trash restoration, and single-image timeline presentation.
+- Blank private-map canvases in browsers that do not render worker-sourced
+  GeoJSON fills; bundled Natural Earth geometry now has a local SVG fallback.
 
 ## [1.1.0] — 2026-07-13
 
