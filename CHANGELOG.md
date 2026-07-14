@@ -30,6 +30,20 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 - Blank private-map canvases in browsers that do not render worker-sourced
   GeoJSON fills; bundled Natural Earth geometry now has a local SVG fallback.
 
+## [1.1.1] — 2026-07-14
+
+### Added
+
+- Guided vault setup and unlock, one-time recovery codes, password and recovery
+  rotation, and configurable automatic locking.
+- Collapsible desktop navigation with a compact header and universal search
+  across photos, albums, routes, and settings.
+
+### Changed
+
+- Account, vault, search, and settings controls now share the local-first v1.1
+  application shell and remain usable across responsive layouts.
+
 ## [1.1.0] — 2026-07-13
 
 A product and platform overhaul bringing timeline-first browsing, account and

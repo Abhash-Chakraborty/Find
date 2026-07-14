@@ -241,6 +241,108 @@ class TestVaultCredentials:
         )
         assert new_unlock.status_code == 200
 
+    def test_password_change_rotates_credentials_round_trip(self, client, db):
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        prepare_vault_tables(db)
+        setup = client.post(
+            "/api/vault/setup",
+            json={"passphrase": "initial local password"},
+        )
+        assert setup.status_code == 200
+        previous_hash = db.execute(
+            text("SELECT recovery_code_hash FROM vault_config WHERE id = 1")
+        ).scalar_one()
+
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        changed = client.post(
+            "/api/vault/password",
+            json={
+                "current_passphrase": "initial local password",
+                "new_passphrase": "replacement local password",
+            },
+        )
+        assert changed.status_code == 200
+        assert changed.json()["session_token"]
+        assert changed.json()["recovery_code"]
+        rotated_hash = db.execute(
+            text("SELECT recovery_code_hash FROM vault_config WHERE id = 1")
+        ).scalar_one()
+        assert rotated_hash != previous_hash
+        assert changed.json()["recovery_code"] not in rotated_hash
+
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        assert (
+            client.post(
+                "/api/vault/unlock",
+                json={"passphrase": "initial local password"},
+            ).status_code
+            == 401
+        )
+
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        assert (
+            client.post(
+                "/api/vault/unlock",
+                json={"passphrase": "replacement local password"},
+            ).status_code
+            == 200
+        )
+
+    def test_legacy_migration_failure_does_not_block_credentials(self, client, db):
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        prepare_vault_tables(db)
+        assert (
+            client.post(
+                "/api/vault/setup",
+                json={"passphrase": "initial local password"},
+            ).status_code
+            == 200
+        )
+
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        with patch.object(
+            vault_router,
+            "_migrate_legacy_encrypted_items",
+            side_effect=RuntimeError("corrupt legacy blob"),
+        ):
+            unlocked = client.post(
+                "/api/vault/unlock",
+                json={"passphrase": "initial local password"},
+            )
+        assert unlocked.status_code == 200
+
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        with patch.object(
+            vault_router,
+            "_migrate_legacy_encrypted_items",
+            side_effect=RuntimeError("missing legacy blob"),
+        ):
+            changed = client.post(
+                "/api/vault/password",
+                json={
+                    "current_passphrase": "initial local password",
+                    "new_passphrase": "replacement local password",
+                },
+            )
+        assert changed.status_code == 200
+
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        assert (
+            client.post(
+                "/api/vault/unlock",
+                json={"passphrase": "replacement local password"},
+            ).status_code
+            == 200
+        )
+
 
 class TestVaultHide:
     """Vault hide endpoint behavior."""

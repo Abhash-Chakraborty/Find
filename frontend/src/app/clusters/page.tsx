@@ -27,7 +27,6 @@ import {
   getClusters,
   getGallery,
   getJobStatus,
-  getRuntimeConfig,
   triggerClustering,
   updateCluster,
 } from "@/lib/api";
@@ -36,6 +35,7 @@ import {
   MINIO_URL_STALE_TIME_MS,
   resolveMediaUrl,
 } from "@/lib/media";
+import { useAiAvailability } from "@/lib/use-ai-availability";
 
 function formatJobStatus(status?: string) {
   switch (status) {
@@ -94,10 +94,7 @@ export default function ClustersPage() {
     refetchInterval: clusterJobId ? 4000 : 10000,
     staleTime: MINIO_URL_STALE_TIME_MS,
   });
-  const { data: runtime } = useQuery({
-    queryKey: ["runtime-config"],
-    queryFn: getRuntimeConfig,
-  });
+  const { aiUnavailable, unavailableMessage } = useAiAvailability();
 
   const selectedClusterQuery = useQuery({
     queryKey: ["cluster-detail", selectedClusterId],
@@ -249,11 +246,10 @@ export default function ClustersPage() {
     indexedQuery.isSuccess &&
     indexedImageCount > 0 &&
     indexedImageCount >= effectiveMinClusterSize;
-  const aiUnavailable = runtime ? !runtime.ai_enabled : false;
   const isClusterButtonDisabled =
     isClusterActionBusy || !hasEnoughIndexedImages || aiUnavailable;
   const clusteringUnavailableMessage = aiUnavailable
-    ? "Local AI is disabled in this installed build. Enable an AI profile in Settings to cluster images."
+    ? unavailableMessage
     : indexedQuery.isSuccess && !hasEnoughIndexedImages
       ? `Need at least ${effectiveMinClusterSize} indexed images to cluster. Found ${indexedImageCount}.`
       : null;
@@ -415,7 +411,8 @@ export default function ClustersPage() {
                 <button
                   type="button"
                   onClick={() => clusterMutation.mutate()}
-                  disabled={isClusterActionBusy}
+                  disabled={isClusterActionBusy || aiUnavailable}
+                  title={clusteringUnavailableMessage ?? undefined}
                   className="white-pill px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isClusterActionBusy ? (

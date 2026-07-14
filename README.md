@@ -187,7 +187,7 @@ Because mock vectors have no semantic content, search results are meaningless â€
 docker compose up --build
 ```
 
-The worker loads BLIP (captioning), YOLOv10 (object detection), PaddleOCR (text extraction), and SigLIP via `open-clip` (semantic embeddings). All metadata and vectors reflect real model output.
+The worker loads BLIP (captioning), YOLO26 nano (object detection), PaddleOCR (text extraction), and SigLIP via `open-clip` (semantic embeddings). All metadata and vectors reflect real model output.
 
 **Full ML mode is required when you are working on or reporting:**
 

@@ -98,6 +98,7 @@ export default function AlbumDetailPage() {
     mutationFn: (mediaId: number) => setArchive(mediaId, true),
     onSuccess: ({ id }) => {
       setRemovedIds((cur) => new Set(cur).add(id));
+      invalidate();
       queryClient.invalidateQueries({ queryKey: ["album-assets", albumId] });
       queryClient.invalidateQueries({ queryKey: ["archive"] });
       toast.success("Archived");
@@ -109,6 +110,7 @@ export default function AlbumDetailPage() {
     mutationFn: (mediaId: number) => trashImage(mediaId),
     onSuccess: ({ id }) => {
       setRemovedIds((cur) => new Set(cur).add(id));
+      invalidate();
       queryClient.invalidateQueries({ queryKey: ["album-assets", albumId] });
       queryClient.invalidateQueries({ queryKey: ["trash"] });
       toast.success("Moved to trash");
@@ -255,9 +257,10 @@ export default function AlbumDetailPage() {
                   onNext={() => onIndexChange(index + 1)}
                   hasPrevious={index > 0}
                   hasNext={index < viewerItems.length - 1}
-                  onDeleted={(id) =>
-                    setRemovedIds((current) => new Set(current).add(id))
-                  }
+                  onDeleted={(id) => {
+                    setRemovedIds((current) => new Set(current).add(id));
+                    invalidate();
+                  }}
                   actions={
                     <>
                       <button

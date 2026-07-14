@@ -22,6 +22,10 @@ import {
 import NavBar from "@/components/NavBar";
 import { UniversalSearch } from "@/components/universal-search";
 import {
+  UploadStatusRing,
+  useUploadStatus,
+} from "@/components/upload-status-indicator";
+import {
   applyThemePreference,
   readThemePreference,
   THEME_CHANGE_EVENT,
@@ -57,6 +61,7 @@ export function AppShell({ children }: AppShellProps) {
   const drawerRef = useRef<HTMLElement | null>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const shellless = isShelllessRoute(pathname);
+  const uploadStatus = useUploadStatus();
 
   useEffect(() => {
     const apply = () => applyThemePreference(readThemePreference());
@@ -232,11 +237,26 @@ export function AppShell({ children }: AppShellProps) {
 
           <Link
             href="/upload"
-            title="Upload photos"
+            title={
+              uploadStatus.active
+                ? `${uploadStatus.percent}% upload and indexing progress`
+                : "Upload photos"
+            }
+            aria-label={
+              uploadStatus.active
+                ? `Upload status: ${uploadStatus.percent}%`
+                : "Upload"
+            }
             className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[color:var(--near-white)] px-3 text-sm font-semibold text-[color:var(--void)] outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] sm:px-4"
           >
-            <Upload className="h-4 w-4" />
-            <span className="hidden sm:inline">Upload</span>
+            {uploadStatus.active ? (
+              <UploadStatusRing />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            <span className="hidden sm:inline">
+              {uploadStatus.active ? `${uploadStatus.percent}%` : "Upload"}
+            </span>
           </Link>
 
           <Link

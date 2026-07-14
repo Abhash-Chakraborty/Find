@@ -83,6 +83,16 @@ export function VaultUnlock() {
       <div className="frost-panel mx-auto h-72 w-full max-w-md animate-pulse rounded-3xl" />
     );
 
+  if (status.isError)
+    return (
+      <p
+        role="alert"
+        className="frost-panel mx-auto w-full max-w-md rounded-3xl p-7 text-sm text-[color:var(--status-failed-text)]"
+      >
+        Could not determine vault status. Please retry.
+      </p>
+    );
+
   if (recovery) {
     return (
       <section className="frost-panel mx-auto w-full max-w-lg rounded-3xl p-7 text-center">
@@ -174,20 +184,21 @@ export function VaultUnlock() {
               ? "Reset password"
               : "Unlock vault"}
       </button>
-      {initialized && (
-        <button
-          type="button"
-          onClick={() => {
-            setMode(mode === "recover" ? "unlock" : "recover");
-            setError(null);
-          }}
-          className="text-sm text-[color:var(--silver)] underline-offset-4 hover:underline"
-        >
-          {mode === "recover"
-            ? "Back to unlock"
-            : "Forgot your vault password?"}
-        </button>
-      )}
+      {initialized &&
+        (mode === "recover" || status.data?.recovery_available) && (
+          <button
+            type="button"
+            onClick={() => {
+              setMode(mode === "recover" ? "unlock" : "recover");
+              setError(null);
+            }}
+            className="text-sm text-[color:var(--silver)] underline-offset-4 hover:underline"
+          >
+            {mode === "recover"
+              ? "Back to unlock"
+              : "Forgot your vault password?"}
+          </button>
+        )}
       {error && (
         <p
           role="alert"

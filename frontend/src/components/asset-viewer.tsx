@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { nextSlideIndex, normalizeIntervalMs } from "@/lib/slideshow";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import {
   buildPreloadPlan,
   displayUrl,
@@ -85,13 +86,7 @@ export function AssetViewer({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const panStateRef = useRef<{ x: number; y: number } | null>(null);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
+  useBodyScrollLock();
 
   const active = assets[index];
   const hasPrev = index > 0;

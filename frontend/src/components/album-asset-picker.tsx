@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Plus, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   addAlbumAssets,
@@ -11,6 +11,7 @@ import {
   searchImages,
 } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 interface AlbumAssetPickerProps {
   albumId: number;
@@ -29,6 +30,10 @@ export function AlbumAssetPicker({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const dialogRef = useRef<HTMLElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  useBodyScrollLock();
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 250);
@@ -36,15 +41,35 @@ export function AlbumAssetPicker({
   }, [query]);
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    openerRef.current = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
+      openerRef.current?.focus();
     };
   }, [onClose]);
 
@@ -109,7 +134,11 @@ export function AlbumAssetPicker({
         className="absolute inset-0 cursor-default"
         onClick={onClose}
       />
-      <section className="frost-panel relative flex max-h-[min(90dvh,800px)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-[color:var(--void)]">
+      <section
+        ref={dialogRef}
+        tabIndex={-1}
+        className="frost-panel relative flex max-h-[min(90dvh,800px)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-[color:var(--void)] outline-none"
+      >
         <header className="flex items-center justify-between border-b border-[var(--frost)] px-5 py-4">
           <div>
             <h2 id="album-picker-heading" className="text-lg font-semibold">

@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from rq.worker.worker_classes import SimpleWorker
+from rq.worker import SimpleWorker
 
 from find_api.core.config import settings
 from find_api.core.database import SessionLocal

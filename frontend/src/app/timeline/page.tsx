@@ -12,7 +12,16 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { toast } from "sonner";
 import { ImagePreviewModal } from "@/components/image-preview-modal";
 import { JustifiedGrid } from "@/components/justified-grid";
 import { TimelineScrubber } from "@/components/timeline-scrubber";
@@ -25,13 +34,13 @@ import {
 } from "@/lib/timeline-scrubber";
 import { useTimeline } from "@/lib/use-timeline";
 
-export default function TimelinePage() {
+function TimelinePageContent() {
   const queryClient = useQueryClient();
-  const [likedOnly] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("liked") === "true",
-  );
+  const searchParams = useSearchParams();
+  const likedOnly = searchParams
+    ? searchParams.get("liked") === "true"
+    : typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("liked") === "true";
   const {
     buckets,
     assets,
@@ -63,6 +72,7 @@ export default function TimelinePage() {
       setRemovedIds((cur) => new Set(cur).add(id));
       queryClient.invalidateQueries({ queryKey: ["archive"] });
     },
+    onError: () => toast.error("Failed to archive photo. Please try again."),
   });
 
   const trashMutation = useMutation({
@@ -71,6 +81,8 @@ export default function TimelinePage() {
       setRemovedIds((cur) => new Set(cur).add(id));
       queryClient.invalidateQueries({ queryKey: ["trash"] });
     },
+    onError: () =>
+      toast.error("Failed to move photo to trash. Please try again."),
   });
 
   // Once buckets are known, eagerly load the first bucket so the grid has
@@ -328,5 +340,17 @@ export default function TimelinePage() {
         />
       )}
     </main>
+  );
+}
+
+export default function TimelinePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="timeline-page page-surface h-[calc(100dvh-var(--nav-height))] animate-pulse" />
+      }
+    >
+      <TimelinePageContent />
+    </Suspense>
   );
 }

@@ -23,13 +23,13 @@ import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
   getPeople,
   getPersonImages,
-  getRuntimeConfig,
   type PersonItem,
   submitPersonFeedbackWrongPerson,
   triggerFaceClustering,
   updatePersonName,
 } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
+import { useAiAvailability } from "@/lib/use-ai-availability";
 
 // ─── Person Card Component ────────────────────────────────────────────────────
 
@@ -203,11 +203,7 @@ export default function PeoplePage() {
     queryFn: getPeople,
     refetchInterval: 15000,
   });
-  const { data: runtime } = useQuery({
-    queryKey: ["runtime-config"],
-    queryFn: getRuntimeConfig,
-  });
-  const aiUnavailable = runtime ? !runtime.ai_enabled : false;
+  const { aiUnavailable, unavailableMessage } = useAiAvailability();
 
   const selectedPersonQuery = useQuery({
     queryKey: ["person-images", selectedPersonId],
@@ -288,11 +284,7 @@ export default function PeoplePage() {
               type="button"
               onClick={() => clusterMutation.mutate()}
               disabled={clusterMutation.isPending || aiUnavailable}
-              title={
-                aiUnavailable
-                  ? "Local AI is disabled in this installed build."
-                  : undefined
-              }
+              title={unavailableMessage ?? undefined}
               className="white-pill px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {clusterMutation.isPending ? (
@@ -342,11 +334,7 @@ export default function PeoplePage() {
               type="button"
               onClick={() => clusterMutation.mutate()}
               disabled={clusterMutation.isPending || aiUnavailable}
-              title={
-                aiUnavailable
-                  ? "Local AI is disabled in this installed build."
-                  : undefined
-              }
+              title={unavailableMessage ?? undefined}
               className="white-pill px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" />

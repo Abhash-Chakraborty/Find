@@ -434,6 +434,7 @@ export const getMapMarkers = async (
 // API Functions
 export const uploadImages = async (
   files: FileList | File[],
+  onProgress?: (progress: number) => void,
 ): Promise<UploadResponse> => {
   const formData = new FormData();
 
@@ -446,6 +447,10 @@ export const uploadImages = async (
     headers: {
       "Content-Type": "multipart/form-data",
     },
+    onUploadProgress: (event) => {
+      if (event.total)
+        onProgress?.(Math.round((event.loaded / event.total) * 100));
+    },
   });
 
   return response.data;
@@ -453,6 +458,7 @@ export const uploadImages = async (
 
 export const uploadImagesBulk = async (
   zipFile: File,
+  onProgress?: (progress: number) => void,
 ): Promise<UploadResponse> => {
   const formData = new FormData();
   formData.append("file", zipFile);
@@ -463,6 +469,10 @@ export const uploadImagesBulk = async (
     {
       headers: {
         "Content-Type": "multipart/form-data",
+      },
+      onUploadProgress: (event) => {
+        if (event.total)
+          onProgress?.(Math.round((event.loaded / event.total) * 100));
       },
     },
   );

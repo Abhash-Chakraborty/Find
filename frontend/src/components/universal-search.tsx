@@ -60,6 +60,7 @@ export function UniversalSearch() {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const normalized = query.trim().toLowerCase();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [images, setImages] = useState<SearchResult[]>([]);
@@ -144,6 +145,7 @@ export function UniversalSearch() {
           className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[color:var(--muted)]"
         />
         <input
+          ref={inputRef}
           aria-label="Search everything"
           value={query}
           onChange={(event) => {
@@ -159,7 +161,10 @@ export function UniversalSearch() {
             type="button"
             title="Clear search"
             aria-label="Clear search"
-            onClick={() => setQuery("")}
+            onClick={() => {
+              setQuery("");
+              inputRef.current?.focus();
+            }}
             className="absolute right-2 top-2 icon-button h-6 w-6"
           >
             <X className="h-3.5 w-3.5" />

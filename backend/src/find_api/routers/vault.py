@@ -456,7 +456,14 @@ def unlock_vault(
             )
 
     master_key = _load_or_create_master_key(db, payload.passphrase)
-    _migrate_legacy_encrypted_items(db, master_key)
+    try:
+        _migrate_legacy_encrypted_items(db, master_key)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Legacy vault migration failed during unlock; continuing with valid credentials",
+            exc_info=True,
+        )
+        db.rollback()
     session_token = secrets.token_urlsafe(32)
     set_session_key(session_token, master_key)
     return {"session_token": session_token}
@@ -513,7 +520,14 @@ def change_vault_password(
             f"Vault password must be at least {MIN_VAULT_PASSPHRASE_LENGTH} characters",
         )
     old_key = _load_or_create_master_key(db, payload.current_passphrase)
-    _migrate_legacy_encrypted_items(db, old_key)
+    try:
+        _migrate_legacy_encrypted_items(db, old_key)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Legacy vault migration failed during password rotation; continuing",
+            exc_info=True,
+        )
+        db.rollback()
     recovery_code = "-".join(secrets.token_hex(4).upper() for _ in range(4))
     master_key = _replace_vault_credentials(
         db, payload.new_passphrase, hash_password(recovery_code)

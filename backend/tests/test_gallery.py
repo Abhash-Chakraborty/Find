@@ -1121,6 +1121,29 @@ class TestArchiveTrashRestore:
         assert body["items"][0]["filename"] == "trash.jpg"
         assert body["items"][0]["deleted_at"] is not None
 
+    def test_trash_view_invokes_retention_purge(self, client):
+        with patch("find_api.routers.gallery.purge_expired_trash") as purge:
+            response = client.get("/api/trash")
+
+        assert response.status_code == 200
+        purge.assert_called_once()
+
+    def test_trash_view_survives_retention_purge_failure(self, client, db):
+        _seed(
+            db,
+            filename="still-visible.jpg",
+            status="indexed",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        with patch(
+            "find_api.routers.gallery.purge_expired_trash",
+            side_effect=RuntimeError("purge unavailable"),
+        ):
+            response = client.get("/api/trash")
+
+        assert response.status_code == 200
+        assert response.json()["items"][0]["filename"] == "still-visible.jpg"
+
     # --- empty trash -------------------------------------------------------
     def test_empty_trash_permanently_deletes_only_trashed(self, client, db):
         keep = _seed(db, filename="keep.jpg", status="indexed")

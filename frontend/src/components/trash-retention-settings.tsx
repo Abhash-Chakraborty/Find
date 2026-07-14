@@ -29,12 +29,14 @@ export function TrashRetentionSettings({
               <h2 id="trash-retention-heading" className="font-semibold">
                 Trash retention
               </h2>
-              <span
+              <button
+                type="button"
                 title="Expired items are permanently removed when Trash is opened. Set Never to require manual emptying."
-                className="text-[color:var(--muted)]"
+                aria-label="Expired items are permanently removed when Trash is opened. Set Never to require manual emptying."
+                className="rounded text-[color:var(--muted)] outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
               >
-                <Info className="h-4 w-4" />
-              </span>
+                <Info className="h-4 w-4" aria-hidden="true" />
+              </button>
             </div>
             <p className="mt-1 text-sm text-[color:var(--silver)]">
               Permanently delete trashed photos after a chosen delay.

@@ -783,7 +783,14 @@ def get_trash(
     """List trashed assets (``deleted_at`` set), most recently trashed first."""
     # Retention is enforced whenever Trash is opened, so the dashboard setting
     # works without requiring an external cron service.
-    purge_expired_trash(db=db, user=user)
+    try:
+        purge_expired_trash(db=db, user=user)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Trash auto-purge failed; listing trash without purging",
+            exc_info=True,
+        )
+        db.rollback()
     query = scope_media_query(
         _public_media_query(db).filter(Media.deleted_at.isnot(None)),
         user,

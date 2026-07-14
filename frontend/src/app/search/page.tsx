@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { FeedbackRating } from "@/components/feedback-rating";
 import { ImagePreviewModal } from "@/components/image-preview-modal";
 import {
@@ -29,6 +29,7 @@ function SearchPageContent() {
   const [currentSkip, setCurrentSkip] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const initializedFromUrlRef = useRef(false);
 
   const LIMIT = 24;
   const recentQuery = useQuery({
@@ -57,12 +58,19 @@ function SearchPageContent() {
   });
 
   useEffect(() => {
-    const initialQuery = searchParams?.get("q")?.trim();
-    if (!initialQuery || initialQuery === activeQuery) return;
+    if (initializedFromUrlRef.current) return;
+    const initialQuery = (
+      searchParams?.get("q") ??
+      (typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("q")
+        : null)
+    )?.trim();
+    if (!initialQuery) return;
+    initializedFromUrlRef.current = true;
     setQuery(initialQuery);
     setActiveQuery(initialQuery);
     searchMutation.mutate({ searchQuery: initialQuery, limit: LIMIT, skip: 0 });
-  }, [activeQuery, searchParams, searchMutation.mutate]);
+  }, [searchParams, searchMutation.mutate]);
 
   // Periodic refresh - update first page results without losing loaded pages
   useEffect(() => {

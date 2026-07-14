@@ -16,6 +16,14 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TimelinePage from "../app/timeline/page";
 
+const navigation = vi.hoisted(() => ({
+  useSearchParams: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: navigation.useSearchParams,
+}));
+
 const api = vi.hoisted(() => ({
   getTimelineBuckets: vi.fn(),
   getTimelineBucket: vi.fn(),
@@ -60,11 +68,20 @@ function renderPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <TimelinePage />
     </QueryClientProvider>,
   );
+  return {
+    ...view,
+    rerenderPage: () =>
+      view.rerender(
+        <QueryClientProvider client={client}>
+          <TimelinePage />
+        </QueryClientProvider>,
+      ),
+  };
 }
 
 beforeEach(() => {
@@ -76,6 +93,9 @@ beforeEach(() => {
   api.toggleLike.mockReset();
   api.setArchive.mockReset();
   api.trashImage.mockReset();
+  navigation.useSearchParams.mockImplementation(
+    () => new URLSearchParams(window.location.search),
+  );
   api.getImageDetail.mockResolvedValue({
     id: 101,
     filename: "photo.jpg",
@@ -177,6 +197,14 @@ describe("TimelinePage", () => {
     await waitFor(() =>
       expect(screen.getByTestId("image-preview-modal")).toBeInTheDocument(),
     );
+    expect(screen.getByTestId("image-preview-modal")).toHaveClass(
+      "h-dvh",
+      "w-full",
+    );
+    const detailsToggle = screen.getByTestId("preview-details-toggle");
+    expect(detailsToggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(detailsToggle);
+    expect(detailsToggle).toHaveAttribute("aria-expanded", "true");
   });
 
   it("loads Favorites only from its dedicated sidebar route", async () => {
@@ -202,6 +230,26 @@ describe("TimelinePage", () => {
       await screen.findByRole("heading", { name: "Favorites" }),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("timeline-favorites-toggle")).toBeNull();
+    await waitFor(() =>
+      expect(api.getTimelineBuckets).toHaveBeenCalledWith(
+        expect.objectContaining({ liked: true }),
+      ),
+    );
+  });
+
+  it("reacts when same-route navigation toggles the Favorites query", async () => {
+    api.getTimelineBuckets.mockResolvedValue({ buckets: [], total: 0 });
+    const view = renderPage();
+    expect(
+      await screen.findByRole("heading", { name: "Photos" }),
+    ).toBeInTheDocument();
+
+    window.history.replaceState(null, "", "/timeline?liked=true");
+    view.rerenderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Favorites" }),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(api.getTimelineBuckets).toHaveBeenCalledWith(
         expect.objectContaining({ liked: true }),

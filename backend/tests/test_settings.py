@@ -79,6 +79,11 @@ class TestSettingsLocalMode:
         assert response.json()["trash_retention_days"] == 7
         assert client.get("/api/settings").json()["trash_retention_days"] == 7
 
+        response = client.put("/api/settings", json={"trash_retention_days": 0})
+        assert response.status_code == 200
+        assert response.json()["trash_retention_days"] == 0
+        assert client.get("/api/settings").json()["trash_retention_days"] == 0
+
         assert (
             client.put("/api/settings", json={"trash_retention_days": -1}).status_code
             == 422
