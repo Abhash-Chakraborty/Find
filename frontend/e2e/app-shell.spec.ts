@@ -55,7 +55,9 @@ test.describe("app shell", () => {
     await page.goto("/settings");
 
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-    await expect(page.getByText("Local-first controls")).toBeVisible();
+    await expect(
+      page.getByText("Appearance, local AI, privacy, and retention."),
+    ).toBeVisible();
   });
 
   test("renders the Photos timeline heading", async ({ page }) => {
