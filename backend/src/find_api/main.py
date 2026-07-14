@@ -24,6 +24,7 @@ from find_api.routers import (
     cluster,
     clusters,
     config,
+    diagnostics,
     feedback,
     gallery,
     map,
@@ -148,6 +149,7 @@ app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(clusters.router, prefix="/api", tags=["clusters"])
 app.include_router(cluster.router, prefix="/api", tags=["cluster-ops"])
 app.include_router(status.router, prefix="/api", tags=["status"])
+app.include_router(diagnostics.router, prefix="/api", tags=["diagnostics"])
 app.include_router(config.router, prefix="/api", tags=["config"])
 app.include_router(people.router, prefix="/api", tags=["people"])
 app.include_router(vault.router, prefix="/api", tags=["vault"])
