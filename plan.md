@@ -4,6 +4,32 @@
 > **Branch:** `abhash/production-hardening` (synchronized with `origin/main`).
 > **Reference codebase:** `./reference-app/` (local, gitignored, AGPL-3.0). Read-only reference used to learn UI/behavior; **its contents are never committed to Find**.
 
+## 2026-07-14 v1.1.1 polish addendum
+
+- [x] Vault has separate setup, unlock, and recovery states; one-time recovery
+  codes are stored only as hashes, password changes rotate recovery codes, and
+  auto-lock supports immediate background lock, a delay, or system-style idle
+  timeout. New vault media stays in private storage without image encryption;
+  legacy encrypted items migrate after a successful old-password unlock.
+- [x] Appearance is controlled only from Settings with Light, Dark, and System
+  choices. The header theme shortcut was removed and the application header was
+  made more compact.
+- [x] The sidebar collapses to icon-only navigation with tooltips, distinct
+  duplicate/cluster icons, a one-line license footer, and the current version.
+- [x] Header and sidebar borders no longer form a crossing line, and background
+  shell regions become inert while the mobile drawer is open.
+- [x] Header search now covers photos, albums, destinations, and settings.
+  Empty image Search shows newest uploads in a normal grid; result suggestions
+  were removed and image results retain the shared preview.
+- [x] All actionable automated PR review findings were addressed, including
+  download authentication, timeline virtualization, profile conflicts, local
+  port binding, worker Redis configuration, and per-item vault restore state.
+- [x] Version metadata is aligned at `1.1.1` across web, API, and desktop.
+- [x] Live Docker and Computer-driven smoke checks verified image thumbnail and
+  full preview rendering, compact navigation, universal search, recent uploads,
+  theme switching, Settings AI/hardware controls, and vault recovery UI.
+
+
 ## 2026-07-13 release-candidate addendum
 
 The local `reference-app/` checkout has been restored by the maintainer and is
@@ -30,9 +56,11 @@ It is excluded from Docker contexts and CI rejects any tracked file below
   adapter exists; private media never silently falls back to a cloud service.
 
 Verification: frontend 253 tests and the 20-route production build pass; Tauri
-`cargo check --locked` passes at v1.1.0; uv lock and all five Compose
-configurations pass; the integrated backend suite passes with 513 tests and 5
-expected platform-specific skips. Real NVIDIA inference remains a
+`cargo check --locked` passes at v1.1.1; uv lock and all five Compose
+configurations pass; the integrated backend suite passes with 516 tests and 5
+expected platform-specific skips. A seeded live-stack browser smoke verifies
+the gallery thumbnail, full preview, settings, search, vault recovery, and a
+healthy Full AI worker. Model-level NVIDIA inference remains a
 hardware-specific release gate.
 > **Nature of project:** Find is an **open-source** photo application. This plan reuses an open-source reference project's UI and code patterns under a compliant license (see §1).
 > **Tracking:** every step is a checkbox with a status label. Update as work lands. Keep this file the single source of truth.
@@ -394,14 +422,20 @@ Every feature lane owns its tests; the program owns the final gate (§Phase 10).
 - [~] **Settings panel** — panel shipped with the hardware-accel group wired to a live backend **and persisted server-side** (`/api/settings`, §5.1). Remaining groups (library/storage/ML/appearance/advanced) are YAGNI-deferred until their backends exist — not a parity gap, a scope choice.
 - [~] **Hardware acceleration** — `Auto/GPU/CPU` resolution + **auto CPU fallback** implemented, unit-tested, wired into all ML inference, and **verified green on a real ubuntu+macOS+windows CI matrix** (run 28392485314). Remaining (owner-delegated): a real-GPU runner (non-fallback path) + Android/NNAPI on-device.
 - [ ] **Speed** — layout + timeline query hot paths **measured and within budget** (Appendix §E: layout ~12 ms, buckets ~19.5 ms, bucket ~19.7 ms — API-level). Real-hardware / low-end-profile budgets (first paint, scroll-to-date, thumbnail throughput, CPU-mode ML latency) **owner-delegated** — need a live stack + seeded library.
-- [~] **All tests green** — the integrated v1.1 candidate passes backend **513 passed / 5 skipped** and frontend **253 passed**, plus Ruff, Biome, TypeScript, the 20-route Next.js production build, five Compose parses, and Tauri `cargo check --locked`. Full data-path browser journeys against seeded data remain owner-delegated because they need a live stack.
+- [x] **All tests green** — the integrated v1.1.1 candidate passes backend
+  **516 passed / 5 skipped** and frontend **253 passed**, plus Ruff, Biome,
+  TypeScript, the 20-route Next.js production build, five Compose parses, and
+  Tauri `cargo check --locked`. A Computer-driven seeded-stack smoke also
+  passes for thumbnail/full preview, search, shell, theme, vault recovery UI,
+  hardware detection, and Full AI worker health.
 - [~] **Accessibility + security** — automated a11y smoke tests green; sharing/crypto + album/asset-state + **partner-sharing** all `/security-review`'d (each found+fixed real issues, re-reviewed RESOLVED). Timeline scrubber made keyboard-operable (CI-gated by Biome a11y). **Manual screen-reader pass owner-delegated** (human — §10.5).
 - [x] **License compliant (Path A)** — Find is AGPL-3.0; `LICENSE`/`NOTICE`/metadata correct; shipped-UI footer corrected MIT→AGPL-3.0 (§9.3/§G).
 - [x] **Name scrubbed** — current tree clean. *(Name-scrub CI intentionally NOT built — it would enforce stripping upstream attribution, conflicting with AGPL; attribution credited in NOTICE instead.)*
 - [x] **Reference isolated** — the local checkout is ignored and optional;
   independence is proven by CI on reference-free checkouts.
 - [x] **Docs shipped** — hardware-accel guide ✅, features guide ✅, migration notes ✅, changelog ✅ — all linked from `docs/index.md` (§9.4).
-- [~] **Shipped** — **authorized by the owner.** Branch pushed; PR #321 open and **fully CI-green**. Merge to `main` + tag in progress (§10.6) — this pass.
+- [~] **Shipped** — **authorized by the owner.** Branch work continues in PR
+  #356; merge to `main` still requires the configured approving review.
 
 > Legend: `[x]` done · `[~]` substantial/verified-in-part · `[ ]` not started or genuinely blocked. When the last box is genuinely `[x]`: set **Goal status → `[x] GOAL COMPLETE`**, add a final Change Log entry, and stop.
 

@@ -32,7 +32,7 @@ See the documentation index in [`docs/index.md`](./docs/index.md), the mobile di
 - Inspect full-resolution images with zoom, keyboard navigation, and slideshow
 - Share albums with scoped links and optional passwords/download controls
 - Organize media with favorites, archive, recoverable trash, and near-duplicate review
-- Protect hidden images in an encrypted local vault with explicit in-memory sessions, timeline browsing, preview, restore, and lock controls
+- Protect hidden images in a password-gated private vault with recovery, configurable auto-lock, timeline browsing, preview, and restore controls. Image bytes remain in private object storage rather than being re-encrypted.
 - Record local feedback for search, captions, objects, and people grouping
 
 ## Tech stack

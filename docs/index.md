@@ -20,7 +20,7 @@ This directory is organized by document purpose and implementation status.
 - [Local Search Quality Roadmap](plans/partial/local-search-quality-roadmap.md) - semantic search exists; measurable evaluation, diagnostics, reranking, and scaling work remain planned.
 - [Desktop Framework Evaluation](plans/partial/desktop-tauri-vs-electron-adr.md) - Tauri spike exists, but release-grade packaging and updater decisions remain open.
 - [Personalization Research](plans/partial/personalization-research.md) - feedback collection exists; adaptive personalization is still planned.
-- [Vault Encryption Design](plans/partial/vault-encryption-design.md) - vault feature exists, but implementation still needs alignment with the full design note.
+- [Legacy Vault Encryption Design](plans/partial/vault-encryption-design.md) - documents the previous encrypted-blob format retained only for safe migration of existing vault items.
 - [Small-Team Authentication](plans/partial/small-team-authentication.md) - backend authentication foundations exist; frontend UI, deletion-request workflow, audit log, and Instance management UI remain planned.
 
 ### Not Started

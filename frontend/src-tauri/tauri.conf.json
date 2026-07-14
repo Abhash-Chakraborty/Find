@@ -1,6 +1,6 @@
 {
   "productName": "Find",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "identifier": "com.abhashchakraborty.find",
   "build": {
     "beforeDevCommand": "pnpm dev",
