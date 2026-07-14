@@ -93,7 +93,7 @@ export function TimelineMediaView<T>({
   getHeight = () => null,
   getThumbnailUrl,
   getOriginalUrl,
-  getAlt = () => "",
+  getAlt,
   getOpenLabel,
   getItemTestId,
   getOpenTestId,
@@ -145,7 +145,7 @@ export function TimelineMediaView<T>({
         return {
           id,
           thumbnailUrl,
-          alt: getAlt(item),
+          alt: getAlt?.(item),
           // View-only shares deliberately fall back to their share-scoped
           // thumbnail; a private route is never synthesized here.
           originalUrl: resolveApiRoute(rawOriginalUrl) ?? thumbnailUrl,
@@ -304,6 +304,7 @@ export function TimelineMediaView<T>({
                   </span>
                 </h2>
                 <JustifiedGrid
+                  scrollContainerRef={scrollContainerRef}
                   items={group.items.map((item) => ({
                     item,
                     ratio: mediaAspectRatio(getWidth(item), getHeight(item)),
@@ -325,7 +326,7 @@ export function TimelineMediaView<T>({
                           data-testid={getOpenTestId?.(item)}
                           aria-label={
                             getOpenLabel?.(item) ??
-                            `Open ${getAlt(item) || "image"}`
+                            `Open ${getAlt?.(item) || "image"}`
                           }
                           onClick={() => {
                             if (onOpenItem) onOpenItem(item, timelineIndex);
@@ -337,7 +338,7 @@ export function TimelineMediaView<T>({
                             // biome-ignore lint/performance/noImgElement: authenticated and share-scoped media URLs are not Next image assets.
                             <img
                               src={thumbnailUrl}
-                              alt={getAlt(item)}
+                              alt={getAlt?.(item) ?? `Photo ${getId(item)}`}
                               loading="lazy"
                               className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.015]"
                             />

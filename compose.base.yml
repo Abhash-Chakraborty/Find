@@ -59,7 +59,7 @@ services:
         UV_SYNC_EXTRAS: ""
     command: uvicorn find_api.main:app --host 0.0.0.0 --port 8000 --log-level warning
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment: &backend-environment
       DATABASE_URL: ${DATABASE_URL}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
@@ -102,7 +102,7 @@ services:
         PYTHON_VERSION: "3.12"
         FIND_BUILD_PROFILE: no-ai
         UV_SYNC_EXTRAS: ""
-    command: rq worker --worker-class ${RQ_WORKER_CLASS:-rq.worker.worker_classes.SimpleWorker} --url ${REDIS_URL:-redis://:find-redis-dev@redis:6379} high default low
+    command: rq worker --worker-class find_api.workers.rq_worker.FindWorker --url ${REDIS_URL} high default low
     environment:
       <<: *backend-environment
       MODEL_MANAGER_PROCESS_NAME: worker
@@ -123,7 +123,7 @@ services:
       dockerfile: Dockerfile
       target: production
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_MINIO_BUCKET: ${NEXT_PUBLIC_MINIO_BUCKET:-images}

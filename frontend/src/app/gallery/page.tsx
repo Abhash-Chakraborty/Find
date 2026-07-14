@@ -839,6 +839,24 @@ function GalleryPageContent() {
     },
   });
 
+  const downloadMutation = useMutation({
+    mutationFn: async (item: { id: number; filename: string }) => {
+      const response = await api.get<Blob>(`/api/image/${item.id}/original`, {
+        responseType: "blob",
+      });
+      const objectUrl = URL.createObjectURL(response.data);
+      try {
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = item.filename;
+        anchor.click();
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    },
+    onError: () => toast.error("Download failed. Please try again."),
+  });
+
   const moveToVaultMutation = useMutation({
     mutationFn: async (mediaId: number) => {
       if (!vaultSessionToken) {
@@ -1313,17 +1331,20 @@ function GalleryPageContent() {
                         }`}
                       />
                     </button>
-                    <a
-                      href={
-                        resolveMediaUrl(`/api/image/${item.id}/original`) ??
-                        `/api/image/${item.id}/original`
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadMutation.mutate({
+                          id: item.id,
+                          filename: item.filename,
+                        })
                       }
-                      download={item.filename}
+                      disabled={downloadMutation.isPending}
                       className="icon-button h-8 w-8"
                       aria-label="Download image"
                     >
                       <Download className="h-3.5 w-3.5" />
-                    </a>
+                    </button>
                     {(item.status === "failed" ||
                       (item.status === "indexed" && !item.caption)) && (
                       <button

@@ -121,6 +121,9 @@ class ModelManager:
                     try:
                         time.sleep(interval_seconds)
                         self.unload_idle_models(ttl_seconds)
+                        # Keep the process heartbeat fresh even when no models
+                        # are loaded and the worker is otherwise idle.
+                        self.publish_status()
                     except Exception as e:
                         logger.error(f"Error in model cleanup thread: {e}")
 

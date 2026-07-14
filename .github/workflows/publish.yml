@@ -23,7 +23,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: publish-${{ github.ref }}-${{ inputs.image_tag || github.ref_name }}
@@ -70,6 +69,9 @@ jobs:
     name: Publish backend (${{ matrix.profile }})
     needs: metadata
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -120,6 +122,9 @@ jobs:
     name: Publish web image
     needs: metadata
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Check out source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5

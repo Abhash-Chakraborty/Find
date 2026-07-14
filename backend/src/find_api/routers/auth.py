@@ -294,7 +294,11 @@ def update_profile(
     if body.display_name is not None:
         user.display_name = body.display_name.strip() or None
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "Username is already in use") from exc
     db.refresh(user)
     return {"user": _user_dict(user)}
 
