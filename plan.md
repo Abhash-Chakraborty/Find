@@ -4,6 +4,27 @@
 > **Branch:** `abhash/production-hardening` (synchronized with `origin/main`).
 > **Reference codebase:** `./reference-app/` (local, gitignored, AGPL-3.0). Read-only reference used to learn UI/behavior; **its contents are never committed to Find**.
 
+## 2026-07-14 v1.1.2 completion addendum
+
+- [x] Timeline browsing has one scroll model: native scrollbars are hidden,
+  the chronological scrubber appears only for overflowing multi-period
+  libraries, and a one-photo library has no inert scroll control.
+- [x] Image previews lock background scrolling, use addressable `/image/{id}`
+  URLs, include metadata and navigation, and expose route-appropriate archive,
+  trash, restore, and album-removal actions.
+- [x] Album sharing is disclosure-based and album detail can add photos from
+  recent media or semantic search without leaving the album.
+- [x] Trash retention supports 7, 30, 90, custom-day, and never-delete modes;
+  expired items are purged automatically when Trash is opened.
+- [x] Search, upload, account, duplicates, clusters, people, and Settings use a
+  compact hierarchy; duplicate behavior and AI-disabled behavior are explicit.
+- [x] GPU controls are unavailable when the installed modular artifact has no
+  GPU runtime. No-AI builds keep import and organization functional without
+  presenting clustering controls as usable.
+- [x] Version metadata is aligned at `1.1.2` across web, API, and desktop.
+- [x] Verification passes: frontend 253 tests, production build with 20 routes,
+  backend Ruff checks, and backend 517 passed / 5 skipped.
+
 ## 2026-07-14 v1.1.1 polish addendum
 
 - [x] Vault has separate setup, unlock, and recovery states; one-time recovery

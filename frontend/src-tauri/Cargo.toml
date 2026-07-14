@@ -1,6 +1,6 @@
 [package]
 name = "find-desktop"
-version = "1.1.1"
+version = "1.1.2"
 description = "Find - Local AI Image Intelligence desktop shell"
 authors = []
 edition = "2021"

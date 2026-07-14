@@ -4,6 +4,30 @@ All notable changes to Find are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project is
 distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
+## [1.1.2] — 2026-07-14
+
+### Added
+
+- Addressable `/image/{id}` previews that retain the originating library route,
+  lock background scroll, expose metadata, and provide contextual archive,
+  trash, restore, or album-removal actions.
+- Album photo picker with recent and semantic-search modes, plus automatic
+  trash retention controls for 7, 30, 90, custom, or never-delete policies.
+
+### Changed
+
+- Timeline pages use the date scrubber as their only visible scrollbar and
+  suppress it when the library cannot scroll.
+- Album sharing is hidden until requested; route headers, upload, account,
+  search, duplicates, clusters, and people use a compact visual hierarchy.
+- AI-dependent controls now report disabled or non-installed artifacts
+  truthfully, including unavailable GPU selection in modular CPU/no-AI builds.
+
+### Fixed
+
+- Full-resolution previews, modal navigation URLs, body scroll containment,
+  archive/trash restoration, and single-image timeline presentation.
+
 ## [1.1.0] — 2026-07-13
 
 A product and platform overhaul bringing timeline-first browsing, account and
