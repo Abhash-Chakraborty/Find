@@ -16,6 +16,11 @@ const vaultClient = vi.hoisted(() => ({
   listVaultItems: vi.fn(),
   lockVaultSession: vi.fn(),
   restoreVaultItem: vi.fn(),
+  changeVaultPassword: vi.fn(),
+  getVaultStatus: vi.fn(),
+  setupVault: vi.fn(),
+  recoverVault: vi.fn(),
+  unlockVault: vi.fn(),
 }));
 
 vi.mock("@/components/vault/vault-client", () => ({
@@ -87,6 +92,10 @@ beforeEach(() => {
 
   vaultStore.getState().unlock("vault-session-token");
   vaultClient.listVaultItems.mockResolvedValue([item]);
+  vaultClient.getVaultStatus.mockResolvedValue({
+    initialized: true,
+    recovery_available: true,
+  });
   vaultClient.fetchVaultThumbnail.mockResolvedValue(
     new Blob(["thumbnail"], { type: "image/webp" }),
   );
@@ -156,6 +165,8 @@ describe("VaultGallery", () => {
         "vault-session-token",
       );
     });
-    expect(screen.getByRole("button", { name: "Unlock Vault" })).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: /unlock vault/i }),
+    ).toBeVisible();
   });
 });

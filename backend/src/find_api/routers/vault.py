@@ -1,4 +1,4 @@
-"""Vault endpoints for unlocking, hiding, and streaming encrypted images."""
+"""Password-gated vault endpoints with legacy encrypted-item migration."""
 
 from __future__ import annotations
 
@@ -34,10 +34,12 @@ from find_api.core.crypto import (
     verify_master_key,
 )
 from find_api.core.database import get_db
+from find_api.core.auth import hash_password, verify_password
 from find_api.core.dependencies import get_required_user
 from find_api.core.storage import (
     delete_file,
     download_file_to_path,
+    get_file,
     upload_file,
     upload_thumbnail,
 )
@@ -59,6 +61,20 @@ MIN_VAULT_PASSPHRASE_LENGTH = 8
 
 class VaultUnlockRequest(BaseModel):
     passphrase: str
+
+
+class VaultSetupRequest(BaseModel):
+    passphrase: str
+
+
+class VaultPasswordChangeRequest(BaseModel):
+    current_passphrase: str
+    new_passphrase: str
+
+
+class VaultRecoverRequest(BaseModel):
+    recovery_code: str
+    new_passphrase: str
 
 
 class VaultLockRequest(BaseModel):
@@ -193,6 +209,90 @@ def _load_or_create_master_key(db: Session, passphrase: str) -> bytes:
     if not verify_master_key(master_key, verifier_nonce, verifier_ciphertext):
         raise HTTPException(status_code=401, detail="Invalid vault passphrase")
     return master_key
+
+
+def _protected_storage_enabled(db: Session) -> bool:
+    """Return true for migrated schemas; old test/legacy schemas remain compatible."""
+    try:
+        row = db.execute(
+            text("SELECT storage_mode FROM vault_config WHERE id = 1")
+        ).first()
+        return bool(row and row[0] == "protected")
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        return False
+
+
+def _replace_vault_credentials(
+    db: Session, passphrase: str, recovery_hash: str
+) -> bytes:
+    salt = os.urandom(16)
+    master_key = derive_master_key(passphrase, salt)
+    nonce, ciphertext = create_key_verifier(master_key)
+    db.execute(
+        text(
+            "UPDATE vault_config SET salt = :salt, verifier_nonce = :nonce, "
+            "verifier_ciphertext = :ciphertext, recovery_code_hash = :recovery_hash, "
+            "storage_mode = 'protected' WHERE id = 1"
+        ),
+        {
+            "salt": salt,
+            "nonce": nonce,
+            "ciphertext": ciphertext,
+            "recovery_hash": recovery_hash,
+        },
+    )
+    db.commit()
+    return master_key
+
+
+def _migrate_legacy_encrypted_items(db: Session, master_key: bytes) -> None:
+    """Move legacy encrypted blobs back into private object storage after unlock."""
+    if not _protected_storage_enabled(db):
+        return
+    rows = db.execute(
+        text("SELECT media_id, encrypted_path, iv FROM vault_metadata")
+    ).all()
+    for media_id, encrypted_path, raw_iv in rows:
+        media = _load_media_or_404(db, int(media_id))
+        encrypted_file = Path(encrypted_path)
+        if not encrypted_file.exists():
+            logger.error("Legacy vault blob missing for media %s", media_id)
+            continue
+        plaintext_file = _decrypt_to_temporary_path(
+            master_key,
+            _normalize_binary(raw_iv),
+            encrypted_file,
+            associated_data=build_vault_aad(media.id, media.file_hash),
+            prefix=f"vault-migrate-{media.id}-",
+        )
+        uploaded_thumbnail: Optional[dict] = None
+        try:
+            plaintext = plaintext_file.read_bytes()
+            upload_file(
+                plaintext,
+                media.minio_key,
+                media.content_type or "application/octet-stream",
+            )
+            uploaded_thumbnail = upload_thumbnail(plaintext, media.file_hash)
+            db.execute(
+                text("DELETE FROM vault_metadata WHERE media_id = :media_id"),
+                {"media_id": media.id},
+            )
+            media.vault_state = "hidden"
+            media.encrypted_at = None
+            _apply_thumbnail_metadata(media, uploaded_thumbnail)
+            db.commit()
+            encrypted_file.unlink(missing_ok=True)
+        except Exception:
+            db.rollback()
+            _delete_storage_objects_best_effort(
+                media.minio_key,
+                uploaded_thumbnail.get("thumbnail_key") if uploaded_thumbnail else None,
+            )
+            raise
+        finally:
+            plaintext_file.unlink(missing_ok=True)
 
 
 def _load_media_or_404(db: Session, media_id: int) -> Media:
@@ -356,9 +456,105 @@ def unlock_vault(
             )
 
     master_key = _load_or_create_master_key(db, payload.passphrase)
+    _migrate_legacy_encrypted_items(db, master_key)
     session_token = secrets.token_urlsafe(32)
     set_session_key(session_token, master_key)
     return {"session_token": session_token}
+
+
+@router.get("/vault/status")
+def vault_status(db: Session = Depends(get_db)):
+    """Report setup state without exposing verifier or recovery material."""
+    initialized = _load_vault_config(db) is not None
+    recovery_available = False
+    if initialized:
+        try:
+            row = db.execute(
+                text("SELECT recovery_code_hash FROM vault_config WHERE id = 1")
+            ).first()
+            recovery_available = bool(row and row[0])
+        except Exception:  # noqa: BLE001
+            db.rollback()
+    return {"initialized": initialized, "recovery_available": recovery_available}
+
+
+@router.post("/vault/setup")
+@limiter.limit("5/minute")
+def setup_vault(
+    request: Request, payload: VaultSetupRequest, db: Session = Depends(get_db)
+):
+    """Create a new vault password and return a one-time local recovery code."""
+    if _load_vault_config(db) is not None:
+        raise HTTPException(409, "Vault is already configured")
+    if len(payload.passphrase) < MIN_VAULT_PASSPHRASE_LENGTH:
+        raise HTTPException(
+            400,
+            f"Vault password must be at least {MIN_VAULT_PASSPHRASE_LENGTH} characters",
+        )
+    _create_vault_config(db, payload.passphrase)
+    recovery_code = "-".join(secrets.token_hex(4).upper() for _ in range(4))
+    master_key = _replace_vault_credentials(
+        db, payload.passphrase, hash_password(recovery_code)
+    )
+    token = secrets.token_urlsafe(32)
+    set_session_key(token, master_key)
+    return {"session_token": token, "recovery_code": recovery_code}
+
+
+@router.post("/vault/password")
+@limiter.limit("5/minute")
+def change_vault_password(
+    request: Request, payload: VaultPasswordChangeRequest, db: Session = Depends(get_db)
+):
+    """Change the vault password and rotate its local recovery code."""
+    if len(payload.new_passphrase) < MIN_VAULT_PASSPHRASE_LENGTH:
+        raise HTTPException(
+            400,
+            f"Vault password must be at least {MIN_VAULT_PASSPHRASE_LENGTH} characters",
+        )
+    old_key = _load_or_create_master_key(db, payload.current_passphrase)
+    _migrate_legacy_encrypted_items(db, old_key)
+    recovery_code = "-".join(secrets.token_hex(4).upper() for _ in range(4))
+    master_key = _replace_vault_credentials(
+        db, payload.new_passphrase, hash_password(recovery_code)
+    )
+    token = secrets.token_urlsafe(32)
+    set_session_key(token, master_key)
+    return {"session_token": token, "recovery_code": recovery_code}
+
+
+@router.post("/vault/recover")
+@limiter.limit("5/minute")
+def recover_vault(
+    request: Request, payload: VaultRecoverRequest, db: Session = Depends(get_db)
+):
+    """Reset a protected-storage vault password with its one-time recovery code."""
+    if len(payload.new_passphrase) < MIN_VAULT_PASSPHRASE_LENGTH:
+        raise HTTPException(
+            400,
+            f"Vault password must be at least {MIN_VAULT_PASSPHRASE_LENGTH} characters",
+        )
+    row = db.execute(
+        text("SELECT recovery_code_hash FROM vault_config WHERE id = 1")
+    ).first()
+    if (
+        not row
+        or not row[0]
+        or not verify_password(payload.recovery_code.strip().upper(), row[0])
+    ):
+        raise HTTPException(401, "Invalid recovery code")
+    if db.execute(text("SELECT 1 FROM vault_metadata LIMIT 1")).first():
+        raise HTTPException(
+            409,
+            "Unlock once with the existing password before recovery so legacy encrypted items can be migrated",
+        )
+    recovery_code = "-".join(secrets.token_hex(4).upper() for _ in range(4))
+    master_key = _replace_vault_credentials(
+        db, payload.new_passphrase, hash_password(recovery_code)
+    )
+    token = secrets.token_urlsafe(32)
+    set_session_key(token, master_key)
+    return {"session_token": token, "recovery_code": recovery_code}
 
 
 @router.get("/vault/list")
@@ -422,6 +618,14 @@ def hide_media(
     existing_metadata = _load_vault_metadata(db, media.id)
     if existing_metadata is not None:
         raise HTTPException(status_code=409, detail="Vault metadata already exists")
+
+    if _protected_storage_enabled(db):
+        media.is_hidden = True
+        media.vault_state = "hidden"
+        media.hidden_at = datetime.now(timezone.utc)
+        media.encrypted_at = None
+        db.commit()
+        return {"status": "hidden", "media_id": media.id, "storage_mode": "protected"}
 
     original_key = media.minio_key
     thumbnail_key = media.thumbnail_key
@@ -520,6 +724,17 @@ def restore_media(
 
     metadata = _load_vault_metadata(db, media.id)
     if metadata is None:
+        if _protected_storage_enabled(db):
+            media.is_hidden = False
+            media.vault_state = "visible"
+            media.hidden_at = None
+            media.encrypted_at = None
+            db.commit()
+            return {
+                "status": "restored",
+                "media_id": media.id,
+                "encrypted_blob_removed": False,
+            }
         raise HTTPException(status_code=404, detail="Vault metadata not found")
 
     encrypted_path, iv = metadata
@@ -627,6 +842,21 @@ def thumbnail_hidden_media(
 
     metadata = _load_vault_metadata(db, media_id)
     if metadata is None:
+        if _protected_storage_enabled(db):
+            object_key = media.thumbnail_key or media.minio_key
+            try:
+                content = get_file(object_key)
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=404, detail="Vault preview not found"
+                ) from exc
+            return Response(
+                content=content,
+                media_type=media.thumbnail_content_type
+                or media.content_type
+                or "application/octet-stream",
+                headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+            )
         raise HTTPException(status_code=404, detail="Vault metadata not found")
 
     encrypted_path, iv = metadata
@@ -672,6 +902,18 @@ def stream_hidden_media(
         raise HTTPException(status_code=404, detail="Image not found")
     metadata = _load_vault_metadata(db, media_id)
     if metadata is None:
+        if _protected_storage_enabled(db):
+            try:
+                content = get_file(media.minio_key)
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=404, detail="Vault image not found"
+                ) from exc
+            return Response(
+                content=content,
+                media_type=media.content_type or "application/octet-stream",
+                headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+            )
         raise HTTPException(status_code=404, detail="Vault metadata not found")
 
     encrypted_path, iv = metadata

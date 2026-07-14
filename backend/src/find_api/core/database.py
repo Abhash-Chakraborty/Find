@@ -277,8 +277,22 @@ def init_db():
                         "salt BYTEA NOT NULL, "
                         "verifier_nonce BYTEA NOT NULL, "
                         "verifier_ciphertext BYTEA NOT NULL, "
+                        "recovery_code_hash VARCHAR(255), "
+                        "storage_mode VARCHAR(32) NOT NULL DEFAULT 'protected', "
                         "created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()"
                         ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_config "
+                        "ADD COLUMN IF NOT EXISTS recovery_code_hash VARCHAR(255)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_config "
+                        "ADD COLUMN IF NOT EXISTS storage_mode VARCHAR(32) NOT NULL DEFAULT 'protected'"
                     )
                 )
                 conn.execute(

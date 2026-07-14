@@ -1,7 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImageOff, Loader2, Lock, RotateCcw } from "lucide-react";
+import {
+  ImageOff,
+  KeyRound,
+  Loader2,
+  Lock,
+  RotateCcw,
+  Settings2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AssetViewer } from "@/components/asset-viewer";
 import {
@@ -11,6 +18,7 @@ import {
 import { vaultStore } from "@/store/vaultStore";
 import { VaultUnlock } from "./VaultUnlock";
 import {
+  changeVaultPassword,
   fetchVaultOriginal,
   fetchVaultThumbnail,
   isExpiredVaultSession,
@@ -118,6 +126,27 @@ export function VaultGallery() {
   const isUnlocked = vaultStore((state) => state.isUnlocked);
   const sessionToken = vaultStore((state) => state.sessionToken);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
+  const [pendingRestoreIds, setPendingRestoreIds] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [lockMode, setLockMode] = useState<"immediate" | "delay" | "idle">(
+    () => {
+      try {
+        const saved = localStorage.getItem("find-vault-lock-mode");
+        return saved === "delay" || saved === "idle" ? saved : "immediate";
+      } catch {
+        return "immediate";
+      }
+    },
+  );
+  const [lockDelay, setLockDelay] = useState(() => {
+    try {
+      return Number(localStorage.getItem("find-vault-lock-delay")) || 5;
+    } catch {
+      return 5;
+    }
+  });
+  const [newRecoveryCode, setNewRecoveryCode] = useState<string | null>(null);
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<number, string>>(
     {},
   );
@@ -211,7 +240,7 @@ export function VaultGallery() {
             return;
           }
           setSessionMessage(
-            "Some encrypted previews could not be loaded. You can retry shortly.",
+            "Some private previews could not be loaded. You can retry shortly.",
           );
         }
       }
@@ -235,10 +264,16 @@ export function VaultGallery() {
       if (!sessionToken) {
         throw new Error("Vault session missing");
       }
+      setPendingRestoreIds((current) => new Set(current).add(mediaId));
       await restoreVaultItem(mediaId, sessionToken);
       return mediaId;
     },
     onSuccess: async (mediaId) => {
+      setPendingRestoreIds((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
       const thumbnailUrl = objectUrlsRef.current[mediaId];
       if (thumbnailUrl) {
         URL.revokeObjectURL(thumbnailUrl);
@@ -248,15 +283,36 @@ export function VaultGallery() {
       setSessionMessage("Image restored to your timeline.");
       await queryClient.invalidateQueries({ queryKey: VAULT_QUERY_KEY });
     },
-    onError: (error) => {
+    onError: (error, mediaId) => {
+      setPendingRestoreIds((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
       if (isExpiredVaultSession(error)) {
         clearSession("Session expired. Please unlock again.");
         return;
       }
       setSessionMessage(
-        "The image could not be restored. Its encrypted copy is still safe.",
+        "The image could not be restored. Its private vault copy is unchanged.",
       );
     },
+  });
+
+  const passwordMutation = useMutation({
+    mutationFn: ({ current, next }: { current: string; next: string }) =>
+      changeVaultPassword(current, next),
+    onSuccess: ({ session_token, recovery_code }) => {
+      vaultStore.getState().unlock(session_token);
+      setNewRecoveryCode(recovery_code);
+      setSessionMessage(
+        "Vault password updated. Save the new recovery code below.",
+      );
+    },
+    onError: () =>
+      setSessionMessage(
+        "Vault password could not be changed. Check the current password.",
+      ),
   });
 
   const handleLock = useCallback(() => {
@@ -277,9 +333,41 @@ export function VaultGallery() {
     }
   }, [queryClient, revokeThumbnails, sessionToken]);
 
+  useEffect(() => {
+    if (!isUnlocked) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const lockAfter = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(handleLock, lockDelay * 60_000);
+    };
+    const visibility = () => {
+      if (document.hidden) {
+        if (lockMode === "immediate") handleLock();
+        else if (lockMode === "delay") lockAfter();
+      } else if (timer && lockMode === "delay") {
+        clearTimeout(timer);
+      }
+    };
+    const activity = () => {
+      if (lockMode === "idle") lockAfter();
+    };
+    document.addEventListener("visibilitychange", visibility);
+    if (lockMode === "idle") {
+      for (const event of ["pointerdown", "keydown", "scroll"] as const)
+        window.addEventListener(event, activity, { passive: true });
+      lockAfter();
+    }
+    return () => {
+      document.removeEventListener("visibilitychange", visibility);
+      for (const event of ["pointerdown", "keydown", "scroll"] as const)
+        window.removeEventListener(event, activity);
+      if (timer) clearTimeout(timer);
+    };
+  }, [handleLock, isUnlocked, lockDelay, lockMode]);
+
   const handleViewerError = useCallback(() => {
     setSessionMessage(
-      "The full encrypted image could not be opened. Its preview remains available.",
+      "The full private image could not be opened. Its preview remains available.",
     );
   }, []);
   const handleSessionExpired = useCallback(() => {
@@ -310,8 +398,8 @@ export function VaultGallery() {
               Locked Vault
             </h1>
             <p className="mt-1 text-xs text-[color:var(--silver)]">
-              Originals stay encrypted at rest. This session exists in memory
-              only.
+              Photos remain in private storage behind this local lock. The
+              session token exists in memory only.
             </p>
           </div>
 
@@ -324,6 +412,120 @@ export function VaultGallery() {
             Lock Vault
           </button>
         </div>
+
+        <details className="mb-8 rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-4">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold">
+            <Settings2 className="h-4 w-4" />
+            Vault security
+          </summary>
+          <div className="mt-4 grid gap-5 lg:grid-cols-2">
+            <fieldset>
+              <legend className="text-sm font-medium">Automatic lock</legend>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {(["immediate", "delay", "idle"] as const).map((mode) => (
+                  <label
+                    key={mode}
+                    className={`cursor-pointer rounded-xl border px-3 py-2 text-center text-xs capitalize ${lockMode === mode ? "border-[color:var(--near-white)] bg-[color:var(--surface-hover)]" : "border-[color:var(--frost)] text-[color:var(--silver)]"}`}
+                  >
+                    <input
+                      className="sr-only"
+                      type="radio"
+                      name="vault-lock-mode"
+                      checked={lockMode === mode}
+                      onChange={() => {
+                        setLockMode(mode);
+                        localStorage.setItem("find-vault-lock-mode", mode);
+                      }}
+                    />
+                    {mode === "idle" ? "When idle" : mode}
+                  </label>
+                ))}
+              </div>
+              <label className="mt-3 block text-xs text-[color:var(--silver)]">
+                Delay / idle timeout{" "}
+                <select
+                  value={lockDelay}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setLockDelay(value);
+                    localStorage.setItem(
+                      "find-vault-lock-delay",
+                      String(value),
+                    );
+                  }}
+                  className="ml-2 rounded-lg border border-[var(--frost)] bg-[color:var(--void)] px-2 py-1"
+                >
+                  <option value={1}>1 minute</option>
+                  <option value={5}>5 minutes</option>
+                  <option value={15}>15 minutes</option>
+                  <option value={30}>30 minutes</option>
+                </select>
+              </label>
+            </fieldset>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const data = new FormData(event.currentTarget);
+                const current = String(data.get("current") ?? "");
+                const next = String(data.get("next") ?? "");
+                const confirmation = String(data.get("confirmation") ?? "");
+                if (next !== confirmation) {
+                  setSessionMessage("New vault passwords do not match.");
+                  return;
+                }
+                passwordMutation.mutate({ current, next });
+              }}
+            >
+              <p className="text-sm font-medium">Change password</p>
+              <div className="mt-2 grid gap-2">
+                <input
+                  name="current"
+                  required
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Current password"
+                  className="rounded-lg border border-[var(--frost)] bg-[color:var(--void)] px-3 py-2 text-sm"
+                />
+                <input
+                  name="next"
+                  required
+                  minLength={8}
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="New password"
+                  className="rounded-lg border border-[var(--frost)] bg-[color:var(--void)] px-3 py-2 text-sm"
+                />
+                <input
+                  name="confirmation"
+                  required
+                  minLength={8}
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Confirm new password"
+                  className="rounded-lg border border-[var(--frost)] bg-[color:var(--void)] px-3 py-2 text-sm"
+                />
+                <button
+                  type="submit"
+                  disabled={passwordMutation.isPending}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-[color:var(--near-white)] px-3 py-2 text-sm font-semibold text-[color:var(--void)]"
+                >
+                  <KeyRound className="h-4 w-4" />
+                  Update password
+                </button>
+              </div>
+            </form>
+          </div>
+          {newRecoveryCode && (
+            <div className="mt-4 rounded-xl border border-[var(--frost)] p-3">
+              <p className="text-xs text-[color:var(--silver)]">
+                New one-time recovery code
+              </p>
+              <code className="mt-1 block select-all text-sm tracking-wider">
+                {newRecoveryCode}
+              </code>
+            </div>
+          )}
+        </details>
 
         {sessionMessage && (
           <p className="mb-6 text-sm text-[color:var(--silver)]">
@@ -371,10 +573,7 @@ export function VaultGallery() {
               <button
                 type="button"
                 aria-label={`Restore ${item.filename}`}
-                disabled={
-                  restoreMutation.isPending &&
-                  restoreMutation.variables === item.id
-                }
+                disabled={pendingRestoreIds.has(item.id)}
                 onClick={() => restoreMutation.mutate(item.id)}
                 className="inline-flex items-center gap-1 rounded-full bg-black/65 px-3 py-1.5 text-xs font-medium text-white backdrop-blur transition hover:bg-black/85 disabled:cursor-wait disabled:opacity-60"
               >

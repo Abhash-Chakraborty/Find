@@ -112,7 +112,9 @@ def unlock_vault(
 
 
 def hide_media(client, db, *, media: Media, token: str) -> Path:
-    """Hide a seeded media row using the vault endpoint."""
+    """Hide through the legacy encrypted path to retain migration coverage."""
+    db.execute(text("UPDATE vault_config SET storage_mode = 'encrypted' WHERE id = 1"))
+    db.commit()
     with (
         patch(
             "find_api.routers.vault.download_file_to_path",
@@ -174,6 +176,70 @@ class TestVaultUnlock:
             json={"passphrase": "wrong horse battery staple"},
         )
         assert response.status_code == 401
+
+
+class TestVaultCredentials:
+    """Setup and recovery rotate credentials without exposing stored secrets."""
+
+    def test_setup_status_and_recovery_round_trip(self, client, db):
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        prepare_vault_tables(db)
+
+        status = client.get("/api/vault/status")
+        assert status.status_code == 200
+        assert status.json() == {
+            "initialized": False,
+            "recovery_available": False,
+        }
+
+        setup = client.post(
+            "/api/vault/setup",
+            json={"passphrase": "initial local password"},
+        )
+        assert setup.status_code == 200
+        recovery_code = setup.json()["recovery_code"]
+        assert recovery_code
+        assert setup.json()["session_token"]
+
+        stored_hash = db.execute(
+            text("SELECT recovery_code_hash FROM vault_config WHERE id = 1")
+        ).scalar_one()
+        assert stored_hash
+        assert recovery_code not in stored_hash
+
+        status = client.get("/api/vault/status")
+        assert status.json() == {
+            "initialized": True,
+            "recovery_available": True,
+        }
+
+        recovered = client.post(
+            "/api/vault/recover",
+            json={
+                "recovery_code": recovery_code.lower(),
+                "new_passphrase": "replacement local password",
+            },
+        )
+        assert recovered.status_code == 200
+        assert recovered.json()["session_token"]
+        assert recovered.json()["recovery_code"] != recovery_code
+
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        old_unlock = client.post(
+            "/api/vault/unlock",
+            json={"passphrase": "initial local password"},
+        )
+        assert old_unlock.status_code == 401
+
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        new_unlock = client.post(
+            "/api/vault/unlock",
+            json={"passphrase": "replacement local password"},
+        )
+        assert new_unlock.status_code == 200
 
 
 class TestVaultHide:
@@ -243,6 +309,10 @@ class TestVaultHide:
     ):
         media = seed_media(db, filename="with-thumb.png", with_thumbnail=True)
         token = unlock_vault(client, db)
+        db.execute(
+            text("UPDATE vault_config SET storage_mode = 'encrypted' WHERE id = 1")
+        )
+        db.commit()
         delete_mock = Mock()
 
         with (
@@ -275,6 +345,30 @@ class TestVaultHide:
             call(media.minio_key),
             call(media.thumbnail_key),
         ]
+
+    def test_protected_storage_hide_keeps_private_objects(self, client, db):
+        media = seed_media(db, filename="protected.png", with_thumbnail=True)
+        token = unlock_vault(client, db)
+        delete_mock = Mock()
+        with patch("find_api.routers.vault.delete_file", delete_mock):
+            response = client.post(
+                "/api/vault/hide",
+                json={"media_id": media.id},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert response.status_code == 200
+        assert response.json()["storage_mode"] == "protected"
+        db.refresh(media)
+        assert media.is_hidden is True
+        assert media.vault_state == "hidden"
+        assert (
+            db.execute(
+                text("SELECT 1 FROM vault_metadata WHERE media_id = :media_id"),
+                {"media_id": media.id},
+            ).first()
+            is None
+        )
+        delete_mock.assert_not_called()
 
 
 class TestVaultLock:

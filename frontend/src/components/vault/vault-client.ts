@@ -23,6 +23,55 @@ export async function unlockVault(passphrase: string): Promise<string> {
   return response.data.session_token;
 }
 
+export async function getVaultStatus(): Promise<{
+  initialized: boolean;
+  recovery_available: boolean;
+}> {
+  const response = await api.get<{
+    initialized: boolean;
+    recovery_available: boolean;
+  }>("/api/vault/status");
+  return response.data;
+}
+
+export async function setupVault(
+  passphrase: string,
+): Promise<{ session_token: string; recovery_code: string }> {
+  const response = await api.post<{
+    session_token: string;
+    recovery_code: string;
+  }>("/api/vault/setup", { passphrase });
+  return response.data;
+}
+
+export async function recoverVault(
+  recoveryCode: string,
+  newPassphrase: string,
+): Promise<{ session_token: string; recovery_code: string }> {
+  const response = await api.post<{
+    session_token: string;
+    recovery_code: string;
+  }>("/api/vault/recover", {
+    recovery_code: recoveryCode,
+    new_passphrase: newPassphrase,
+  });
+  return response.data;
+}
+
+export async function changeVaultPassword(
+  currentPassphrase: string,
+  newPassphrase: string,
+): Promise<{ session_token: string; recovery_code: string }> {
+  const response = await api.post<{
+    session_token: string;
+    recovery_code: string;
+  }>("/api/vault/password", {
+    current_passphrase: currentPassphrase,
+    new_passphrase: newPassphrase,
+  });
+  return response.data;
+}
+
 export async function listVaultItems(
   sessionToken: string,
 ): Promise<VaultListItem[]> {
