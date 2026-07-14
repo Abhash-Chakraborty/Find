@@ -18,6 +18,7 @@ class TestSettingsLocalMode:
         assert body["map_enabled"] is False
         assert body["ml_mode"] == settings.ML_MODE
         assert "disabled" in body["supported_ml_modes"]
+        assert body["trash_retention_days"] == settings.TRASH_RETENTION_DAYS
 
     def test_put_persists_and_reads_back(self, client):
         put = client.put("/api/settings", json={"accel_mode": "cpu"})
@@ -71,6 +72,17 @@ class TestSettingsLocalMode:
         assert "disabled" in body["supported_ml_modes"]
         assert client.get("/api/config").json()["ai_enabled"] is False
         assert client.get("/api/config").json()["map_enabled"] is True
+
+    def test_trash_retention_is_dashboard_configurable(self, client):
+        response = client.put("/api/settings", json={"trash_retention_days": 7})
+        assert response.status_code == 200
+        assert response.json()["trash_retention_days"] == 7
+        assert client.get("/api/settings").json()["trash_retention_days"] == 7
+
+        assert (
+            client.put("/api/settings", json={"trash_retention_days": -1}).status_code
+            == 422
+        )
 
     def test_installed_ai_mode_can_be_changed_from_settings(self, client):
         with patch("find_api.core.runtime_profile.settings.FIND_BUILD_PROFILE", "cpu"):

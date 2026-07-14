@@ -347,6 +347,8 @@ export interface AppSettings {
   map_enabled: boolean;
   ml_mode: "disabled" | "full" | "mock" | "remote";
   supported_ml_modes: string[];
+  /** 0 disables automatic age-based deletion. */
+  trash_retention_days: number;
 }
 
 export interface RuntimeConfig {

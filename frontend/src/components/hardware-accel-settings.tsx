@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Cpu, Gauge, MonitorCog } from "lucide-react";
-import { type AccelMode, getHardwareReport } from "@/lib/api";
+import { type AccelMode, getHardwareReport, getRuntimeConfig } from "@/lib/api";
 
 const MODES: { value: AccelMode; label: string; hint: string }[] = [
   {
@@ -33,6 +33,10 @@ export function HardwareAccelSettings({
     queryKey: ["hardware-report"],
     queryFn: getHardwareReport,
   });
+  const { data: runtime } = useQuery({
+    queryKey: ["runtime-config"],
+    queryFn: getRuntimeConfig,
+  });
   const selected: AccelMode = value ?? data?.accel_mode ?? "auto";
 
   return (
@@ -62,37 +66,52 @@ export function HardwareAccelSettings({
 
       <fieldset className="grid gap-px border-y border-[color:var(--frost)] bg-[color:var(--frost)] sm:grid-cols-3">
         <legend className="sr-only">Acceleration mode</legend>
-        {MODES.map((mode, index) => (
-          <label
-            key={mode.value}
-            data-testid={`accel-option-${mode.value}`}
-            className="group relative flex min-h-28 cursor-pointer flex-col gap-2 bg-[color:var(--void)]/90 p-4 transition hover:bg-[color:var(--surface-hover)] has-[:checked]:bg-[color:var(--blue-soft)]"
-          >
-            <input
-              type="radio"
-              name="accel-mode"
-              value={mode.value}
-              checked={selected === mode.value}
-              disabled={pending}
-              onChange={() => onChange?.(mode.value)}
-              className="peer sr-only"
-            />
-            <span className="flex items-center justify-between gap-3 text-sm font-semibold">
-              <span className="flex items-center gap-2">
-                {index === 0 ? (
-                  <MonitorCog aria-hidden="true" size={16} />
-                ) : (
-                  <Cpu aria-hidden="true" size={16} />
-                )}
-                {mode.label}
+        {MODES.map((mode, index) => {
+          const gpuNotInstalled =
+            mode.value === "gpu" &&
+            runtime !== undefined &&
+            runtime.build_profile !== "nvidia" &&
+            runtime.build_profile !== "development";
+
+          return (
+            <label
+              key={mode.value}
+              data-testid={`accel-option-${mode.value}`}
+              className="group relative flex min-h-28 cursor-pointer flex-col gap-2 bg-[color:var(--void)]/90 p-4 transition hover:bg-[color:var(--surface-hover)] has-[:checked]:bg-[color:var(--blue-soft)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
+              title={
+                gpuNotInstalled
+                  ? "GPU runtime is not included in this installed build."
+                  : undefined
+              }
+            >
+              <input
+                type="radio"
+                name="accel-mode"
+                value={mode.value}
+                checked={selected === mode.value}
+                disabled={pending || gpuNotInstalled}
+                onChange={() => onChange?.(mode.value)}
+                className="peer sr-only"
+              />
+              <span className="flex items-center justify-between gap-3 text-sm font-semibold">
+                <span className="flex items-center gap-2">
+                  {index === 0 ? (
+                    <MonitorCog aria-hidden="true" size={16} />
+                  ) : (
+                    <Cpu aria-hidden="true" size={16} />
+                  )}
+                  {mode.label}
+                </span>
+                <span className="size-4 rounded-full border border-[color:var(--frost-strong)] bg-[color:var(--void)] shadow-[inset_0_0_0_3px_var(--void)] peer-checked:border-[color:var(--blue)] peer-checked:bg-[color:var(--blue)]" />
               </span>
-              <span className="size-4 rounded-full border border-[color:var(--frost-strong)] bg-[color:var(--void)] shadow-[inset_0_0_0_3px_var(--void)] peer-checked:border-[color:var(--blue)] peer-checked:bg-[color:var(--blue)]" />
-            </span>
-            <span className="text-xs leading-5 text-[color:var(--silver)]">
-              {mode.hint}
-            </span>
-          </label>
-        ))}
+              <span className="text-xs leading-5 text-[color:var(--silver)]">
+                {gpuNotInstalled
+                  ? "Not installed in this modular build."
+                  : mode.hint}
+              </span>
+            </label>
+          );
+        })}
       </fieldset>
 
       {isLoading && (

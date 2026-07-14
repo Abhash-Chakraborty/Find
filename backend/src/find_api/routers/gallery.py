@@ -24,7 +24,9 @@ from find_api.core.queue import get_task_queue
 from find_api.core.storage import get_file_url, delete_file
 from find_api.models.media import Media
 from find_api.models.cluster import Cluster
+from find_api.models.app_setting import AppSetting
 from find_api.models.user import User
+from find_api.routers.config import TRASH_RETENTION_DAYS_KEY
 from find_api.services.query_cache import invalidate_query_cache
 from find_api.workers.jobs import analyze_image, generate_thumbnail_for_media
 
@@ -779,6 +781,9 @@ def get_trash(
     user: Optional[User] = Depends(get_required_user),
 ):
     """List trashed assets (``deleted_at`` set), most recently trashed first."""
+    # Retention is enforced whenever Trash is opened, so the dashboard setting
+    # works without requiring an external cron service.
+    purge_expired_trash(db=db, user=user)
     query = scope_media_query(
         _public_media_query(db).filter(Media.deleted_at.isnot(None)),
         user,
@@ -851,7 +856,17 @@ def purge_expired_trash(
     than ``TRASH_RETENTION_DAYS`` are removed. Intended for a scheduled/manual
     auto-purge. Retention of 0 disables age-based purging (no-op).
     """
-    retention_days = settings.TRASH_RETENTION_DAYS
+    retention_setting = (
+        db.query(AppSetting).filter(AppSetting.key == TRASH_RETENTION_DAYS_KEY).first()
+    )
+    try:
+        retention_days = int(
+            retention_setting.value
+            if retention_setting is not None
+            else settings.TRASH_RETENTION_DAYS
+        )
+    except (TypeError, ValueError):
+        retention_days = settings.TRASH_RETENTION_DAYS
     if retention_days <= 0:
         return {
             "message": "Auto-purge disabled (TRASH_RETENTION_DAYS=0)",

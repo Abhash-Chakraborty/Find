@@ -77,6 +77,7 @@ describe("SettingsPage", () => {
     map_enabled: false,
     ml_mode: "full",
     supported_ml_modes: ["disabled", "mock", "full"],
+    trash_retention_days: 30,
     ...overrides,
   });
 

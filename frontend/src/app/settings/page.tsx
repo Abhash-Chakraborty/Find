@@ -9,11 +9,13 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { AiRuntimeSettings } from "@/components/ai-runtime-settings";
 import { AppearanceSettings } from "@/components/appearance-settings";
 import { HardwareAccelSettings } from "@/components/hardware-accel-settings";
 import { MapPrivacySettings } from "@/components/map-privacy-settings";
+import { TrashRetentionSettings } from "@/components/trash-retention-settings";
 import { type AppSettings, getSettings, updateSettings } from "@/lib/api";
 
 const SECTIONS = [
@@ -21,6 +23,7 @@ const SECTIONS = [
   { href: "#hardware", label: "Performance", icon: Cpu },
   { href: "#ai-runtime-heading", label: "Local AI", icon: Sparkles },
   { href: "#privacy", label: "Privacy", icon: MapPinned },
+  { href: "#trash-retention", label: "Trash", icon: Trash2 },
 ] as const;
 
 export default function SettingsPage() {
@@ -43,20 +46,22 @@ export default function SettingsPage() {
   return (
     <main className="page-surface pb-20 pt-8 sm:pt-10 lg:pb-24 lg:pt-12">
       <div className="mx-auto w-full max-w-6xl">
-        <header className="mb-8 border-b border-[color:var(--frost)] pb-7 sm:mb-10 sm:pb-8">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--blue)]">
-            <ShieldCheck aria-hidden="true" size={15} />
-            Local-first controls
-          </div>
+        <header className="mb-7 border-b border-[color:var(--frost)] pb-5 sm:mb-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="section-heading text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
-                Settings
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--silver)] sm:text-base sm:leading-7">
-                Tune performance, control local AI, and choose whether private
-                location metadata is retained. Changes apply to this Find
-                instance.
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-sm font-semibold text-[color:var(--blue)]">
+                  System
+                </span>
+                <span aria-hidden="true" className="text-[color:var(--muted)]">
+                  /
+                </span>
+                <h1 className="section-heading text-4xl font-semibold tracking-[-0.035em]">
+                  Settings
+                </h1>
+              </div>
+              <p className="mt-2 text-sm text-[color:var(--silver)]">
+                Appearance, local AI, privacy, and retention.
               </p>
             </div>
             <div className="min-h-8" aria-live="polite">
@@ -173,6 +178,13 @@ export default function SettingsPage() {
                     }
                   />
                 </div>
+                <TrashRetentionSettings
+                  value={settingsQuery.data.trash_retention_days}
+                  pending={save.isPending}
+                  onChange={(trash_retention_days) =>
+                    save.mutate({ trash_retention_days })
+                  }
+                />
               </div>
             )}
 

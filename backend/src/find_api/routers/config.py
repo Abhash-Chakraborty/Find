@@ -29,6 +29,7 @@ from find_api.models.user import User
 router = APIRouter()
 
 _VALID_ACCEL_MODES = ("auto", "gpu", "cpu")
+TRASH_RETENTION_DAYS_KEY = "trash_retention_days"
 
 
 def get_setting(db: Session, key: str, default: str) -> str:
@@ -40,6 +41,19 @@ def get_setting(db: Session, key: str, default: str) -> str:
 def _effective_accel_mode(db: Session) -> str:
     """The accel mode in force: the persisted preference, else the env default."""
     return get_setting(db, ACCEL_MODE_KEY, settings.ACCEL_MODE)
+
+
+def _trash_retention_days(db: Session) -> int:
+    raw = get_setting(
+        db,
+        TRASH_RETENTION_DAYS_KEY,
+        str(settings.TRASH_RETENTION_DAYS),
+    )
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return settings.TRASH_RETENTION_DAYS
+    return value if 0 <= value <= 3650 else settings.TRASH_RETENTION_DAYS
 
 
 def _runtime_resolution(db: Session):
@@ -111,6 +125,7 @@ class SettingsResponse(BaseModel):
     map_enabled: bool
     ml_mode: Literal["disabled", "full", "mock", "remote"]
     supported_ml_modes: list[str]
+    trash_retention_days: int
 
 
 class SettingsUpdate(BaseModel):
@@ -118,6 +133,7 @@ class SettingsUpdate(BaseModel):
     ai_enabled: Optional[bool] = None
     map_enabled: Optional[bool] = None
     ml_mode: Optional[Literal["disabled", "full", "mock", "remote"]] = None
+    trash_retention_days: Optional[int] = None
 
 
 def _settings_response(db: Session) -> SettingsResponse:
@@ -128,6 +144,7 @@ def _settings_response(db: Session) -> SettingsResponse:
         map_enabled=preferences.map_enabled,
         ml_mode=preferences.ml_mode,
         supported_ml_modes=list(resolve_runtime(preferences).supported_modes),
+        trash_retention_days=_trash_retention_days(db),
     )
 
 
@@ -185,6 +202,18 @@ def update_settings(
                 f"ML mode '{request.ml_mode}' is not installed in this artifact",
             )
         _upsert_setting(db, ML_MODE_KEY, request.ml_mode)
+
+    if request.trash_retention_days is not None:
+        if not 0 <= request.trash_retention_days <= 3650:
+            raise HTTPException(
+                422,
+                "trash_retention_days must be between 0 and 3650",
+            )
+        _upsert_setting(
+            db,
+            TRASH_RETENTION_DAYS_KEY,
+            str(request.trash_retention_days),
+        )
 
     if request.model_fields_set:
         db.commit()
