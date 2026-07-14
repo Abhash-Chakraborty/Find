@@ -27,6 +27,7 @@ import {
   getClusters,
   getGallery,
   getJobStatus,
+  getRuntimeConfig,
   triggerClustering,
   updateCluster,
 } from "@/lib/api";
@@ -92,6 +93,10 @@ export default function ClustersPage() {
     queryFn: getClusters,
     refetchInterval: clusterJobId ? 4000 : 10000,
     staleTime: MINIO_URL_STALE_TIME_MS,
+  });
+  const { data: runtime } = useQuery({
+    queryKey: ["runtime-config"],
+    queryFn: getRuntimeConfig,
   });
 
   const selectedClusterQuery = useQuery({
@@ -244,10 +249,12 @@ export default function ClustersPage() {
     indexedQuery.isSuccess &&
     indexedImageCount > 0 &&
     indexedImageCount >= effectiveMinClusterSize;
+  const aiUnavailable = runtime ? !runtime.ai_enabled : false;
   const isClusterButtonDisabled =
-    isClusterActionBusy || !hasEnoughIndexedImages;
-  const clusteringUnavailableMessage =
-    indexedQuery.isSuccess && !hasEnoughIndexedImages
+    isClusterActionBusy || !hasEnoughIndexedImages || aiUnavailable;
+  const clusteringUnavailableMessage = aiUnavailable
+    ? "Local AI is disabled in this installed build. Enable an AI profile in Settings to cluster images."
+    : indexedQuery.isSuccess && !hasEnoughIndexedImages
       ? `Need at least ${effectiveMinClusterSize} indexed images to cluster. Found ${indexedImageCount}.`
       : null;
 
@@ -266,12 +273,13 @@ export default function ClustersPage() {
   return (
     <div className="page-shell">
       <div className="container-shell py-10 md:py-14">
-        <div className="page-enter mb-10 flex flex-col gap-6 border-b border-[var(--frost)] pb-8 md:flex-row md:items-end md:justify-between">
+        <div className="page-enter mb-8 flex flex-col gap-4 border-b border-[var(--frost)] pb-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
-            <h1 className="section-heading mb-4 text-5xl font-medium md:text-6xl">
-              Clusters
-            </h1>
-            <p className="muted-copy text-sm leading-6">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--blue)]">
+              Library / Clusters
+            </p>
+            <h1 className="section-heading text-3xl font-medium">Clusters</h1>
+            <p className="muted-copy mt-2 text-sm leading-6">
               Similar images are grouped into clean, browsable sets as your
               library is indexed.
             </p>
@@ -306,6 +314,13 @@ export default function ClustersPage() {
             </button>
           </div>
         </div>
+
+        {aiUnavailable && (
+          <div className="mb-6 rounded-2xl border border-[color:var(--frost)] bg-[color:var(--surface-soft)] px-5 py-4 text-sm text-[color:var(--silver)]">
+            This build imports and organizes photos without AI. Install or
+            enable a local AI profile in Settings to create visual clusters.
+          </div>
+        )}
 
         {activeJobStatus && (
           <div className="mb-8 flex justify-center">

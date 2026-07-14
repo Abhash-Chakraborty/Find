@@ -11,11 +11,12 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Archive, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AssetViewer } from "@/components/asset-viewer";
+import { ImagePreviewModal } from "@/components/image-preview-modal";
 import { JustifiedGrid } from "@/components/justified-grid";
 import { TimelineScrubber } from "@/components/timeline-scrubber";
-import { setArchive, toggleLike, trashImage } from "@/lib/api";
+import { setArchive, trashImage } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 import {
   buildScrubberLayout,
@@ -26,7 +27,7 @@ import { useTimeline } from "@/lib/use-timeline";
 
 export default function TimelinePage() {
   const queryClient = useQueryClient();
-  const [likedOnly, setLikedOnly] = useState(
+  const [likedOnly] = useState(
     () =>
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).get("liked") === "true",
@@ -43,12 +44,8 @@ export default function TimelinePage() {
     liked: likedOnly || undefined,
   });
   const [scrollOffset, setScrollOffset] = useState(0);
+  const [canScroll, setCanScroll] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
-  // Local favorite overrides for instant feedback (the per-bucket cache isn't
-  // refetched on a like toggle, only on a filter change).
-  const [favoriteOverrides, setFavoriteOverrides] = useState<
-    Record<number, boolean>
-  >({});
   // Assets archived/trashed from the viewer leave the grid immediately; the
   // per-bucket cache still holds them, so we hide them locally.
   const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
@@ -59,25 +56,6 @@ export default function TimelinePage() {
     () => assets.filter((a) => !removedIds.has(a.id)),
     [assets, removedIds],
   );
-
-  const favoriteIds = useMemo(() => {
-    const ids = new Set<number>();
-    for (const a of assets) {
-      const overridden = favoriteOverrides[a.id];
-      if (overridden ?? a.liked) {
-        ids.add(a.id);
-      }
-    }
-    return ids;
-  }, [assets, favoriteOverrides]);
-
-  const favoriteMutation = useMutation({
-    mutationFn: (mediaId: number) => toggleLike(mediaId),
-    onSuccess: ({ id, liked }) => {
-      setFavoriteOverrides((cur) => ({ ...cur, [id]: liked }));
-      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
-    },
-  });
 
   const archiveMutation = useMutation({
     mutationFn: (mediaId: number) => setArchive(mediaId, true),
@@ -124,7 +102,7 @@ export default function TimelinePage() {
           loadBucket(nextBucket.timeBucket);
         }
       },
-      { rootMargin: "800px 0px" },
+      { root: scrollRef.current, rootMargin: "800px 0px" },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
@@ -136,25 +114,50 @@ export default function TimelinePage() {
   const scrubberLayout = useMemo(() => buildScrubberLayout(buckets), [buckets]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || scrubberLayout.totalHeight <= 0) {
-      return;
-    }
+    const container = scrollRef.current;
+    if (!container || scrubberLayout.totalHeight <= 0) return;
+
     const update = () => {
-      const documentElement = document.documentElement;
       const scrollable = Math.max(
-        1,
-        documentElement.scrollHeight - window.innerHeight,
+        0,
+        container.scrollHeight - container.clientHeight,
       );
-      const fraction = Math.min(1, Math.max(0, window.scrollY / scrollable));
+      setCanScroll(scrollable > 2);
+      const fraction =
+        scrollable > 0
+          ? Math.min(1, Math.max(0, container.scrollTop / scrollable))
+          : 0;
       const offset = fraction * scrubberLayout.totalHeight;
       setScrollOffset(offset);
       const segment = offsetToSegment(scrubberLayout, offset);
       if (segment) loadBucket(segment.timeBucket);
     };
+
     update();
-    window.addEventListener("scroll", update, { passive: true });
-    return () => window.removeEventListener("scroll", update);
+    container.addEventListener("scroll", update, { passive: true });
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(container);
+    return () => {
+      container.removeEventListener("scroll", update);
+      observer?.disconnect();
+    };
   }, [loadBucket, scrubberLayout]);
+
+  const visibleAssetCount = visibleAssets.length;
+  useEffect(() => {
+    if (visibleAssetCount === 0) {
+      setCanScroll(false);
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      const container = scrollRef.current;
+      if (container) {
+        setCanScroll(container.scrollHeight - container.clientHeight > 2);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [visibleAssetCount]);
   const handleScrub = useCallback(
     (offset: number) => {
       setScrollOffset(offset);
@@ -162,70 +165,46 @@ export default function TimelinePage() {
       if (segment) {
         loadBucket(segment.timeBucket);
       }
-      if (typeof window !== "undefined") {
+      const container = scrollRef.current;
+      if (container) {
         const fraction = offsetToTrackFraction(scrubberLayout, offset);
-        const doc = document.documentElement;
-        const scrollable = Math.max(0, doc.scrollHeight - window.innerHeight);
-        window.scrollTo({ top: fraction * scrollable, behavior: "auto" });
+        const scrollable = Math.max(
+          0,
+          container.scrollHeight - container.clientHeight,
+        );
+        container.scrollTo({ top: fraction * scrollable, behavior: "auto" });
       }
     },
     [scrubberLayout, loadBucket],
   );
-
-  const viewerAssets = visibleAssets.map((a) => ({
-    id: a.id,
-    thumbnailUrl:
-      resolveMediaUrl(a.thumbnailUrl, null, a.id, true) ?? a.thumbnailUrl,
-    originalUrl:
-      resolveMediaUrl(`/api/image/${a.id}/original`) ??
-      `/api/image/${a.id}/original`,
-    alt: a.createdAt
-      ? `Photo from ${new Date(a.createdAt).toLocaleDateString()}`
-      : `Photo ${a.id}`,
-  }));
+  const activeViewerAsset =
+    viewerIndex === null ? null : (visibleAssets[viewerIndex] ?? null);
 
   return (
     <main
-      className="timeline-page page-surface"
+      className="timeline-page page-surface flex h-[calc(100dvh-var(--nav-height))] flex-col overflow-hidden pt-6 sm:pt-8"
       style={{ position: "relative" }}
     >
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--frost)] pb-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--blue)]">
+      <header className="mb-4 shrink-0 border-b border-[var(--frost)] pb-4">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="text-sm font-semibold text-[color:var(--blue)]">
             Library
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold text-[color:var(--near-white)]">
-            Photos
+          </span>
+          <span aria-hidden="true" className="text-[color:var(--muted)]">
+            /
+          </span>
+          <h1 className="text-3xl font-semibold text-[color:var(--near-white)]">
+            {likedOnly ? "Favorites" : "Photos"}
           </h1>
           {!isLoadingBuckets && (
             <p
               data-testid="timeline-total"
-              className="mt-1 text-sm text-[color:var(--silver)]"
+              className="ml-1 text-sm text-[color:var(--silver)]"
             >
               {total} photos
             </p>
           )}
         </div>
-        <button
-          type="button"
-          data-testid="timeline-favorites-toggle"
-          aria-pressed={likedOnly}
-          onClick={() =>
-            setLikedOnly((current) => {
-              const next = !current;
-              if (typeof window !== "undefined") {
-                const url = new URL(window.location.href);
-                if (next) url.searchParams.set("liked", "true");
-                else url.searchParams.delete("liked");
-                window.history.replaceState(null, "", url);
-              }
-              return next;
-            })
-          }
-          className="frost-button px-4 py-2 text-sm font-medium"
-        >
-          {likedOnly ? "Showing favorites" : "Show favorites"}
-        </button>
       </header>
 
       {isLoadingBuckets && (
@@ -244,9 +223,14 @@ export default function TimelinePage() {
         <p data-testid="timeline-empty">No photos yet.</p>
       )}
 
-      <div className="flex gap-3" style={{ display: "flex" }}>
-        <div ref={scrollRef} id="timeline-scroll-region" style={{ flex: 1 }}>
+      <div className="flex min-h-0 flex-1 gap-3">
+        <div
+          ref={scrollRef}
+          id="timeline-scroll-region"
+          className="timeline-native-scroll min-w-0 flex-1 overflow-y-auto pr-1"
+        >
           <JustifiedGrid
+            scrollContainerRef={scrollRef}
             items={visibleAssets}
             getKey={(a) => a.id}
             renderItem={(asset, index) => (
@@ -274,14 +258,14 @@ export default function TimelinePage() {
           />
           <div
             ref={loadMoreRef}
-            className="grid min-h-16 place-items-center text-xs text-[color:var(--muted)]"
+            className="grid min-h-8 place-items-center text-xs text-[color:var(--muted)]"
             aria-live="polite"
           >
             {nextBucket ? "Loading more of your timeline…" : null}
           </div>
         </div>
 
-        {buckets.length > 0 && (
+        {canScroll && buckets.length > 1 && (
           <aside
             aria-label="Timeline navigation"
             className="sticky top-[calc(var(--nav-height)+12px)] h-[calc(100dvh-var(--nav-height)-24px)] text-[color:var(--silver)]"
@@ -295,16 +279,52 @@ export default function TimelinePage() {
         )}
       </div>
 
-      {viewerIndex !== null && viewerAssets[viewerIndex] && (
-        <AssetViewer
-          assets={viewerAssets}
-          index={viewerIndex}
-          onIndexChange={setViewerIndex}
+      {viewerIndex !== null && activeViewerAsset && (
+        <ImagePreviewModal
+          media={{
+            id: activeViewerAsset.id,
+            filename: `Photo ${activeViewerAsset.id}`,
+            created_at: activeViewerAsset.createdAt ?? undefined,
+            liked: activeViewerAsset.liked,
+          }}
           onClose={() => setViewerIndex(null)}
-          favoriteIds={favoriteIds}
-          onToggleFavorite={(id) => favoriteMutation.mutate(id)}
-          onArchive={(id) => archiveMutation.mutate(id)}
-          onTrash={(id) => trashMutation.mutate(id)}
+          onPrevious={() =>
+            setViewerIndex((current) => (current === null ? null : current - 1))
+          }
+          onNext={() =>
+            setViewerIndex((current) => (current === null ? null : current + 1))
+          }
+          hasPrevious={viewerIndex > 0}
+          hasNext={viewerIndex < visibleAssets.length - 1}
+          onDeleted={(id) =>
+            setRemovedIds((current) => new Set(current).add(id))
+          }
+          actions={
+            <>
+              <button
+                type="button"
+                data-testid="preview-archive"
+                className="frost-button px-4 py-2 text-sm"
+                onClick={() => {
+                  archiveMutation.mutate(activeViewerAsset.id);
+                  setViewerIndex(null);
+                }}
+              >
+                <Archive className="h-4 w-4" /> Archive
+              </button>
+              <button
+                type="button"
+                data-testid="preview-trash"
+                className="frost-button px-4 py-2 text-sm"
+                onClick={() => {
+                  trashMutation.mutate(activeViewerAsset.id);
+                  setViewerIndex(null);
+                }}
+              >
+                <Trash2 className="h-4 w-4" /> Move to trash
+              </button>
+            </>
+          }
         />
       )}
     </main>

@@ -119,21 +119,21 @@ function SearchPageContent() {
   return (
     <div className="page-shell">
       <div className="container-shell py-10 md:py-14">
-        <div className="page-enter mx-auto mb-10 max-w-3xl text-center">
-          <h1 className="section-heading mb-4 text-5xl font-medium md:text-6xl">
-            Search
-          </h1>
-          <p className="muted-copy text-sm leading-6">
-            Describe what you remember and Find will surface the matching
-            images.
-          </p>
-        </div>
+        <header className="page-enter mb-6 flex flex-wrap items-baseline gap-2 border-b border-[var(--frost)] pb-5">
+          <span className="text-sm font-semibold text-[color:var(--blue)]">
+            Library
+          </span>
+          <span aria-hidden="true" className="text-[color:var(--muted)]">
+            /
+          </span>
+          <h1 className="section-heading text-4xl font-medium">Search</h1>
+          <span className="text-sm text-[color:var(--silver)]">
+            Scenes, objects, captions, and visible text
+          </span>
+        </header>
 
-        <form
-          onSubmit={handleSearch}
-          className="delayed-enter mx-auto mb-10 max-w-3xl"
-        >
-          <div className="frost-panel flex items-center gap-3 rounded-3xl p-2 transition focus-within:border-[var(--frost-strong)]">
+        <form onSubmit={handleSearch} className="delayed-enter mb-8 max-w-4xl">
+          <div className="frost-panel flex items-center gap-3 rounded-2xl p-2 transition focus-within:border-[var(--frost-strong)]">
             <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[var(--frost)] bg-[color:var(--surface-soft)] text-[color:var(--blue)]">
               <SearchIcon className="h-5 w-5" />
             </div>

@@ -28,6 +28,11 @@ const api = vi.hoisted(() => ({
   getSharedLinks: vi.fn(),
   createSharedLink: vi.fn(),
   deleteSharedLink: vi.fn(),
+  getImageDetail: vi.fn(),
+  deleteImage: vi.fn(),
+  reprocessImage: vi.fn(),
+  submitCaptionCorrection: vi.fn(),
+  submitObjectCorrection: vi.fn(),
 }));
 
 class FakeResizeObserver {
@@ -50,7 +55,11 @@ class FakeResizeObserver {
 }
 
 vi.mock("@/lib/api", () => api);
-vi.mock("@/lib/media", () => ({ resolveMediaUrl: (u: string) => u }));
+vi.mock("@/lib/media", () => ({
+  resolveMediaUrl: (u: string) => u,
+  MINIO_URL_STALE_TIME_MS: 60_000,
+  MINIO_URL_REFRESH_INTERVAL_MS: 60_000,
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "1" }),
@@ -99,6 +108,13 @@ beforeEach(() => {
     total: 2,
   });
   api.getSharedLinks.mockResolvedValue({ shared_links: [], total: 0 });
+  api.getImageDetail.mockImplementation(async (id: number) => ({
+    ...item(id),
+    file_hash: `hash-${id}`,
+    url: `/api/image/${id}/original`,
+    metadata: {},
+    exif: {},
+  }));
   vi.stubGlobal("ResizeObserver", FakeResizeObserver);
   vi.stubGlobal("innerHeight", 5000);
   vi.stubGlobal(
@@ -116,26 +132,22 @@ afterEach(() => {
 });
 
 describe("AlbumDetailPage viewer", () => {
-  it("opens the AssetViewer when an album photo is clicked", async () => {
+  it("opens the metadata preview when an album photo is clicked", async () => {
     renderPage();
 
     const tile = await screen.findByTestId("open-asset-10");
     fireEvent.click(tile);
 
     await waitFor(() =>
-      expect(screen.getByTestId("asset-viewer")).toBeInTheDocument(),
+      expect(screen.getByTestId("image-preview-modal")).toBeInTheDocument(),
     );
-    // Viewer shows the clicked asset's thumbnail first.
-    expect(screen.getByTestId("viewer-image")).toHaveAttribute(
-      "src",
-      "/api/image/10/thumbnail",
-    );
+    expect(api.getImageDetail).toHaveBeenCalledWith(10);
   });
 
   it("does not show the viewer until a photo is clicked", async () => {
     renderPage();
     await screen.findByTestId("open-asset-10");
-    expect(screen.queryByTestId("asset-viewer")).toBeNull();
+    expect(screen.queryByTestId("image-preview-modal")).toBeNull();
   });
 
   it("archives the viewed asset and closes the viewer", async () => {
@@ -143,12 +155,12 @@ describe("AlbumDetailPage viewer", () => {
     renderPage();
 
     fireEvent.click(await screen.findByTestId("open-asset-10"));
-    await screen.findByTestId("asset-viewer");
-    fireEvent.click(screen.getByTestId("viewer-archive"));
+    await screen.findByTestId("image-preview-modal");
+    fireEvent.click(screen.getByTestId("preview-archive"));
 
     await waitFor(() => expect(api.setArchive).toHaveBeenCalledWith(10, true));
     await waitFor(() =>
-      expect(screen.queryByTestId("asset-viewer")).toBeNull(),
+      expect(screen.queryByTestId("image-preview-modal")).toBeNull(),
     );
   });
 
@@ -160,8 +172,8 @@ describe("AlbumDetailPage viewer", () => {
     renderPage();
 
     fireEvent.click(await screen.findByTestId("open-asset-10"));
-    await screen.findByTestId("asset-viewer");
-    fireEvent.click(screen.getByTestId("viewer-trash"));
+    await screen.findByTestId("image-preview-modal");
+    fireEvent.click(screen.getByTestId("preview-trash"));
 
     await waitFor(() => expect(api.trashImage).toHaveBeenCalledWith(10));
   });

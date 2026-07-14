@@ -272,6 +272,15 @@
     scrollbar-gutter: stable;
   }
 
+  .timeline-native-scroll {
+    scrollbar-width: none;
+    overscroll-behavior: contain;
+  }
+
+  .timeline-native-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
   .safe-bottom {
     padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
   }

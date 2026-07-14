@@ -9,6 +9,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { ImagePreviewModal } from "@/components/image-preview-modal";
 import { TimelineMediaView } from "@/components/timeline-media-view";
 import { emptyTrash, getTrash, restoreImage } from "@/lib/api";
 
@@ -49,8 +50,19 @@ export default function TrashPage() {
   return (
     <main className="page-shell">
       <div className="container-shell py-10 md:py-14">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="section-heading text-4xl font-medium">Trash</h1>
+        <div className="mb-6 flex items-end justify-between gap-4 border-b border-[var(--frost)] pb-5">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="text-sm font-semibold text-[color:var(--blue)]">
+              Utilities
+            </span>
+            <span aria-hidden="true" className="text-[color:var(--muted)]">
+              /
+            </span>
+            <h1 className="section-heading text-4xl font-medium">Trash</h1>
+            <span className="text-sm text-[color:var(--silver)]">
+              {items.length} photos
+            </span>
+          </div>
           {items.length > 0 && (
             <button
               type="button"
@@ -108,6 +120,37 @@ export default function TrashPage() {
                 <RotateCcw size={12} /> Restore
               </button>
             )}
+            renderViewer={({
+              items: viewerItems,
+              index,
+              onIndexChange,
+              onClose,
+            }) => {
+              const active = viewerItems[index];
+              if (!active) return null;
+              return (
+                <ImagePreviewModal
+                  media={active}
+                  onClose={onClose}
+                  onPrevious={() => onIndexChange(index - 1)}
+                  onNext={() => onIndexChange(index + 1)}
+                  hasPrevious={index > 0}
+                  hasNext={index < viewerItems.length - 1}
+                  actions={
+                    <button
+                      type="button"
+                      className="white-pill px-4 py-2 text-sm font-semibold"
+                      onClick={() => {
+                        restoreMutation.mutate(active.id);
+                        onClose();
+                      }}
+                    >
+                      <RotateCcw className="h-4 w-4" /> Restore to Photos
+                    </button>
+                  }
+                />
+              );
+            }}
           />
         )}
       </div>

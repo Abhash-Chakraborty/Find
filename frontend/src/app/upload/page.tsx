@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   CheckCircle,
@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import {
   extractErrorMessage,
   getJobStatus,
+  getRuntimeConfig,
   type JobStatus,
   type UploadResponse,
   type UploadResult,
@@ -150,6 +151,15 @@ export default function UploadPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadListItem[]>([]);
   const [mode, setMode] = useState<UploadMode>("single");
   const queryClient = useQueryClient();
+  const runtime = useQuery({
+    queryKey: ["runtime-config"],
+    queryFn: getRuntimeConfig,
+    retry: false,
+  });
+  const localAiActive =
+    runtime.data?.ai_enabled &&
+    (runtime.data.applied_mode === "full" ||
+      runtime.data.applied_mode === "mock");
 
   const parsedUploadLimit = Number(
     process.env.NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB ?? "50",
@@ -173,7 +183,7 @@ export default function UploadPage() {
       setUploadedFiles((prev) => [...hydrateResults(data), ...prev]);
       void queryClient.invalidateQueries({ queryKey: ["gallery"] });
       toast.success(
-        `Queued ${data.total} file${data.total === 1 ? "" : "s"} for analysis`,
+        `Queued ${data.total} file${data.total === 1 ? "" : "s"} for library processing`,
       );
     },
     onError: (error) => {
@@ -428,14 +438,22 @@ export default function UploadPage() {
   return (
     <div className="page-shell">
       <div className="container-shell max-w-3xl py-10 md:py-14">
-        <div className="page-enter mb-10 text-center">
-          <h1 className="section-heading mb-4 text-5xl font-medium md:text-6xl">
-            Upload
-          </h1>
-          <p className="muted-copy mx-auto max-w-xl text-sm leading-6">
-            Add images to analyze. Search and clustering update as jobs finish.
-          </p>
-        </div>
+        <header className="page-enter mb-7 flex flex-wrap items-baseline gap-2 border-b border-[var(--frost)] pb-5">
+          <span className="text-sm font-semibold text-[color:var(--blue)]">
+            Library
+          </span>
+          <span aria-hidden="true" className="text-[color:var(--muted)]">
+            /
+          </span>
+          <h1 className="section-heading text-4xl font-medium">Upload</h1>
+          <span className="text-sm text-[color:var(--silver)]">
+            {runtime.isPending
+              ? "Checking local processing mode"
+              : localAiActive
+                ? "Local AI analysis is active"
+                : "Photos will import without AI analysis"}
+          </span>
+        </header>
 
         <div className="delayed-enter mb-5 flex justify-center">
           <div className="frost-panel flex rounded-full p-1">

@@ -201,7 +201,7 @@ export function AppShell({ children }: AppShellProps) {
             className="group flex min-w-0 items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
             aria-label="FIND. Photos"
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--frost)] bg-[color:var(--near-white)] p-1 shadow-sm transition group-hover:scale-105 dark:bg-[color:var(--frost-soft)]">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--frost)] bg-[color:var(--near-white)] p-1 shadow-sm dark:bg-[color:var(--frost-soft)]">
               <Image
                 src="/Find-Logo.svg"
                 alt=""
@@ -267,7 +267,7 @@ export function AppShell({ children }: AppShellProps) {
               Copyright 2026 Find · AGPL-3.0 License
             </span>
           )}
-          <span className="shrink-0">v1.1.1</span>
+          <span className="shrink-0">v1.1.2</span>
         </div>
         <button
           type="button"

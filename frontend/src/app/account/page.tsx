@@ -97,21 +97,39 @@ export default function AccountPage() {
 
   if (account.data?.mode === "local" || !account.data?.user) {
     return (
-      <main className="page-surface mx-auto max-w-3xl py-12">
-        <div className="rounded-3xl border border-[var(--frost)] bg-[color:var(--surface-soft)] p-8">
-          <Shield className="h-8 w-8 text-[color:var(--green)]" />
-          <h1 className="mt-5 text-3xl font-semibold">Private local mode</h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-[color:var(--silver)]">
-            This installation has no accounts. It stays single-user and local
-            until you explicitly create an administrator.
-          </p>
-          <Link
-            href="/auth/setup"
-            className="white-pill mt-6 px-5 py-3 text-sm font-semibold"
-          >
-            Enable accounts
-          </Link>
-        </div>
+      <main className="page-surface mx-auto max-w-5xl py-10 md:py-14">
+        <header className="mb-6 flex flex-wrap items-baseline gap-2 border-b border-[var(--frost)] pb-5">
+          <span className="text-sm font-semibold text-[color:var(--blue)]">
+            System
+          </span>
+          <span aria-hidden="true" className="text-[color:var(--muted)]">
+            /
+          </span>
+          <h1 className="section-heading text-4xl font-medium">Account</h1>
+        </header>
+        <section className="grid overflow-hidden rounded-3xl border border-[var(--frost)] bg-[color:var(--surface-soft)] md:grid-cols-[1.4fr_0.8fr]">
+          <div className="p-7 sm:p-9">
+            <Shield className="h-7 w-7 text-[color:var(--green)]" />
+            <h2 className="mt-5 text-2xl font-semibold">Private local mode</h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[color:var(--silver)]">
+              No sign-in is required and this installation remains a single-user
+              library. Your photos and AI data stay on this instance.
+            </p>
+          </div>
+          <div className="border-t border-[var(--frost)] bg-[color:var(--void)]/35 p-7 md:border-l md:border-t-0 sm:p-9">
+            <h3 className="text-sm font-semibold">Need shared access?</h3>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--silver)]">
+              Create the first administrator only when you want account-based
+              access for this server.
+            </p>
+            <Link
+              href="/auth/setup"
+              className="white-pill mt-5 px-5 py-3 text-sm font-semibold"
+            >
+              Enable accounts
+            </Link>
+          </div>
+        </section>
       </main>
     );
   }

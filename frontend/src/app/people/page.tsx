@@ -23,6 +23,7 @@ import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
   getPeople,
   getPersonImages,
+  getRuntimeConfig,
   type PersonItem,
   submitPersonFeedbackWrongPerson,
   triggerFaceClustering,
@@ -202,6 +203,11 @@ export default function PeoplePage() {
     queryFn: getPeople,
     refetchInterval: 15000,
   });
+  const { data: runtime } = useQuery({
+    queryKey: ["runtime-config"],
+    queryFn: getRuntimeConfig,
+  });
+  const aiUnavailable = runtime ? !runtime.ai_enabled : false;
 
   const selectedPersonQuery = useQuery({
     queryKey: ["person-images", selectedPersonId],
@@ -251,12 +257,15 @@ export default function PeoplePage() {
     <div className="page-shell bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
       <div className="container-shell py-10 md:py-14">
         {/* Page header */}
-        <div className="page-enter mb-10 flex flex-col gap-6 border-b border-[var(--frost)] pb-8 md:flex-row md:items-end md:justify-between">
+        <div className="page-enter mb-8 flex flex-col gap-4 border-b border-[var(--frost)] pb-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
-            <h1 className="section-heading mb-4 text-5xl font-medium text-[color:var(--near-white)] md:text-6xl">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--blue)]">
+              Library / People
+            </p>
+            <h1 className="section-heading text-3xl font-medium text-[color:var(--near-white)]">
               People
             </h1>
-            <p className="muted-copy text-sm leading-6 text-[color:var(--silver)]">
+            <p className="muted-copy mt-2 text-sm leading-6 text-[color:var(--silver)]">
               Photos grouped by person, detected and clustered entirely on your
               device.
             </p>
@@ -278,7 +287,12 @@ export default function PeoplePage() {
             <button
               type="button"
               onClick={() => clusterMutation.mutate()}
-              disabled={clusterMutation.isPending}
+              disabled={clusterMutation.isPending || aiUnavailable}
+              title={
+                aiUnavailable
+                  ? "Local AI is disabled in this installed build."
+                  : undefined
+              }
               className="white-pill px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {clusterMutation.isPending ? (
@@ -290,6 +304,13 @@ export default function PeoplePage() {
             </button>
           </div>
         </div>
+
+        {aiUnavailable && (
+          <div className="mb-6 rounded-2xl border border-[color:var(--frost)] bg-[color:var(--surface-soft)] px-5 py-4 text-sm text-[color:var(--silver)]">
+            Face detection is not included in this build. Photos still import
+            normally; enable a local AI profile in Settings to group people.
+          </div>
+        )}
 
         {/* Loading state rendering layout */}
         {isLoading && (
@@ -320,7 +341,12 @@ export default function PeoplePage() {
             <button
               type="button"
               onClick={() => clusterMutation.mutate()}
-              disabled={clusterMutation.isPending}
+              disabled={clusterMutation.isPending || aiUnavailable}
+              title={
+                aiUnavailable
+                  ? "Local AI is disabled in this installed build."
+                  : undefined
+              }
               className="white-pill px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" />

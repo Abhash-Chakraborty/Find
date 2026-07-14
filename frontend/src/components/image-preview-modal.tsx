@@ -16,7 +16,14 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import {
   type AnalysisStageName,
@@ -67,6 +74,10 @@ type ImagePreviewModalProps = {
   onNext?: () => void;
   hasPrevious?: boolean;
   hasNext?: boolean;
+  /** Context actions such as Archive, Restore, or Remove from album. */
+  actions?: React.ReactNode;
+  /** Keep the viewer addressable at /image/:id while it is open. */
+  syncUrl?: boolean;
 };
 
 const ANALYSIS_STAGE_ORDER: AnalysisStageName[] = [
@@ -214,12 +225,52 @@ export function ImagePreviewModal({
   onNext,
   hasPrevious = false,
   hasNext = false,
+  actions,
+  syncUrl = true,
 }: ImagePreviewModalProps) {
   const queryClient = useQueryClient();
   const [likedOverride, setLikedOverride] = useState<boolean | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [captionCopied, setCaptionCopied] = useState(false);
   const [ocrCopied, setOcrCopied] = useState(false);
+  const returnUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!syncUrl || typeof window === "undefined") return;
+
+    returnUrlRef.current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    return () => {
+      if (window.location.pathname.startsWith("/image/")) {
+        History.prototype.replaceState.call(
+          window.history,
+          null,
+          "",
+          returnUrlRef.current ?? "/timeline",
+        );
+      }
+    };
+  }, [syncUrl]);
+
+  useEffect(() => {
+    if (!syncUrl || !returnUrlRef.current || typeof window === "undefined") {
+      return;
+    }
+    const returnTo = encodeURIComponent(returnUrlRef.current);
+    History.prototype.replaceState.call(
+      window.history,
+      { findImageViewer: true },
+      "",
+      `/image/${media.id}?return=${returnTo}`,
+    );
+  }, [media.id, syncUrl]);
 
   useEffect(() => {
     if (!captionCopied) return;
@@ -377,6 +428,7 @@ export function ImagePreviewModal({
         aria-label="Close detail view"
       />
       <div
+        data-testid="image-preview-modal"
         className="frost-panel page-enter relative grid h-[calc(100dvh-1rem)] w-full max-w-7xl grid-rows-[minmax(0,1fr)_minmax(320px,42dvh)] overflow-hidden rounded-3xl bg-[color:var(--void)] md:h-[calc(100dvh-2rem)] md:grid-cols-[minmax(0,1fr)_minmax(380px,430px)] md:grid-rows-1"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
@@ -820,6 +872,7 @@ export function ImagePreviewModal({
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
+                {actions}
                 {(status === "failed" ||
                   (status === "indexed" && !caption)) && (
                   <button

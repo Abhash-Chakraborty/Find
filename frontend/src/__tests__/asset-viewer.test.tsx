@@ -75,9 +75,12 @@ describe("AssetViewer", () => {
   });
 
   it("uses descriptive asset text and a safe fallback for image alternatives", () => {
+    const first = ASSETS.at(0);
+    const second = ASSETS.at(1);
+    if (!first || !second) throw new Error("Asset fixture is incomplete");
     const assets = [
-      { ...ASSETS[0], alt: "Sunset above the mountain ridge" },
-      ASSETS[1],
+      { ...first, alt: "Sunset above the mountain ridge" },
+      second,
     ];
     const { rerender } = render(
       <AssetViewer
