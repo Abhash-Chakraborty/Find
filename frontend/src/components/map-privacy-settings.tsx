@@ -24,7 +24,7 @@ export function MapPrivacySettings({
     >
       <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
         <div className="flex min-w-0 gap-4">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[color:var(--orange-soft)] text-[color:var(--orange)]">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[color:var(--surface-hover)] text-[color:var(--silver)]">
             <MapIcon aria-hidden="true" size={21} />
           </span>
           <div>
@@ -49,7 +49,7 @@ export function MapPrivacySettings({
           aria-checked={checked}
           disabled={enabled === undefined || pending}
           onClick={() => onChange(!checked)}
-          className="relative h-7 w-12 shrink-0 rounded-full border border-[color:var(--frost-strong)] bg-[color:var(--surface-hover)] transition disabled:cursor-wait disabled:opacity-50 aria-checked:border-[color:var(--orange)] aria-checked:bg-[color:var(--orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--void)]"
+          className="relative h-7 w-12 shrink-0 rounded-full border border-[color:var(--frost-strong)] bg-[color:var(--surface-hover)] transition disabled:cursor-wait disabled:opacity-50 aria-checked:border-[color:var(--near-white)] aria-checked:bg-[color:var(--near-white)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--void)]"
         >
           <span
             aria-hidden="true"
@@ -86,7 +86,7 @@ export function MapPrivacySettings({
           {checked && (
             <Link
               href="/map"
-              className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-[color:var(--orange)] hover:bg-[color:var(--orange-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
+              className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-[color:var(--near-white)] hover:bg-[color:var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
             >
               Open map
             </Link>

@@ -44,7 +44,7 @@
     --status-pending-text: #ffe08a;
     --status-failed-border: rgba(255, 32, 71, 0.3);
     --status-failed-text: #ff9bab;
-    --nav-height: 64px;
+    --nav-height: 56px;
     --sidebar-width: 256px;
   }
   html.light,
@@ -96,7 +96,7 @@
     --status-failed-border: rgba(239, 68, 68, 0.35);
     --status-failed-text: #991b1b;
 
-    --nav-height: 64px;
+    --nav-height: 56px;
     --sidebar-width: 256px;
   }
 
@@ -149,7 +149,7 @@
     --status-failed-border: rgba(255, 32, 71, 0.3);
     --status-failed-text: #ff9bab;
 
-    --nav-height: 64px;
+    --nav-height: 56px;
     --sidebar-width: 256px;
   }
 
@@ -186,7 +186,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     font-synthesis: none;
-    text-rendering: optimizeLegibility;
+    text-rendering: optimizelegibility;
     -webkit-font-smoothing: antialiased;
   }
 

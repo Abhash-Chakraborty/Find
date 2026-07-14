@@ -2,13 +2,14 @@
 
 import {
   Archive,
-  Boxes,
+  Copy,
   Heart,
   Images,
   Library,
   LockKeyhole,
   type LucideIcon,
   Map as MapIcon,
+  ScanSearch,
   Search,
   Settings,
   Trash2,
@@ -49,8 +50,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Utilities",
     items: [
-      { href: "/duplicates", label: "Duplicates", icon: Boxes },
-      { href: "/clusters", label: "Clusters", icon: Boxes },
+      { href: "/duplicates", label: "Duplicates", icon: Copy },
+      { href: "/clusters", label: "Clusters", icon: ScanSearch },
       { href: "/archive", label: "Archive", icon: Archive },
       { href: "/vault", label: "Vault", icon: LockKeyhole },
       { href: "/trash", label: "Trash", icon: Trash2 },
@@ -79,9 +80,14 @@ function isCurrentRoute(pathname: string, href: string, search: string) {
 type NavBarProps = {
   onNavigate?: () => void;
   className?: string;
+  collapsed?: boolean;
 };
 
-export default function NavBar({ onNavigate, className }: NavBarProps) {
+export default function NavBar({
+  onNavigate,
+  className,
+  collapsed = false,
+}: NavBarProps) {
   const pathname = usePathname();
   const [search, setSearch] = useState("");
 
@@ -91,12 +97,12 @@ export default function NavBar({ onNavigate, className }: NavBarProps) {
 
   return (
     <nav aria-label="Main navigation" className={className}>
-      <div className="space-y-7">
+      <div className={collapsed ? "space-y-3" : "space-y-7"}>
         {NAV_GROUPS.map((group) => (
           <section key={group.label} aria-labelledby={`nav-${group.label}`}>
             <h2
               id={`nav-${group.label}`}
-              className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--muted)]"
+              className={`${collapsed ? "sr-only" : "mb-2 px-3"} text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--muted)]`}
             >
               {group.label}
             </h2>
@@ -109,9 +115,10 @@ export default function NavBar({ onNavigate, className }: NavBarProps) {
                   <li key={item.href}>
                     <Link
                       href={item.href}
+                      title={item.label}
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
-                      className={`group flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] ${
+                      className={`group flex min-h-10 items-center rounded-xl py-2 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] ${collapsed ? "justify-center px-2" : "gap-3 px-3"} ${
                         active
                           ? "bg-[color:var(--near-white)] text-[color:var(--void)] shadow-sm"
                           : "text-[color:var(--silver)] hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)]"
@@ -125,7 +132,9 @@ export default function NavBar({ onNavigate, className }: NavBarProps) {
                             : "text-[color:var(--muted)] transition group-hover:text-[color:var(--near-white)]"
                         }`}
                       />
-                      <span>{item.label}</span>
+                      <span className={collapsed ? "sr-only" : undefined}>
+                        {item.label}
+                      </span>
                     </Link>
                   </li>
                 );

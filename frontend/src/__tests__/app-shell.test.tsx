@@ -76,7 +76,13 @@ describe("AppShell", () => {
       "/account",
     );
     expect(
-      screen.getByRole("button", { name: "Switch to dark mode" }),
+      screen.getByRole("textbox", { name: "Search everything" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/switch to .* mode/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Collapse sidebar" }),
     ).toBeInTheDocument();
   });
 

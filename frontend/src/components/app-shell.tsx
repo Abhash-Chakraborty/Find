@@ -1,13 +1,31 @@
 "use client";
 
-import { Menu, Moon, Search, Sun, Upload, UserRound, X } from "lucide-react";
+import {
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Upload,
+  UserRound,
+  X,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import NavBar from "@/components/NavBar";
-
-type Theme = "light" | "dark";
+import { UniversalSearch } from "@/components/universal-search";
+import {
+  applyThemePreference,
+  readThemePreference,
+  THEME_CHANGE_EVENT,
+} from "@/lib/theme";
 
 type AppShellProps = {
   children: ReactNode;
@@ -31,39 +49,37 @@ function isShelllessRoute(pathname: string) {
   );
 }
 
-function applyTheme(theme: Theme) {
-  document.documentElement.classList.remove("light", "dark");
-  document.documentElement.classList.add(theme);
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.style.colorScheme = theme;
-}
-
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [theme, setTheme] = useState<Theme>("light");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const drawerRef = useRef<HTMLElement | null>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const shellless = isShelllessRoute(pathname);
 
   useEffect(() => {
-    let initialTheme: Theme = "light";
-
+    const apply = () => applyThemePreference(readThemePreference());
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    apply();
+    media?.addEventListener("change", apply);
+    window.addEventListener(THEME_CHANGE_EVENT, apply);
     try {
-      const saved = localStorage.getItem("find-theme");
-      if (saved === "light" || saved === "dark") {
-        initialTheme = saved;
-      } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        initialTheme = "dark";
-      }
+      setSidebarCollapsed(
+        localStorage.getItem("find-sidebar-collapsed") === "true",
+      );
     } catch {
-      initialTheme = "light";
+      setSidebarCollapsed(false);
     }
-
-    applyTheme(initialTheme);
-    setTheme(initialTheme);
+    return () => {
+      media?.removeEventListener("change", apply);
+      window.removeEventListener(THEME_CHANGE_EVENT, apply);
+    };
   }, []);
+
+  useEffect(() => {
+    if (pathname) setDrawerOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     const handleSearchShortcut = (event: KeyboardEvent) => {
@@ -143,21 +159,31 @@ export function AppShell({ children }: AppShellProps) {
     return <>{children}</>;
   }
 
-  const toggleTheme = () => {
-    const nextTheme: Theme = theme === "light" ? "dark" : "light";
-    applyTheme(nextTheme);
+  const toggleSidebar = () => {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
     try {
-      localStorage.setItem("find-theme", nextTheme);
+      localStorage.setItem("find-sidebar-collapsed", String(next));
     } catch {
-      // Theme still applies for this session when storage is unavailable.
+      // Keep the preference for this session when storage is unavailable.
     }
-    setTheme(nextTheme);
   };
 
+  const shellStyle = {
+    "--sidebar-width": sidebarCollapsed ? "76px" : "256px",
+  } as CSSProperties;
+
   return (
-    <div className="min-h-dvh bg-[color:var(--void)] text-[color:var(--near-white)]">
-      <header className="fixed inset-x-0 top-0 z-50 flex h-[var(--nav-height)] items-center border-b border-[var(--frost)] bg-[color:var(--void)]/92 backdrop-blur-xl">
-        <div className="flex h-full items-center gap-2 border-r border-transparent px-3 lg:w-[var(--sidebar-width)] lg:shrink-0 lg:border-[var(--frost)] lg:px-5">
+    <div
+      style={shellStyle}
+      className="min-h-dvh bg-[color:var(--void)] text-[color:var(--near-white)]"
+    >
+      <header
+        inert={drawerOpen}
+        aria-hidden={drawerOpen || undefined}
+        className="fixed inset-x-0 top-0 z-50 flex h-[var(--nav-height)] items-center border-b border-[var(--frost)] bg-[color:var(--void)]/92 backdrop-blur-xl"
+      >
+        <div className="flex h-full items-center gap-2 px-3 lg:w-[var(--sidebar-width)] lg:shrink-0 lg:px-4">
           <button
             ref={drawerTriggerRef}
             type="button"
@@ -184,29 +210,21 @@ export function AppShell({ children }: AppShellProps) {
                 priority
               />
             </span>
-            <span className="hidden truncate text-lg font-semibold tracking-tight sm:inline">
+            <span
+              className={`${sidebarCollapsed ? "lg:hidden" : ""} hidden truncate text-lg font-semibold tracking-tight sm:inline`}
+            >
               FIND.
             </span>
           </Link>
         </div>
 
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 px-2 sm:gap-2 sm:px-4">
-          <Link
-            href="/search"
-            aria-label="Search your library"
-            aria-keyshortcuts="/ Control+K Meta+K"
-            className="hidden h-10 min-w-0 max-w-md flex-1 items-center gap-3 rounded-xl border border-[var(--frost)] bg-[color:var(--surface-soft)] px-3 text-sm text-[color:var(--silver)] outline-none transition hover:border-[var(--frost-strong)] hover:text-[color:var(--near-white)] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] md:flex"
-          >
-            <Search className="h-4 w-4 shrink-0" />
-            <span className="truncate">Search your library</span>
-            <kbd className="ml-auto rounded-md border border-[var(--frost)] px-1.5 py-0.5 text-[10px] text-[color:var(--muted)]">
-              /
-            </kbd>
-          </Link>
+          <UniversalSearch />
 
           <Link
             href="/search"
             aria-label="Search your library"
+            title="Search photos, albums and settings"
             className="icon-button md:hidden"
           >
             <Search className="h-4 w-4" />
@@ -214,38 +232,59 @@ export function AppShell({ children }: AppShellProps) {
 
           <Link
             href="/upload"
+            title="Upload photos"
             className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[color:var(--near-white)] px-3 text-sm font-semibold text-[color:var(--void)] outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] sm:px-4"
           >
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Upload</span>
           </Link>
 
-          <button
-            type="button"
-            onClick={toggleTheme}
+          <Link
+            href="/account"
+            title="Account"
             className="icon-button"
-            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+            aria-label="Account"
           >
-            {theme === "light" ? (
-              <Moon className="h-4 w-4" />
-            ) : (
-              <Sun className="h-4 w-4" />
-            )}
-          </button>
-
-          <Link href="/account" className="icon-button" aria-label="Account">
             <UserRound className="h-4 w-4" />
           </Link>
         </div>
       </header>
 
-      <aside className="fixed bottom-0 left-0 top-[var(--nav-height)] z-40 hidden w-[var(--sidebar-width)] flex-col border-r border-[var(--frost)] bg-[color:var(--void)]/96 lg:flex">
-        <NavBar className="app-shell-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6" />
-        <p className="border-t border-[var(--frost)] px-5 py-4 text-[10px] leading-4 text-[color:var(--muted)]">
-          Copyright 2026 Find
-          <br />
-          AGPL-3.0 License
-        </p>
+      <aside
+        inert={drawerOpen}
+        aria-hidden={drawerOpen || undefined}
+        className="fixed bottom-0 left-0 top-[var(--nav-height)] z-40 hidden w-[var(--sidebar-width)] flex-col border-r border-[var(--frost)] bg-[color:var(--void)]/96 transition-[width] lg:flex"
+      >
+        <NavBar
+          collapsed={sidebarCollapsed}
+          className={`app-shell-scrollbar min-h-0 flex-1 overflow-y-auto py-5 ${sidebarCollapsed ? "px-2" : "px-4"}`}
+        />
+        <div
+          className={`flex items-center border-t border-[var(--frost)] p-3 text-[10px] text-[color:var(--muted)] ${sidebarCollapsed ? "justify-center" : "justify-between gap-2"}`}
+        >
+          {!sidebarCollapsed && (
+            <span className="truncate">
+              Copyright 2026 Find · AGPL-3.0 License
+            </span>
+          )}
+          <span className="shrink-0">v1.1.1</span>
+        </div>
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="m-2 mt-0 flex h-9 items-center justify-center gap-2 rounded-lg text-xs text-[color:var(--silver)] hover:bg-[color:var(--surface-hover)]"
+        >
+          {sidebarCollapsed ? (
+            <PanelLeftOpen className="h-4 w-4" />
+          ) : (
+            <>
+              <PanelLeftClose className="h-4 w-4" />
+              <span>Collapse</span>
+            </>
+          )}
+        </button>
       </aside>
 
       <button
@@ -294,7 +333,11 @@ export function AppShell({ children }: AppShellProps) {
         </p>
       </aside>
 
-      <main className="min-h-dvh min-w-0 pt-[var(--nav-height)] lg:pl-[var(--sidebar-width)]">
+      <main
+        inert={drawerOpen}
+        aria-hidden={drawerOpen || undefined}
+        className="min-h-dvh min-w-0 pt-[var(--nav-height)] transition-[padding] lg:pl-[var(--sidebar-width)]"
+      >
         {children}
       </main>
     </div>

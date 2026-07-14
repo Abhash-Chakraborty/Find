@@ -4,20 +4,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Cpu,
   MapPinned,
+  Palette,
   RefreshCw,
   Settings2,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { AiRuntimeSettings } from "@/components/ai-runtime-settings";
+import { AppearanceSettings } from "@/components/appearance-settings";
 import { HardwareAccelSettings } from "@/components/hardware-accel-settings";
 import { MapPrivacySettings } from "@/components/map-privacy-settings";
 import { type AppSettings, getSettings, updateSettings } from "@/lib/api";
 
 const SECTIONS = [
+  { href: "#appearance", label: "Appearance", icon: Palette },
   { href: "#hardware", label: "Performance", icon: Cpu },
   { href: "#ai-runtime-heading", label: "Local AI", icon: Sparkles },
-  { href: "#private-map", label: "Privacy & map", icon: MapPinned },
+  { href: "#privacy", label: "Privacy", icon: MapPinned },
 ] as const;
 
 export default function SettingsPage() {
@@ -96,13 +99,16 @@ export default function SettingsPage() {
                 ))}
               </div>
             </nav>
-            <div className="mt-4 hidden rounded-2xl border border-[color:var(--frost)] bg-[color:var(--void)]/55 p-4 text-xs leading-5 text-[color:var(--muted)] lg:block">
+            <div
+              className="group relative mt-4 hidden rounded-2xl border border-[color:var(--frost)] bg-[color:var(--void)]/55 p-4 text-xs leading-5 text-[color:var(--muted)] lg:block"
+              title="Dashboard controls only switch capabilities already included in your selected modular build. They never install packages or send your library elsewhere."
+            >
               <Settings2
                 aria-hidden="true"
                 className="mb-2 text-[color:var(--silver)]"
                 size={17}
               />
-              Runtime switches never install packages or transmit your library.
+              About runtime controls
             </div>
           </aside>
 
@@ -144,6 +150,7 @@ export default function SettingsPage() {
               </section>
             ) : (
               <div className="space-y-5 sm:space-y-6">
+                <AppearanceSettings />
                 <HardwareAccelSettings
                   value={settingsQuery.data.accel_mode}
                   pending={save.isPending}
@@ -157,11 +164,15 @@ export default function SettingsPage() {
                   supportedModes={settingsQuery.data.supported_ml_modes}
                   onModeChange={(ml_mode) => save.mutate({ ml_mode })}
                 />
-                <MapPrivacySettings
-                  enabled={settingsQuery.data.map_enabled}
-                  pending={save.isPending}
-                  onChange={(enabled) => save.mutate({ map_enabled: enabled })}
-                />
+                <div id="privacy" className="space-y-5 sm:space-y-6">
+                  <MapPrivacySettings
+                    enabled={settingsQuery.data.map_enabled}
+                    pending={save.isPending}
+                    onChange={(enabled) =>
+                      save.mutate({ map_enabled: enabled })
+                    }
+                  />
+                </div>
               </div>
             )}
 

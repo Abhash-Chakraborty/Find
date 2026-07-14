@@ -4,6 +4,7 @@ import type React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiMocks = vi.hoisted(() => ({
+  getGallery: vi.fn(),
   searchImages: vi.fn(),
   submitSearchRating: vi.fn(),
 }));
@@ -14,6 +15,7 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
+  getGallery: apiMocks.getGallery,
   searchImages: apiMocks.searchImages,
   submitSearchRating: apiMocks.submitSearchRating,
 }));
@@ -84,6 +86,7 @@ function renderWithQueryClient() {
 
 describe("Search page", () => {
   beforeEach(() => {
+    apiMocks.getGallery.mockResolvedValue({ items: [], total: 0 });
     apiMocks.searchImages.mockReset();
     apiMocks.submitSearchRating.mockReset();
   });
