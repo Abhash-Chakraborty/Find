@@ -2,11 +2,14 @@ import logging
 
 import cv2
 import numpy as np
-from insightface.app import FaceAnalysis
 from PIL import Image
 from typing import Dict, List, Union
 
-from find_api.core.hardware import detect_capabilities, resolve_execution
+from find_api.core.hardware import (
+    detect_capabilities,
+    preload_onnx_runtime_libraries,
+    resolve_execution,
+)
 from find_api.core.model_manager import get_model_manager
 from find_api.core.runtime_profile import current_accel_mode
 
@@ -23,6 +26,12 @@ class FaceDetector:
     def _load_model(self):
         """Loader function for ModelManager"""
         logger.info("Loading InsightFace model: antelopev2")
+
+        # The NVIDIA artifact gets CUDA/cuDNN from the locked PyTorch wheels.
+        # Make those libraries visible to ONNX Runtime before InsightFace opens
+        # any model sessions. This is a no-op in CPU-only artifacts.
+        preload_onnx_runtime_libraries()
+        from insightface.app import FaceAnalysis
 
         # Resolve ONNX execution providers from the accel mode, with automatic
         # CPU fallback (the EP list always ends with CPUExecutionProvider, and

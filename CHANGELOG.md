@@ -4,6 +4,16 @@ All notable changes to Find are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project is
 distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
+## [1.1.3] — 2026-07-15
+
+### Fixed
+
+- NVIDIA workers now use a CUDA 12/cuDNN 9-compatible ONNX Runtime and preload
+  the CUDA libraries installed with PyTorch before InsightFace creates model
+  sessions, preventing repeated `libcublasLt.so.11` errors and CPU fallback.
+- Full-screen previews retain their complete action and metadata toolset, and
+  upload/indexing progress persists across routes until successful completion.
+
 ## [1.1.2] — 2026-07-14
 
 ### Added

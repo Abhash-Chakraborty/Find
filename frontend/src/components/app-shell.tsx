@@ -287,7 +287,7 @@ export function AppShell({ children }: AppShellProps) {
               Copyright 2026 Find · AGPL-3.0 License
             </span>
           )}
-          <span className="shrink-0">v1.1.2</span>
+          <span className="shrink-0">v1.1.3</span>
         </div>
         <button
           type="button"

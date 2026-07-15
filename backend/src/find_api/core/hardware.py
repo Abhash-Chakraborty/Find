@@ -106,6 +106,27 @@ def _safe_onnx_providers() -> list[str]:
         return [CPU_EP]
 
 
+def preload_onnx_runtime_libraries() -> bool:
+    """Preload CUDA/cuDNN libraries bundled with the NVIDIA Python packages.
+
+    ONNX Runtime 1.21+ can locate the same CUDA 12 and cuDNN 9 libraries that
+    the locked PyTorch wheel installs. Loading them before InsightFace creates
+    its sessions avoids an unusable CUDA provider silently falling back to CPU.
+    CPU-only artifacts do not expose ``preload_dlls`` and remain a no-op.
+    """
+    try:
+        import onnxruntime as ort  # type: ignore
+
+        preload = getattr(ort, "preload_dlls", None)
+        if not callable(preload):
+            return False
+        preload()
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Unable to preload ONNX Runtime accelerator libraries: %s", exc)
+        return False
+
+
 def _safe_torch_devices() -> tuple[bool, bool]:
     """Return (cuda_available, mps_available), never raising."""
     cuda = False

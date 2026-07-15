@@ -5,6 +5,9 @@ The Auto/GPU/CPU matrix + automatic CPU fallback is the acceptance behavior
 for the low-end/edge goal, so it is covered exhaustively here.
 """
 
+import sys
+from types import SimpleNamespace
+
 from find_api.core.hardware import (
     CPU_EP,
     CUDA_EP,
@@ -13,9 +16,34 @@ from find_api.core.hardware import (
     ROCM_EP,
     CapabilityReport,
     detect_capabilities,
+    preload_onnx_runtime_libraries,
     resolve_execution,
     resolve_torch_device,
 )
+
+
+class TestOnnxRuntimeLibraryPreload:
+    def test_preloads_packaged_accelerator_libraries(self, monkeypatch):
+        calls = []
+        fake_ort = SimpleNamespace(preload_dlls=lambda: calls.append(True))
+        monkeypatch.setitem(sys.modules, "onnxruntime", fake_ort)
+
+        assert preload_onnx_runtime_libraries() is True
+        assert calls == [True]
+
+    def test_is_noop_for_cpu_runtime_without_preloader(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "onnxruntime", SimpleNamespace())
+
+        assert preload_onnx_runtime_libraries() is False
+
+    def test_preload_failure_never_breaks_cpu_fallback(self, monkeypatch):
+        def fail_preload():
+            raise OSError("missing optional accelerator library")
+
+        fake_ort = SimpleNamespace(preload_dlls=fail_preload)
+        monkeypatch.setitem(sys.modules, "onnxruntime", fake_ort)
+
+        assert preload_onnx_runtime_libraries() is False
 
 
 def _report(providers):

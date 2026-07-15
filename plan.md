@@ -4,6 +4,18 @@
 > **Branch:** `abhash/production-hardening` (synchronized with `origin/main`).
 > **Reference codebase:** `./reference-app/` (local, gitignored, AGPL-3.0). Read-only reference used to learn UI/behavior; **its contents are never committed to Find**.
 
+## 2026-07-15 v1.1.3 patch addendum
+
+- [x] The NVIDIA artifact uses a CUDA 12/cuDNN 9 ONNX Runtime compatible with
+  its locked PyTorch CUDA 12.8 runtime rather than falling back to CPU while
+  looking for `libcublasLt.so.11`.
+- [x] InsightFace preloads the CUDA libraries bundled with the NVIDIA Python
+  packages before opening ONNX sessions; CPU-only builds remain CUDA-free.
+- [x] Version metadata is aligned at `1.1.3` across web, API, and desktop.
+- [x] Verification passes: 60 focused backend ML/runtime/worker tests, 257
+  frontend tests, frontend production and Tauri builds, modular CPU/NVIDIA
+  dependency exports, and live CUDA sessions for all five AntelopeV2 models.
+
 ## 2026-07-14 v1.1.2 completion addendum
 
 - [x] Timeline browsing has one scroll model: native scrollbars are hidden,
