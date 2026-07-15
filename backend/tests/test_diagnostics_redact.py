@@ -26,12 +26,8 @@ _EXAMPLE_PASSWORD = "EXAMPLE_PASSWORD_PLACEHOLDER"
 _EXAMPLE_STORAGE_SECRET = "EXAMPLE_STORAGE_SECRET_PLACEHOLDER"
 _EXAMPLE_API_KEY = "sk-test-" + "FAKE-KEY-FOR-TESTING-ONLY"
 _EXAMPLE_BEARER = "Bearer " + "FAKE.TEST.TOKEN"
-_EXAMPLE_DSN = (
-    "postgresql://" + "USER" + ":" + "REDACTED" + "@localhost:5432/find"
-)
-_EXAMPLE_REDIS_URL = (
-    "redis://" + ":" + "EXAMPLE_PASSWORD_PLACEHOLDER" + "@localhost"
-)
+_EXAMPLE_DSN = "postgresql://" + "USER" + ":" + "REDACTED" + "@localhost:5432/find"
+_EXAMPLE_REDIS_URL = "redis://" + ":" + "EXAMPLE_PASSWORD_PLACEHOLDER" + "@localhost"
 
 SECRETS = [
     _EXAMPLE_PASSWORD,
@@ -89,9 +85,24 @@ class TestScrubString:
         assert "vacation-photo-2024.jpg" not in out
         assert "<filename>" in out
         # Allowlist-free: uncommon extensions are still scrubbed.
-        out_custom = scrub_string("failed on notes.xyz")
-        assert "notes.xyz" not in out_custom
-        assert "<filename>" in out_custom
+        for name in (
+            "notes.xyz",
+            "private_notes.txt",
+            "customer.csv",
+            "private notes.txt",
+        ):
+            scrubbed = scrub_string(f"failed on {name}")
+            assert name not in scrubbed, name
+            assert "<filename>" in scrubbed
+
+    def test_strips_dotfiles(self):
+        for name in (".env", ".gitignore", ".htaccess"):
+            scrubbed = scrub_string(f"cannot read {name} during startup")
+            assert name not in scrubbed, name
+            assert "<filename>" in scrubbed
+
+    def test_version_numbers_not_treated_as_filenames(self):
+        assert scrub_string("app version 1.0.0 ready") == "app version 1.0.0 ready"
 
     def test_strips_url_credentials(self):
         out = scrub_string(f"connect {_EXAMPLE_DSN}")
@@ -104,9 +115,7 @@ class TestScrubString:
         assert "<credentials>" in out
 
     def test_strips_secret_assignments(self):
-        out = scrub_string(
-            f"password={_EXAMPLE_PASSWORD} token=FAKE.TEST.TOKEN"
-        )
+        out = scrub_string(f"password={_EXAMPLE_PASSWORD} token=FAKE.TEST.TOKEN")
         assert _EXAMPLE_PASSWORD not in out
         assert "password=<redacted>" in out
 

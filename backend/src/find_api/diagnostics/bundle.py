@@ -10,6 +10,7 @@ import logging
 import os
 import platform
 import sys
+import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -40,30 +41,28 @@ class _ErrorLogBuffer(logging.Handler):
     def __init__(self, capacity: int = ERROR_LOG_LIMIT) -> None:
         super().__init__(level=logging.ERROR)
         self._records: deque[dict[str, Any]] = deque(maxlen=capacity)
+        self._records_lock = threading.Lock()
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
             message = self.format(record) if self.formatter else record.getMessage()
-            self._records.append(
-                {
-                    "timestamp": datetime.fromtimestamp(
-                        record.created, tz=timezone.utc
-                    ).isoformat(),
-                    "level": record.levelname,
-                    "logger": record.name,
-                    "message": scrub_string(message),
-                    "source": "log",
-                }
-            )
+            entry = {
+                "timestamp": datetime.fromtimestamp(
+                    record.created, tz=timezone.utc
+                ).isoformat(),
+                "level": record.levelname,
+                "logger": record.name,
+                "message": scrub_string(message),
+                "source": "log",
+            }
+            with self._records_lock:
+                self._records.append(entry)
         except Exception:  # noqa: BLE001 — never break the logging pipeline
             self.handleError(record)
 
     def snapshot(self) -> list[dict[str, Any]]:
-        self.acquire()
-        try:
+        with self._records_lock:
             return list(self._records)
-        finally:
-            self.release()
 
 
 _error_buffer = _ErrorLogBuffer()
@@ -82,9 +81,7 @@ def ensure_error_log_buffer() -> None:
     if _buffer_installed:
         return
     root = logging.getLogger()
-    if not any(
-        getattr(h, "name", None) == _error_buffer.name for h in root.handlers
-    ):
+    if not any(getattr(h, "name", None) == _error_buffer.name for h in root.handlers):
         root.addHandler(_error_buffer)
     _buffer_installed = True
 
@@ -146,9 +143,7 @@ def _check_storage() -> dict[str, Any]:
                 "latency_ms": round((time.perf_counter() - started) * 1000, 2),
             }
             if not reachable:
-                result["error"] = (
-                    "Local storage path is not a writable directory"
-                )
+                result["error"] = "Local storage path is not a writable directory"
             return result
 
         from minio import Minio
@@ -236,9 +231,7 @@ def _collect_queue_stats() -> dict[str, Any]:
             queued = int(counts.get("queued", 0))
             started = int(counts.get("running", 0)) + int(counts.get("started", 0))
             failed = int(counts.get("failed", 0))
-            finished = int(counts.get("finished", 0)) + int(
-                counts.get("completed", 0)
-            )
+            finished = int(counts.get("finished", 0)) + int(counts.get("completed", 0))
             return {
                 "mode": mode,
                 "depth": queued,

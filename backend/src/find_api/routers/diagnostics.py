@@ -18,7 +18,6 @@ from find_api.diagnostics.bundle import (
     collect_diagnostics_bundle,
     ensure_error_log_buffer,
 )
-from find_api.diagnostics.redact import scrub_string
 from find_api.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -29,6 +28,7 @@ _BUNDLE_HEADERS = {
     "Content-Disposition": 'attachment; filename="find-diagnostics-bundle.json"',
     "X-Find-Diagnostics": "local-only",
 }
+_GENERIC_FAILURE = {"error": "Failed to generate diagnostics bundle"}
 
 # Install the in-process error buffer when this router is imported so recent
 # ERROR logs are available by the time an admin requests a bundle.
@@ -47,16 +47,11 @@ def export_diagnostics_bundle(
     """
     try:
         bundle = collect_diagnostics_bundle()
-    except Exception as exc:  # noqa: BLE001 — never leak stack traces to clients
+    except Exception:  # noqa: BLE001 — never leak exception details to clients
         logger.exception("Diagnostics bundle collection failed")
-        # Scrub secrets first; sanitize_error path stripping can tear across
-        # "password=..." assignments if applied before credential scrubbing.
-        safe_message = scrub_string(str(exc))
-        if len(safe_message) > 150:
-            safe_message = safe_message[:150] + "..."
         return JSONResponse(
             status_code=500,
-            content={"error": f"{exc.__class__.__name__}: {safe_message}"},
+            content=_GENERIC_FAILURE,
             headers=_BUNDLE_HEADERS,
         )
 

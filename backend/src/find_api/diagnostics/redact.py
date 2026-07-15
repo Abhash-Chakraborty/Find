@@ -115,9 +115,17 @@ _PATH_RE = re.compile(
     r")"
 )
 
-# Filename-like tokens: basename + '.' + extension starting with a letter.
-# Digit-only suffixes (e.g. version fragments like 1.0) are not filenames.
-_FILENAME_RE = re.compile(r"(?i)\b[\w\-]+\.[A-Za-z][A-Za-z0-9]{0,15}\b")
+# Generic filename-like tokens (not an extension allowlist):
+# - dotted files: .env, .gitignore
+# - name.ext / "my file.txt" (spaces allowed in the stem)
+# Extension must start with a letter so version fragments like 1.0 stay intact.
+_FILENAME_RE = re.compile(
+    r"(?i)(?:"
+    r"(?<![\\/\w.])\.[A-Za-z][\w\-]{0,31}"
+    r"|"
+    r"(?<![\\/\w])[\w\-]+(?: [\w\-]+)*\.[A-Za-z][A-Za-z0-9]{0,15}"
+    r")"
+)
 
 # Credentials embedded in URLs / DSNs: scheme://user:pass@host
 # username may be empty (redis://:password@host).
@@ -131,8 +139,7 @@ _BEARER_RE = re.compile(
     r"(?i)\bbearer\s+[A-Za-z0-9\-._~+/]+=*",
 )
 _TOKEN_RE = re.compile(
-    r"(?i)\b(?:sk-[a-z0-9]{10,}|"
-    r"[a-f0-9]{32,}|[A-Za-z0-9_\-]{40,})\b",
+    r"(?i)\b(?:sk-[a-z0-9]{10,}|" r"[a-f0-9]{32,}|[A-Za-z0-9_\-]{40,})\b",
 )
 
 # password=..., token: ..., SECRET_KEY=... style assignments.
