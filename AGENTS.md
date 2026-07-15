@@ -24,6 +24,9 @@ This is the main shared instruction file for AI coding agents working on Find. T
 4. Keep the branch focused on one issue. Do not bundle opportunistic refactors, unrelated docs, formatting churn, or cleanup.
 5. Read `docs/policies/agent-security.md` before touching upload, storage, ML, face/person data, feedback, secrets, Docker, CI, or dependency files.
 
+Contributor branches start from and target `canary`. Only the reviewed
+maintainer promotion PR may target `main`; a merge to `main` is a release event.
+
 ## Project Structure & Module Organization
 
 Find is a local-first AI image intelligence app. Key paths:

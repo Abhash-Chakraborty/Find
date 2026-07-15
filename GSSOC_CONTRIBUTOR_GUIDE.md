@@ -35,10 +35,11 @@ Important paths:
 
 1. Find an issue labeled `good first issue`, `help wanted`, `gssoc26`, `level:beginner`, `level:intermediate`, `level:advanced`, or `level:critical`.
 2. Comment on the issue and wait for maintainer assignment before starting.
-3. Fork the repository and create a branch from `main`.
+3. Fork the repository and create a branch from the default `canary` branch.
 4. Keep the change scoped to one issue.
 5. Run the relevant checks before opening a PR.
-6. Open a PR against `main` and fill out the full PR template.
+6. Open a PR against `canary` and fill out the full PR template. Contributors
+   do not open PRs directly against `main`.
 
 Do not open broad PRs that mix unrelated UI, backend, docs, and formatting changes. Small, focused PRs are faster to review.
 

@@ -1,6 +1,22 @@
 name: Publish release images
 
 on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Image tag to publish"
+        required: true
+        type: string
+      backend_profile:
+        description: "Backend profile used when publish_all is false"
+        required: false
+        default: nvidia
+        type: string
+      publish_all:
+        description: "Publish every modular backend profile"
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - "v*"
@@ -49,6 +65,7 @@ jobs:
         env:
           REQUESTED_TAG: ${{ inputs.image_tag }}
           REQUESTED_PROFILE: ${{ inputs.backend_profile }}
+          PUBLISH_ALL: ${{ inputs.publish_all }}
         run: |
           owner="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           tag="${REQUESTED_TAG:-${GITHUB_REF_NAME#v}}"
@@ -59,7 +76,7 @@ jobs:
           echo "owner=${owner}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "sha_tag=sha-$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
-          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] || [ "${PUBLISH_ALL}" = "true" ]; then
             echo 'profiles=["no-ai","mock","cpu","nvidia"]' >> "$GITHUB_OUTPUT"
           else
             echo "profiles=[\"${REQUESTED_PROFILE}\"]" >> "$GITHUB_OUTPUT"
@@ -102,6 +119,8 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
+          provenance: mode=max
+          sbom: true
           platforms: ${{ matrix.profile == 'nvidia' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           build-args: |
             BASE_IMAGE=${{ matrix.profile == 'nvidia' && 'nvidia/cuda:12.1.1-runtime-ubuntu22.04' || 'python:3.12-slim' }}
@@ -151,6 +170,8 @@ jobs:
           file: ./frontend/Dockerfile
           target: production
           push: true
+          provenance: mode=max
+          sbom: true
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ needs.metadata.outputs.owner }}/find-web:${{ needs.metadata.outputs.tag }}

@@ -5,7 +5,7 @@ name: CI
 #   Path pattern                    | frontend-check | backend-check | compose-check
 #   --------------------------------|----------------|---------------|--------------
 #   frontend/**                     |      yes       |      no       |      no
-#   backend/**                      |      no        |      yes      |      no
+#   backend/**, scripts/**          |      no        |      yes      |      no
 #   .github/workflows/**            |      yes       |      yes      |      yes
 #   compose*.yml                    |      yes       |      yes      |      yes
 #   root/shared non-doc config      |      yes       |      yes      |      no
@@ -14,9 +14,9 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["canary", "main"]
   pull_request:
-    branches: ["main"]
+    branches: ["canary", "main"]
 
 permissions:
   contents: read
@@ -26,9 +26,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  branch-policy:
+    name: Branch policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Enforce the canary promotion path
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            exit 0
+          fi
+          if [ "${BASE_BRANCH}" = "main" ] && [ "${HEAD_BRANCH}" != "canary" ]; then
+            echo "main only accepts promotion pull requests from canary." >&2
+            exit 1
+          fi
+          if [ "${BASE_BRANCH}" = "canary" ] && [ "${HEAD_BRANCH}" = "main" ]; then
+            echo "Do not merge main backwards into canary through a pull request." >&2
+            exit 1
+          fi
+
   reference-boundary:
     name: Reference source boundary
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -42,8 +67,35 @@ jobs:
             exit 1
           fi
 
+  release-governance:
+    name: Release metadata and license
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Validate synchronized version and licensing
+        shell: bash
+        run: |
+          python scripts/bump_version.py --check
+          grep -q "GNU AFFERO GENERAL PUBLIC LICENSE" LICENSE
+          grep -q 'license = "AGPL-3.0-only"' backend/pyproject.toml
+          grep -q '"license": "AGPL-3.0-only"' frontend/package.json
+          test -s NOTICE
+
+      - name: Reject mutable action references
+        shell: bash
+        run: |
+          if grep -R -nE 'uses: [^#]+@(v[0-9]+|main|master)[[:space:]]*$' .github/workflows; then
+            echo "GitHub Actions must be pinned to immutable commit SHAs." >&2
+            exit 1
+          fi
+
   detect-changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
@@ -62,6 +114,7 @@ jobs:
               - 'frontend/**'
             backend:
               - 'backend/**'
+              - 'scripts/**'
             shared:
               - '.github/workflows/**'
               - 'compose*.yml'
@@ -75,6 +128,7 @@ jobs:
               - '**'
               - '!frontend/**'
               - '!backend/**'
+              - '!scripts/**'
               - '!.github/workflows/**'
               - '!compose*.yml'
               - '!docs/**'
@@ -89,6 +143,7 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.uncategorized == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: ./frontend
@@ -107,7 +162,7 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - run: pnpm install
+      - run: pnpm install --frozen-lockfile
 
       # Report high/critical vulnerabilities for maintainer review.
       - run: pnpm audit --audit-level=high || true
@@ -132,6 +187,7 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.uncategorized == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: ./backend
@@ -184,6 +240,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     env:
       ML_MODE: mock
     defaults:
@@ -238,6 +295,7 @@ jobs:
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:

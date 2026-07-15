@@ -10,12 +10,13 @@ For repo-aware coding-agent and contributor guidance, start with [AGENTS.md](./A
 
 1. Check open issues and comment on one before starting work.
 2. Wait for maintainer confirmation/assignment.
-3. Fork the repository and branch from `main`.
+3. Fork the repository and branch from the default `canary` branch.
 
 ## Repository protection rules
 
-- Direct pushes to `main` are blocked.
-- Open a pull request from your branch.
+- Direct pushes to `canary` and `main` are blocked for contributors.
+- Open feature and fix pull requests from your branch into `canary`.
+- `main` accepts only the maintainer-controlled promotion PR from `canary`.
 - PR merge requires:
   - Passing CI checks
   - At least one approval
@@ -183,10 +184,28 @@ Each PR must:
 3. Include manual test steps and expected result.
 4. Add screenshots/videos for UI changes.
 5. Keep scope focused to one issue.
-6. Target the `main` branch.
+6. Target the `canary` branch. Only a maintainer promotion PR targets `main`.
 7. Pass CI checks (`frontend-check`, `backend-check`).
 
 Use the PR template in `.github/pull_request_template.md`.
+
+## Release and version workflow
+
+Find uses semantic versions (`MAJOR.MINOR.PATCH`) and one maintainer-triggered
+release workflow:
+
+- `patch` is for backward-compatible fixes and urgent maintenance.
+- `minor` is for backward-compatible features.
+- `major` is for breaking changes that require migration notes.
+
+The **Prepare version release** action opens a generated version PR into
+`canary` and synchronizes backend, web, desktop, lockfile, UI, and changelog
+versions. After that PR and the `canary` promotion are reviewed, merging the
+promotion into `main` starts a three-hour quiet period. A newer `main` update
+restarts the timer. When the timer completes, GitHub creates the immutable tag,
+release, provenance/SBOM attestations, web image, and every modular backend
+image. Critical fixes use a patch bump and the manual emergency release input;
+sensitive reports must use a private security advisory.
 
 ## Review expectations
 

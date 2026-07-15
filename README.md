@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://gssoc.girlscript.org/"><img src="https://img.shields.io/badge/GSSoC-2026-ff4f8b?style=for-the-badge" alt="GSSoC 2026"></a>
-  <a href="https://github.com/Abhash-Chakraborty/Find/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Abhash-Chakraborty/Find/ci.yml?branch=main&label=CI" alt="CI"></a>
+  <a href="https://github.com/Abhash-Chakraborty/Find/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Abhash-Chakraborty/Find/ci.yml?branch=canary&label=CI" alt="CI"></a>
   <a href="https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue"><img src="https://img.shields.io/github/issues/Abhash-Chakraborty/Find/good%20first%20issue?label=good%20first%20issue" alt="Good first issue"></a>
   <a href="https://github.com/Abhash-Chakraborty/Find/issues"><img src="https://img.shields.io/github/issues/Abhash-Chakraborty/Find?label=issues" alt="Open issues"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
@@ -234,10 +234,12 @@ actually applied by a worker. If that endpoint says `restart_required: true`,
 start the CPU or NVIDIA compose artifact; a no-AI/mock image cannot become a
 full image through a toggle.
 
-Release tags (`v*`) publish immutable web images plus separate `no-ai`, `mock`,
-`cpu`, and `nvidia` backend images through `.github/workflows/publish.yml`.
-Manual runs can publish one selected profile without building unrelated AI
-dependencies.
+Maintainers prepare patch, minor, or major semantic versions with one manual
+workflow. The generated version PR lands in `canary`; the reviewed
+`canary`-to-`main` promotion starts a three-hour quiet period before GitHub
+creates the release and publishes immutable web plus separate `no-ai`, `mock`,
+`cpu`, and `nvidia` backend images. Manual publish runs can still build one
+selected profile without unrelated AI dependencies.
 
 `ML_MODE=remote` is intentionally fail-closed for now: no remote inference
 adapter is installed, the runtime reports `unavailable`, and Find never sends
@@ -439,10 +441,10 @@ docker compose -f compose.mock.yml up --build
 ## Contribution quick start
 
 1. Pick an issue and comment to get assigned.
-2. Fork and create a branch from `main`.
+2. Fork and create a branch from the default `canary` branch.
 3. Make changes with focused commits.
 4. Run quality checks from CONTRIBUTING.
-5. Open a PR using the project template and link the issue.
+5. Open a PR into `canary` using the project template and link the issue.
 
 ## Contribution Workflow
 

@@ -1,8 +1,19 @@
 # Find — Whole-Application Overhaul Plan
 
 > **Status:** v1.1 release candidate — implementation complete locally; final PR/release gates in progress.
-> **Branch:** `abhash/production-hardening` (synchronized with `origin/main`).
+> **Branch:** `canary` (the protected default integration branch).
 > **Reference codebase:** `./reference-app/` (local, gitignored, AGPL-3.0). Read-only reference used to learn UI/behavior; **its contents are never committed to Find**.
+
+## 2026-07-15 repository and release governance addendum
+
+- [x] Feature/fix PRs target the protected `canary` default branch; `main`
+  accepts only a reviewed promotion from canary.
+- [x] Patch, minor, and major release preparation share one manually dispatched
+  workflow that synchronizes every application and lockfile version.
+- [x] A main promotion starts a restartable three-hour release quiet period;
+  the emergency path is reserved for reviewed critical patch releases.
+- [x] CI, dependency updates, CODEOWNERS, issue/PR templates, image provenance,
+  and release automation are maintained as protected repository policy.
 
 ## 2026-07-15 v1.1.3 patch addendum
 

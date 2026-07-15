@@ -1,0 +1,28 @@
+name: Documentation problem
+description: Report missing, unclear, or inaccurate documentation.
+title: "docs: "
+labels: [documentation, needs triage]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping keep Find's documentation accurate.
+  - type: input
+    id: location
+    attributes:
+      label: Documentation location
+      description: Link the page or name the file and section.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is unclear or incorrect?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: Describe the wording, example, or structure you would prefer.
+    validations:
+      required: false

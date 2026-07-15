@@ -3,7 +3,7 @@ name: Stale PR Handler
 # When a maintainer marks a PR as stale (applies the "stale" label), this
 # workflow guarantees the label is present and posts a heads-up comment.
 # A scheduled scan then closes any PR that has carried the "stale" label
-# for at least 24 hours and is still open.
+# for at least seven days and is still open.
 
 on:
   pull_request_target:
@@ -33,9 +33,9 @@ concurrency:
 
 env:
   STALE_LABEL: stale
-  STALE_COMMENT: "PR is marked as stale and will be closed in March."
+  STALE_COMMENT: "This PR is marked as stale. It will close automatically after 7 days without renewed activity; remove the stale label when work resumes."
   # Hours a PR may carry the stale label before it is auto-closed.
-  STALE_CLOSE_AFTER_HOURS: "24"
+  STALE_CLOSE_AFTER_HOURS: "168"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -48,9 +48,10 @@ jobs:
       github.event_name == 'pull_request_target' &&
       github.event.label.name == 'stale'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Label and comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           script: |
             const prNumber = context.payload.pull_request.number;
@@ -100,9 +101,10 @@ jobs:
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Scan and close
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           script: |
             const staleLabel = process.env.STALE_LABEL;

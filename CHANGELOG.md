@@ -4,6 +4,17 @@ All notable changes to Find are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project is
 distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
+## [Unreleased]
+
+### Changed
+
+- Contributor work now targets a protected `canary` default branch; only the
+  reviewed canary promotion can enter `main`.
+- Release preparation synchronizes every version surface and uses one manual
+  patch/minor/major selector, followed by a restartable three-hour release gate.
+- CI actions are immutable-SHA pinned, dependency updates target canary, and
+  release images include provenance and software bill-of-material attestations.
+
 ## [1.1.3] — 2026-07-15
 
 ### Fixed

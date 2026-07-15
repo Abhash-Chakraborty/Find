@@ -2,7 +2,7 @@ name: TestSprite PR Tests
 
 on:
   pull_request:
-    branches: ["main"]
+    branches: ["canary", "main"]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
@@ -36,7 +36,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
 
       - name: Check TestSprite secret
         id: testsprite-secret
@@ -81,7 +83,7 @@ jobs:
 
       - name: Run TestSprite
         if: steps.testsprite-secret.outputs.available == 'true'
-        uses: TestSprite/run-action@v1
+        uses: TestSprite/run-action@e1793b89af73cf22d267b025e827fdb94d2c4e7d
         with:
           testsprite-api-key: ${{ secrets.TESTSPRITE_API_KEY }}
           base_url: ${{ github.event.inputs.base_url || 'http://127.0.0.1:3000' }}
