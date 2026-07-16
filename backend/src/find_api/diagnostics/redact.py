@@ -139,7 +139,8 @@ _BEARER_RE = re.compile(
     r"(?i)\bbearer\s+[A-Za-z0-9\-._~+/]+=*",
 )
 _TOKEN_RE = re.compile(
-    r"(?i)\b(?:sk-[a-z0-9]{10,}|" r"[a-f0-9]{32,}|[A-Za-z0-9_\-]{40,})\b",
+    r"(?i)(?<![A-Za-z0-9_\-])(?:sk-[a-z0-9]{10,}|"
+    r"[a-f0-9]{32,}|[A-Za-z0-9_\-]{40,})(?![A-Za-z0-9_\-])",
 )
 
 # password=..., token: ..., SECRET_KEY=... style assignments.

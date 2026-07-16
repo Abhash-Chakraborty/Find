@@ -123,6 +123,13 @@ class TestScrubString:
         out = scrub_string(f"Authorization: {_EXAMPLE_BEARER}")
         assert "FAKE.TEST.TOKEN" not in out
 
+    def test_strips_long_token_ending_in_hyphen(self):
+        # Trailing '-' is part of the token; word-boundary \\b would miss it.
+        token = ("A" * 39) + "-"
+        out = scrub_string(f"leak={token} trailing")
+        assert token not in out
+        assert REDACTED in out
+
     def test_strips_free_standing_quoted_private_text(self):
         caption = PRIVATE_STRINGS[0]
         out = scrub_string(f'model said "{caption}" during indexing')

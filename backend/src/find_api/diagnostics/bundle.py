@@ -73,16 +73,19 @@ _buffer_installed = False
 def ensure_error_log_buffer() -> None:
     """Attach the in-process error ring buffer to the root logger once.
 
-    Uses a stable handler ``name`` check (not ``isinstance``) so uvicorn
-    ``--reload`` re-imports do not stack duplicate buffers when the class
-    object identity changes across reloads.
+    Under uvicorn ``--reload``, prior import cycles leave a same-named handler
+    from an old module instance on the root logger. Remove those stale handlers
+    and always attach the current ``_error_buffer`` so ``_collect_recent_errors``
+    reads from the live instance.
     """
     global _buffer_installed
     if _buffer_installed:
         return
     root = logging.getLogger()
-    if not any(getattr(h, "name", None) == _error_buffer.name for h in root.handlers):
-        root.addHandler(_error_buffer)
+    for handler in list(root.handlers):
+        if getattr(handler, "name", None) == _error_buffer.name:
+            root.removeHandler(handler)
+    root.addHandler(_error_buffer)
     _buffer_installed = True
 
 
