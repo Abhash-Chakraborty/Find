@@ -81,6 +81,8 @@ dev = [
   "ruff==0.1.14",
   "pip-audit==2.9.0",
   "scikit-learn==1.5.0",
+  "psutil>=7.2.2",
+  "python-levenshtein>=0.27.3",
 ]
 
 [tool.pytest.ini_options]
