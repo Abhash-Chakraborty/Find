@@ -26,19 +26,29 @@ OCR_AWARE_SIGNAL_WEIGHTS = {
 }
 
 PERSON_OBJECT_LABELS = {
-    "person", "people", "human", "man", "woman", "boy", "girl", "face",
+    "person",
+    "people",
+    "human",
+    "man",
+    "woman",
+    "boy",
+    "girl",
+    "face",
 }
 
 # ---------------------------------------------------------------------------
 # Remote ML dispatch helpers
 # ---------------------------------------------------------------------------
 
+
 def _remote_analyze_image(image: Image.Image) -> Dict[str, Any]:
     """Send the image to the remote Find ML server for the analyze stage."""
     from find_api.ml.remote_client import _feature_enabled, remote_analyze
 
     if not any(_feature_enabled(f) for f in ("caption", "detect", "ocr")):
-        logger.info("Remote mode: no analyze features enabled; returning empty metadata.")
+        logger.info(
+            "Remote mode: no analyze features enabled; returning empty metadata."
+        )
         return {
             "caption": "",
             "objects": [],
@@ -65,6 +75,7 @@ def _remote_analyze_image(image: Image.Image) -> Dict[str, Any]:
     )
     return result
 
+
 def _remote_embed_image(image: Image.Image, metadata: Dict[str, Any]) -> List[float]:
     """Send the image to the remote Find ML server for the embed stage."""
     from find_api.ml.remote_client import _feature_enabled, remote_embed
@@ -76,9 +87,11 @@ def _remote_embed_image(image: Image.Image, metadata: Dict[str, Any]) -> List[fl
     logger.info("Dispatching embed to remote ML server")
     return remote_embed(image, metadata)
 
+
 # ---------------------------------------------------------------------------
 # Existing helpers
 # ---------------------------------------------------------------------------
+
 
 def _safe_normalize_embedding(
     vector: np.ndarray,
@@ -111,9 +124,11 @@ def _record_stage_error(metadata: Dict[str, Any], stage: str, error: Exception) 
         message = f"{stage} failed during processing."
     metadata.setdefault("stage_errors", {})[stage] = message
 
+
 # ---------------------------------------------------------------------------
 # Public processor functions
 # ---------------------------------------------------------------------------
+
 
 def extract_image_metadata(
     image: Image.Image,
@@ -167,30 +182,42 @@ def extract_image_metadata(
         if on_stage:
             on_stage("detecting objects")
         from find_api.ml.object_detector import get_object_detector
+
         objects = get_object_detector().detect(image)
         metadata["objects"] = objects
-        metadata["stage_status"]["object_detection"] = {"status": "success", "error": None}
+        metadata["stage_status"]["object_detection"] = {
+            "status": "success",
+            "error": None,
+        }
     except Exception as e:
         metadata["objects"] = []
         _record_stage_error(metadata, "objects", e)
-        metadata["stage_status"]["object_detection"] = {"status": "failed", "error": sanitize_error(e)}
+        metadata["stage_status"]["object_detection"] = {
+            "status": "failed",
+            "error": sanitize_error(e),
+        }
 
     try:
         if on_stage:
             on_stage("generating caption")
         from find_api.ml.captioner import get_image_captioner
+
         caption = get_image_captioner().generate_caption(image)
         metadata["caption"] = caption
         metadata["stage_status"]["captioning"] = {"status": "success", "error": None}
     except Exception as e:
         metadata["caption"] = ""
         _record_stage_error(metadata, "caption", e)
-        metadata["stage_status"]["captioning"] = {"status": "failed", "error": sanitize_error(e)}
+        metadata["stage_status"]["captioning"] = {
+            "status": "failed",
+            "error": sanitize_error(e),
+        }
 
     try:
         if on_stage:
             on_stage("running OCR")
         from find_api.ml.ocr import get_ocr_extractor
+
         ocr = get_ocr_extractor()
         ocr_text, text_blocks = ocr.extract_text_and_boxes(image)
         metadata["ocr_text"] = ocr_text
@@ -200,7 +227,10 @@ def extract_image_metadata(
         metadata["ocr_text"] = ""
         metadata["text_blocks"] = []
         _record_stage_error(metadata, "ocr", e)
-        metadata["stage_status"]["ocr"] = {"status": "failed", "error": sanitize_error(e)}
+        metadata["stage_status"]["ocr"] = {
+            "status": "failed",
+            "error": sanitize_error(e),
+        }
 
     return metadata
 
@@ -229,6 +259,7 @@ def generate_hybrid_embedding(
     # ---- Full / local mode ----
     try:
         from find_api.ml.clip_embedder import get_clip_embedder
+
         embedder = get_clip_embedder()
 
         # --- 1. Image vector (always computed) ---
@@ -238,8 +269,16 @@ def generate_hybrid_embedding(
         caption = (metadata.get("caption") or "").strip()
 
         raw_objects = metadata.get("objects") or []
-        object_names_set = {str(obj.get("class", "")).strip() for obj in raw_objects if isinstance(obj, dict) and str(obj.get("class", "")).strip()}
-        objects_text = "detected objects: " + ", ".join(sorted(object_names_set)) if object_names_set else ""
+        object_names_set = {
+            str(obj.get("class", "")).strip()
+            for obj in raw_objects
+            if isinstance(obj, dict) and str(obj.get("class", "")).strip()
+        }
+        objects_text = (
+            "detected objects: " + ", ".join(sorted(object_names_set))
+            if object_names_set
+            else ""
+        )
         ocr_text = (metadata.get("ocr_text") or "").strip()
 
         has_caption = bool(caption)
@@ -272,9 +311,15 @@ def generate_hybrid_embedding(
         active_signals = list(signal_vectors.keys())
 
         if has_ocr:
-            total_weight = sum(OCR_AWARE_SIGNAL_WEIGHTS.get(name, 0.0) for name in active_signals)
+            total_weight = sum(
+                OCR_AWARE_SIGNAL_WEIGHTS.get(name, 0.0) for name in active_signals
+            )
             if total_weight > 0:
-                hybrid_vector = sum(signal_vectors[name] * (OCR_AWARE_SIGNAL_WEIGHTS.get(name, 0.0) / total_weight) for name in active_signals)
+                hybrid_vector = sum(
+                    signal_vectors[name]
+                    * (OCR_AWARE_SIGNAL_WEIGHTS.get(name, 0.0) / total_weight)
+                    for name in active_signals
+                )
             else:
                 hybrid_vector = image_embedding
         else:
@@ -302,10 +347,14 @@ def generate_hybrid_embedding(
 
 def has_person_object(metadata: Dict[str, Any]) -> bool:
     """Return true when object detection found a person-like object."""
-    for obj in (metadata.get("objects") or []):
+    for obj in metadata.get("objects") or []:
         if not isinstance(obj, dict):
             continue
-        label = str(obj.get("class") or obj.get("name") or obj.get("label") or "").strip().lower()
+        label = (
+            str(obj.get("class") or obj.get("name") or obj.get("label") or "")
+            .strip()
+            .lower()
+        )
         if label in PERSON_OBJECT_LABELS:
             return True
     return False
@@ -323,8 +372,11 @@ def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
 
     try:
         from find_api.ml.face_detector import get_face_detector
+
         faces = get_face_detector().detect_faces(image)
-        db.query(Face).filter(Face.media_id == media_id).delete(synchronize_session=False)
+        db.query(Face).filter(Face.media_id == media_id).delete(
+            synchronize_session=False
+        )
 
         if not faces:
             db.commit()
@@ -338,7 +390,14 @@ def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
             if None in (bbox, embedding, confidence):
                 continue
 
-            db.add(Face(media_id=media_id, bounding_box=bbox, embedding=embedding, confidence=confidence))
+            db.add(
+                Face(
+                    media_id=media_id,
+                    bounding_box=bbox,
+                    embedding=embedding,
+                    confidence=confidence,
+                )
+            )
             stored_count += 1
 
         db.commit()

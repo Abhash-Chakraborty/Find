@@ -41,7 +41,9 @@ def _require_auth(
     configured_key = (settings.REMOTE_ML_API_KEY or "").strip()
 
     if not configured_key:
-        logger.warning("ML request received but REMOTE_ML_API_KEY is not set. Rejecting.")
+        logger.warning(
+            "ML request received but REMOTE_ML_API_KEY is not set. Rejecting."
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Remote ML endpoints are not configured on this server.",
@@ -56,6 +58,7 @@ def _require_auth(
         )
 
     import hmac
+
     token_matches = hmac.compare_digest(
         credentials.credentials.encode(),
         configured_key.encode(),
@@ -98,6 +101,7 @@ def analyze(image: UploadFile = File(...)) -> Dict[str, Any]:
 
     try:
         from find_api.workers.processors import extract_image_metadata
+
         metadata = extract_image_metadata(pil_image)
     except Exception as exc:
         logger.exception("analyze endpoint: extract_image_metadata failed")
@@ -114,7 +118,7 @@ def analyze(image: UploadFile = File(...)) -> Dict[str, Any]:
             err = data.get("error")
             clean_status[stage] = {
                 "status": str(data.get("status", "pending")),
-                "error": str(err) if err else None
+                "error": str(err) if err else None,
             }
 
     return {
@@ -148,6 +152,7 @@ def embed(
         )
     try:
         from find_api.workers.processors import generate_hybrid_embedding
+
         embedding = generate_hybrid_embedding(pil_image, meta_dict)
     except Exception as exc:
         logger.exception("embed endpoint: generate_hybrid_embedding failed")

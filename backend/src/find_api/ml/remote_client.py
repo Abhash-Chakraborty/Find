@@ -64,9 +64,7 @@ def _base_url() -> str:
 def _feature_enabled(feature: str) -> bool:
     """Return True when *feature* is listed in REMOTE_ML_FEATURES."""
     enabled = {
-        f.strip().lower()
-        for f in settings.REMOTE_ML_FEATURES.split(",")
-        if f.strip()
+        f.strip().lower() for f in settings.REMOTE_ML_FEATURES.split(",") if f.strip()
     }
     return feature.lower() in enabled
 
@@ -82,6 +80,7 @@ def _raise_for_auth(response: httpx.Response) -> None:
 
 # --- Public API ---
 
+
 def check_health() -> Dict[str, Any]:
     url = f"{_base_url()}/api/ml/health"
     try:
@@ -90,7 +89,9 @@ def check_health() -> Dict[str, Any]:
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as exc:
-        raise RemoteMLError(f"Health check failed: HTTP {exc.response.status_code}") from exc
+        raise RemoteMLError(
+            f"Health check failed: HTTP {exc.response.status_code}"
+        ) from exc
     except httpx.RequestError as exc:
         raise RemoteMLError(f"Health check connection error: {exc}") from exc
 
@@ -112,7 +113,9 @@ def remote_analyze(image: Image.Image) -> Dict[str, Any]:
     except (RemoteMLAuthError, RemoteMLError):
         raise
     except httpx.HTTPStatusError as exc:
-        raise RemoteMLError(f"remote_analyze failed: HTTP {exc.response.status_code}") from exc
+        raise RemoteMLError(
+            f"remote_analyze failed: HTTP {exc.response.status_code}"
+        ) from exc
     except httpx.RequestError as exc:
         raise RemoteMLError(f"remote_analyze connection error: {exc}") from exc
 
@@ -122,6 +125,7 @@ def remote_embed(image: Image.Image, metadata: Dict[str, Any]) -> List[float]:
     image_bytes = _image_to_bytes(image, strip_exif=settings.REMOTE_ML_STRIP_EXIF)
 
     import json
+
     try:
         with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
             response = client.post(
@@ -137,7 +141,9 @@ def remote_embed(image: Image.Image, metadata: Dict[str, Any]) -> List[float]:
     except (RemoteMLAuthError, RemoteMLError):
         raise
     except httpx.HTTPStatusError as exc:
-        raise RemoteMLError(f"remote_embed failed: HTTP {exc.response.status_code}") from exc
+        raise RemoteMLError(
+            f"remote_embed failed: HTTP {exc.response.status_code}"
+        ) from exc
     except httpx.RequestError as exc:
         raise RemoteMLError(f"remote_embed connection error: {exc}") from exc
 
@@ -158,6 +164,8 @@ def remote_cluster(embeddings: List[List[float]]) -> Dict[str, Any]:
     except (RemoteMLAuthError, RemoteMLError):
         raise
     except httpx.HTTPStatusError as exc:
-        raise RemoteMLError(f"remote_cluster failed: HTTP {exc.response.status_code}") from exc
+        raise RemoteMLError(
+            f"remote_cluster failed: HTTP {exc.response.status_code}"
+        ) from exc
     except httpx.RequestError as exc:
         raise RemoteMLError(f"remote_cluster connection error: {exc}") from exc
