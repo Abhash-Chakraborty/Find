@@ -29,6 +29,15 @@ def _require_auth(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> None:
     """Validate the bearer token against REMOTE_ML_API_KEY."""
+
+    # Prevent infinite loops: A remote client cannot act as a server.
+    if settings.ML_MODE.lower() == "remote":
+        logger.error("Rejecting ML request: This server is itself in remote mode.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This server is configured as a client (ML_MODE=remote) and cannot process ML requests.",
+        )
+
     configured_key = (settings.REMOTE_ML_API_KEY or "").strip()
 
     if not configured_key:
