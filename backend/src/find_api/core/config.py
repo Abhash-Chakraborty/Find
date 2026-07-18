@@ -47,9 +47,9 @@ class Settings(BaseSettings):
     # Runtime/build profile. Docker images set this explicitly so the API can
     # distinguish installed capabilities from hardware that merely exists on
     # the host. ``development`` keeps source checkouts backwards compatible.
-    FIND_BUILD_PROFILE: Literal["development", "no-ai", "mock", "cpu", "nvidia"] = (
-        "development"
-    )
+    FIND_BUILD_PROFILE: Literal[
+        "development", "no-ai", "mock", "cpu", "nvidia"
+    ] = "development"
 
     # ML Models
     ML_MODE: Literal["disabled", "full", "mock", "remote"] = "full"
