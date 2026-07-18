@@ -2,10 +2,6 @@
 Tests for the remote ML client.
 """
 
-"""
-Tests for the remote ML client.
-"""
-
 from unittest.mock import MagicMock, patch
 import pytest
 from PIL import Image
