@@ -4,12 +4,11 @@ Tests for the remote ML client.
 
 import io
 from unittest.mock import MagicMock, patch
-import httpx
 import pytest
 from PIL import Image
 
 from find_api.ml.remote_client import (
-    RemoteMLAuthError, RemoteMLError, _feature_enabled, _strip_exif,
+    RemoteMLAuthError, _feature_enabled, _strip_exif,
     check_health, remote_analyze, remote_cluster, remote_embed,
 )
 

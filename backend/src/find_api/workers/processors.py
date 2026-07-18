@@ -164,7 +164,8 @@ def extract_image_metadata(
     }
 
     try:
-        if on_stage: on_stage("detecting objects")
+        if on_stage:
+            on_stage("detecting objects")
         from find_api.ml.object_detector import get_object_detector
         objects = get_object_detector().detect(image)
         metadata["objects"] = objects
@@ -175,7 +176,8 @@ def extract_image_metadata(
         metadata["stage_status"]["object_detection"] = {"status": "failed", "error": sanitize_error(e)}
 
     try:
-        if on_stage: on_stage("generating caption")
+        if on_stage:
+            on_stage("generating caption")
         from find_api.ml.captioner import get_image_captioner
         caption = get_image_captioner().generate_caption(image)
         metadata["caption"] = caption
@@ -186,7 +188,8 @@ def extract_image_metadata(
         metadata["stage_status"]["captioning"] = {"status": "failed", "error": sanitize_error(e)}
 
     try:
-        if on_stage: on_stage("running OCR")
+        if on_stage:
+            on_stage("running OCR")
         from find_api.ml.ocr import get_ocr_extractor
         ocr = get_ocr_extractor()
         ocr_text, text_blocks = ocr.extract_text_and_boxes(image)
@@ -300,9 +303,11 @@ def generate_hybrid_embedding(
 def has_person_object(metadata: Dict[str, Any]) -> bool:
     """Return true when object detection found a person-like object."""
     for obj in (metadata.get("objects") or []):
-        if not isinstance(obj, dict): continue
+        if not isinstance(obj, dict):
+            continue
         label = str(obj.get("class") or obj.get("name") or obj.get("label") or "").strip().lower()
-        if label in PERSON_OBJECT_LABELS: return True
+        if label in PERSON_OBJECT_LABELS:
+            return True
     return False
 
 
@@ -330,7 +335,8 @@ def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
             bbox = face_data.get("bbox")
             embedding = face_data.get("embedding")
             confidence = face_data.get("confidence")
-            if None in (bbox, embedding, confidence): continue
+            if None in (bbox, embedding, confidence):
+                continue
 
             db.add(Face(media_id=media_id, bounding_box=bbox, embedding=embedding, confidence=confidence))
             stored_count += 1

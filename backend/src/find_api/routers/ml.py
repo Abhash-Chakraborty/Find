@@ -106,12 +106,23 @@ def analyze(image: UploadFile = File(...)) -> Dict[str, Any]:
             detail="ML inference failed on the remote server.",
         ) from exc
 
+    # Deep-sanitize the stage_status to prevent CodeQL information exposure warnings
+    raw_status = metadata.get("stage_status", {})
+    clean_status = {}
+    for stage, data in raw_status.items():
+        if isinstance(data, dict):
+            err = data.get("error")
+            clean_status[stage] = {
+                "status": str(data.get("status", "pending")),
+                "error": str(err) if err else None
+            }
+
     return {
         "caption": str(metadata.get("caption", "")),
         "objects": metadata.get("objects", []),
         "ocr_text": str(metadata.get("ocr_text", "")),
         "text_blocks": metadata.get("text_blocks", []),
-        "stage_status": metadata.get("stage_status", {}),
+        "stage_status": clean_status,
     }
 
 
@@ -170,7 +181,7 @@ def cluster(body: Dict[str, Any]) -> Dict[str, Any]:
         )
         labels = clusterer.fit_predict(X).tolist()
 
-        n_clusters = len(set(l for l in labels if l >= 0))
+        n_clusters = len(set(lbl for lbl in labels if lbl >= 0))
         n_noise = labels.count(-1)
 
         return {
