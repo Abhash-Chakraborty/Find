@@ -107,9 +107,9 @@ def analyze(image: UploadFile = File(...)) -> Dict[str, Any]:
         ) from exc
 
     return {
-        "caption": metadata.get("caption", ""),
+        "caption": str(metadata.get("caption", "")),
         "objects": metadata.get("objects", []),
-        "ocr_text": metadata.get("ocr_text", ""),
+        "ocr_text": str(metadata.get("ocr_text", "")),
         "text_blocks": metadata.get("text_blocks", []),
         "stage_status": metadata.get("stage_status", {}),
     }

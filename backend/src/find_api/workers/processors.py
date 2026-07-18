@@ -9,8 +9,10 @@ from typing import Any, Dict, List
 import numpy as np
 from PIL import Image
 
+
 from find_api.core.config import settings
 from find_api.core.model_manager import ModelUnavailableError
+from find_api.core.runtime_profile import current_ml_mode
 from find_api.ml.mock_embedder import get_mock_embedder
 from find_api.utils.errors import sanitize_error
 
@@ -110,9 +112,13 @@ def extract_image_metadata(
     image: Image.Image,
     on_stage: Callable[[str], None] | None = None,
 ) -> Dict[str, Any]:
-    """Run all ML models to extract metadata from image."""
+    """
+    Run all ML models to extract metadata from image
+    """
+    mode = current_ml_mode()
+
     # ---- Mock mode ----
-    if settings.ML_MODE.lower() == "mock":
+    if mode == "mock":
         if on_stage:
             on_stage("generating mock metadata")
         return {
@@ -130,10 +136,15 @@ def extract_image_metadata(
         }
 
     # ---- Remote mode ----
+    # We check settings.ML_MODE directly because current_ml_mode() maps "remote" to "unavailable" locally.
     if settings.ML_MODE.lower() == "remote":
         if on_stage:
             on_stage("sending to remote ML server")
         return _remote_analyze_image(image)
+
+    # Protect local execution
+    if mode != "full":
+        raise RuntimeError(f"AI metadata extraction is unavailable in mode '{mode}'.")
 
     # ---- Full / local mode ----
     metadata: Dict[str, Any] = {
@@ -183,15 +194,24 @@ def extract_image_metadata(
 
     return metadata
 
-def generate_hybrid_embedding(image: Image.Image, metadata: Dict[str, Any]) -> List[float]:
+def generate_hybrid_embedding(
+    image: Image.Image, metadata: Dict[str, Any]
+) -> List[float]:
     """Generate hybrid embedding from image, caption, detected objects, and OCR text."""
+    mode = current_ml_mode()
+
     # ---- Mock mode ----
-    if settings.ML_MODE.lower() == "mock":
+    if mode == "mock":
+        logger.info("Using mock embedding generator")
         return get_mock_embedder().embed_metadata(image, metadata)
 
     # ---- Remote mode ----
     if settings.ML_MODE.lower() == "remote":
         return _remote_embed_image(image, metadata)
+
+    # Protect local execution
+    if mode != "full":
+        raise RuntimeError(f"AI embedding generation is unavailable in mode '{mode}'.")
 
     # ---- Full / local mode ----
     try:
