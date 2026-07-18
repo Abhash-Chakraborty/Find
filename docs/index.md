@@ -2,6 +2,11 @@
 
 This directory is organized by document purpose and implementation status.
 
+## Project
+
+- [Changelog](../CHANGELOG.md) - notable changes per release.
+- [Migration Notes](../MIGRATION.md) - upgrade steps (DB migrations + env vars).
+
 ## Plan Status
 
 ### Complete
@@ -15,7 +20,8 @@ This directory is organized by document purpose and implementation status.
 - [Local Search Quality Roadmap](plans/partial/local-search-quality-roadmap.md) - semantic search exists; measurable evaluation, diagnostics, reranking, and scaling work remain planned.
 - [Desktop Framework Evaluation](plans/partial/desktop-tauri-vs-electron-adr.md) - Tauri spike exists, but release-grade packaging and updater decisions remain open.
 - [Personalization Research](plans/partial/personalization-research.md) - feedback collection exists; adaptive personalization is still planned.
-- [Vault Encryption Design](plans/partial/vault-encryption-design.md) - vault feature exists, but implementation still needs alignment with the full design note.
+- [Legacy Vault Encryption Design](plans/partial/vault-encryption-design.md) - documents the previous encrypted-blob format retained only for safe migration of existing vault items.
+- [Small-Team Authentication](plans/partial/small-team-authentication.md) - backend authentication foundations exist; frontend UI, deletion-request workflow, audit log, and Instance management UI remain planned.
 
 ### Not Started
 
@@ -26,13 +32,14 @@ This directory is organized by document purpose and implementation status.
 - [Desktop Runtime Quick Reference](plans/not-started/desktop-runtime-quick-reference.md)
 - [Mobile Strategy ADR](plans/not-started/mobile-strategy.md)
 - [Optional Self-Hosted Remote Acceleration](plans/not-started/remote-acceleration.md)
-- [Small-Team Authentication](plans/not-started/small-team-authentication.md)
 
 ## Guides
 
 - [Common Setup Errors](guides/common-setup-errors.md)
 - [Image Loading Behavior](guides/image-loading.md)
 - [Real ML Troubleshooting](guides/real-ml-troubleshooting.md)
+- [Features Guide](guides/features.md)
+- [Hardware Acceleration](guides/hardware-acceleration.md)
 - [PR Triage Automation Dry Run](guides/pr-triage-dry-run.md)
 - [TestSprite PR Testing](guides/testsprite-ci.md)
 

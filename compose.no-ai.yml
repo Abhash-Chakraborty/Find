@@ -1,0 +1,30 @@
+services:
+  db:
+    extends:
+      file: compose.base.yml
+      service: db
+  redis:
+    extends:
+      file: compose.base.yml
+      service: redis
+  minio:
+    extends:
+      file: compose.base.yml
+      service: minio
+  api:
+    extends:
+      file: compose.base.yml
+      service: api
+  worker:
+    extends:
+      file: compose.base.yml
+      service: worker
+  web:
+    extends:
+      file: compose.base.yml
+      service: web
+
+volumes:
+  db_data:
+  redis_data:
+  minio_data:

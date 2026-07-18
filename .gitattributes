@@ -1,0 +1,15 @@
+# Line-ending policy (issue #336): frontend Biome enforces lineEnding "lf",
+# so a CRLF checkout — the Windows default with core.autocrlf=true — fails
+# `pnpm check` on formatting alone while the same tree is green on Linux.
+# `text=auto` lets Git keep auto-detecting binaries; `eol=lf` pins every
+# detected text file to LF in the working tree on ALL platforms, making the
+# repo's checkout independent of each contributor's autocrlf setting.
+* text=auto eol=lf
+
+# Binary assets — never subject to any conversion.
+*.png binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary

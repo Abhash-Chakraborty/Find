@@ -1,25 +1,31 @@
 # syntax=docker/dockerfile:1.7
 
-ARG BASE_IMAGE=nvidia/cuda:12.1.1-runtime-ubuntu22.04
+ARG BASE_IMAGE=python:3.12-slim
 ARG PYTHON_VERSION=3.12
-ARG UV_SYNC_EXTRAS="--extra ml"
+ARG FIND_BUILD_PROFILE=no-ai
+ARG UV_SYNC_EXTRAS=""
 FROM ${BASE_IMAGE}
-ARG UV_SYNC_EXTRAS="--extra ml"
+ARG PYTHON_VERSION=3.12
+ARG FIND_BUILD_PROFILE=no-ai
+ARG UV_SYNC_EXTRAS=""
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-dev \
-    build-essential \
-    libpq-dev \
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies.
+#
+# The selected build profile controls this layer. CPU and NVIDIA artifacts need
+# native build/OpenCV runtime libraries; no-AI and mock artifacts intentionally
+# stay on the minimal Python base and never install those dependencies.
+#
+# So we branch: full set for ML, just curl (needed to fetch uv) for light.
+RUN set -eux; \
+    apt-get update; \
+    if [ "${FIND_BUILD_PROFILE}" = "cpu" ] || [ "${FIND_BUILD_PROFILE}" = "nvidia" ]; then \
+      apt-get install -y --no-install-recommends \
+        python3 python3-dev build-essential libpq-dev \
+        libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 curl; \
+    else \
+      apt-get install -y --no-install-recommends curl; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*
 
 # Ensure "python" command exists when base image only provides python3
 RUN if ! command -v python >/dev/null 2>&1; then \
@@ -36,6 +42,7 @@ ENV UV_PYTHON="${PYTHON_VERSION}"
 ENV UV_LINK_MODE="copy"
 ENV PATH="/opt/find/.venv/bin:/usr/local/bin:/root/.local/bin:/root/.cargo/bin:$PATH"
 ENV PYTHONPATH="/app/src"
+ENV FIND_BUILD_PROFILE="${FIND_BUILD_PROFILE}"
 
 # Set working directory
 WORKDIR /app
@@ -46,7 +53,7 @@ COPY pyproject.toml uv.lock ./
 # Install Python dependencies with uv. Keep uv's package cache in a BuildKit
 # cache mount so it speeds rebuilds without bloating the final runtime image.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --no-install-project ${UV_SYNC_EXTRAS}
+    uv sync --locked --no-dev --no-install-project ${UV_SYNC_EXTRAS}
 
 # Copy application code
 COPY . .

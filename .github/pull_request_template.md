@@ -2,6 +2,9 @@
 
 Briefly describe the change and why it is needed.
 
+Contributor PRs must target `canary`. Only the maintainer promotion PR from
+`canary` may target `main`.
+
 Fixes #<issue-number>
 
 ## Type of change
@@ -11,6 +14,14 @@ Fixes #<issue-number>
 - [ ] Documentation update
 - [ ] Refactor
 - [ ] CI / tooling
+
+## Release impact
+
+- [ ] No user-visible release note needed
+- [ ] Patch (backward-compatible fix)
+- [ ] Minor (backward-compatible feature)
+- [ ] Major (breaking change)
+- [ ] Critical/security fix (keep sensitive details private)
 
 ## What changed
 
@@ -33,6 +44,7 @@ List exact steps/commands used to validate this PR.
 - [ ] My PR is scoped to a single issue
 - [ ] I followed commit message conventions
 - [ ] I am not committing secrets or local artifacts
+- [ ] This PR targets `canary` unless it is the maintainer promotion PR
 
 ## GSSoC'26 checklist
 

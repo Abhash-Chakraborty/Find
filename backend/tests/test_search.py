@@ -1,18 +1,28 @@
 """Tests for GET /api/search response shape and pagination behavior."""
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from find_api.core.database import get_db
 from find_api.main import app
+from find_api.routers.search import _metadata_filter_sql
 from find_api.services.query_cache import clear_query_cache, invalidate_query_cache
 
 
 @pytest.fixture(autouse=True)
-def clear_cache_between_tests():
+def clear_cache_between_tests(monkeypatch):
     clear_query_cache()
+    monkeypatch.setattr(
+        "find_api.routers.search.resolve_runtime",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            applied_mode="mock", configured_accel_mode="cpu"
+        ),
+    )
+    monkeypatch.setattr("find_api.routers.search.bind_runtime", lambda _runtime: None)
+    monkeypatch.setattr("find_api.routers.search.reset_runtime", lambda _tokens: None)
 
 
 def _fake_search_row(media_id: int = 1, similarity: float = 0.82) -> MagicMock:
@@ -46,8 +56,27 @@ def _signature_result(token: str = "1:2026-01-01T00:00:00+00:00") -> MagicMock:
     return result
 
 
-def _mock_search(client, fake_rows, *, params=None, total_count=None):
+def _mock_search(client, fake_rows, *, params=None, total_count=None, return_db=False):
     """Call /api/search with mocked embeddings and paginated DB responses."""
+    response, mock_db = _mock_search_with_db(
+        client,
+        fake_rows,
+        params=params,
+        total_count=total_count,
+    )
+    if return_db:
+        return response, mock_db
+    return response
+
+
+def _mock_search_with_db(
+    client,
+    fake_rows,
+    *,
+    params=None,
+    total_count=None,
+):
+    """Call /api/search and return the mocked DB for SQL assertions."""
     mock_embedder = MagicMock()
     mock_embedder.embed_text.return_value = [0.0] * 768
 
@@ -74,8 +103,17 @@ def _mock_search(client, fake_rows, *, params=None, total_count=None):
                 "find_api.ml.mock_embedder.get_mock_embedder",
                 return_value=mock_embedder,
             ),
+            patch(
+                "find_api.routers.search.resolve_runtime",
+                return_value=MagicMock(applied_mode="mock"),
+            ),
+            patch("find_api.routers.search.bind_runtime", return_value=None),
+            patch("find_api.routers.search.reset_runtime"),
         ):
-            return client.get("/api/search", params={"q": "sunset", **(params or {})})
+            response = client.get(
+                "/api/search", params={"q": "sunset", **(params or {})}
+            )
+            return response, mock_db
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -197,6 +235,22 @@ class TestSearchResponseShape:
         response = client.get("/api/search")
         assert response.status_code == 422
 
+    def test_no_feedback_search_uses_zero_boost_fallback(self, client):
+        response, mock_db = _mock_search_with_db(client, [])
+
+        assert response.status_code == 200
+        search_sql = str(mock_db.execute.call_args_list[2].args[0])
+        assert "COALESCE(ranking_boost, 0) as ranking_boost" in search_sql
+        assert "+ COALESCE(ranking_boost, 0)" in search_sql
+
+    def test_search_orders_by_boosted_score_but_filters_by_similarity(self, client):
+        response, mock_db = _mock_search_with_db(client, [])
+
+        assert response.status_code == 200
+        search_sql = str(mock_db.execute.call_args_list[2].args[0])
+        assert "WHERE similarity > :threshold AND is_hidden = false" in search_sql
+        assert "ORDER BY final_score DESC, similarity DESC, id ASC" in search_sql
+
     def test_ocr_text_boost_reranks_results(self, client):
         text_heavy = MagicMock(
             id=201,
@@ -305,6 +359,81 @@ class TestSearchResponseShape:
         assert "ocr_text" not in default_meta
         assert include_meta["ocr_text"] == "total 42.00"
 
+    def test_search_accepts_metadata_filter_params(self, client):
+        response, mock_db = _mock_search(
+            client,
+            [_fake_search_row()],
+            params={
+                "camera_make": "Canon",
+                "camera_model": "EOS",
+                "date_from": "2026-01-01",
+                "date_to": "2026-12-31",
+                "min_width": 1000,
+                "min_height": 700,
+                "orientation": "landscape",
+                "file_type": "jpg",
+            },
+            return_db=True,
+        )
+
+        assert response.status_code == 200
+        count_sql = str(mock_db.execute.call_args_list[1].args[0])
+        search_sql = str(mock_db.execute.call_args_list[2].args[0])
+        search_params = mock_db.execute.call_args_list[2].args[1]
+
+        assert "exif_json ->> 'make' ILIKE :camera_make_pattern" in count_sql
+        assert "exif_json ->> 'model' ILIKE :camera_model_pattern" in search_sql
+        assert "created_at >= :date_from" in search_sql
+        assert "created_at <= :date_to" in search_sql
+        assert "width >= :min_width" in search_sql
+        assert "height >= :min_height" in search_sql
+        assert "width > height" in search_sql
+        assert "content_type ILIKE :file_type_pattern" in search_sql
+        assert search_params["camera_make_pattern"] == "%Canon%"
+        assert search_params["camera_model_pattern"] == "%EOS%"
+        assert search_params["min_width"] == 1000
+        assert search_params["min_height"] == 700
+        assert search_params["file_type_pattern"] == "%jpg%"
+
+    def test_search_rejects_invalid_metadata_filter_values(self, client):
+        invalid_date = _mock_search(
+            client,
+            [],
+            params={"date_from": "not-a-date"},
+        )
+        invalid_range = _mock_search(
+            client,
+            [],
+            params={"date_from": "2026-03-01", "date_to": "2026-02-01"},
+        )
+        invalid_orientation = _mock_search(
+            client,
+            [],
+            params={"orientation": "diagonal"},
+        )
+
+        assert invalid_date.status_code == 422
+        assert invalid_range.status_code == 422
+        assert invalid_orientation.status_code == 422
+
+    def test_metadata_filter_cache_key_escapes_user_values(self):
+        _, _, filter_key = _metadata_filter_sql(
+            camera_make="Sony&A",
+            camera_model="Alpha=7",
+            min_width=None,
+            min_height=None,
+            file_type="jpeg&png",
+            date_from=None,
+            date_to=None,
+            orientation=None,
+        )
+
+        assert "camera_make=sony%26a" in filter_key
+        assert "camera_model=alpha%3D7" in filter_key
+        assert "file_type=jpeg%26png" in filter_key
+        assert "sony&a" not in filter_key
+        assert "alpha=7" not in filter_key
+
 
 class TestSearchDiagnostics:
     """Tests for the debug diagnostics response behavior."""
@@ -339,6 +468,12 @@ class TestSearchDiagnostics:
                     "find_api.ml.mock_embedder.get_mock_embedder",
                     return_value=mock_embedder,
                 ),
+                patch(
+                    "find_api.routers.search.resolve_runtime",
+                    return_value=MagicMock(applied_mode="mock"),
+                ),
+                patch("find_api.routers.search.bind_runtime", return_value=None),
+                patch("find_api.routers.search.reset_runtime"),
             ):
                 return client.get(
                     "/api/search", params={"q": "sunset", "debug": str(debug).lower()}

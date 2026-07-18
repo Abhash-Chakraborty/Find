@@ -51,9 +51,11 @@ class _FakeDb:
     def __init__(self, row: tuple[int, float] | None):
         self.row = row
         self.statements: list[str] = []
+        self.params: list[dict[str, Any]] = []
 
     def execute(self, statement: Any, params: dict[str, Any] | None = None):
         self.statements.append(str(statement))
+        self.params.append(params or {})
         return _FakeResult(self.row)
 
 
@@ -76,6 +78,22 @@ def test_find_near_duplicate_returns_match_above_threshold():
     assert result == 42
     assert "user_id" not in db.statements[0]
     assert "id != :media_id" in db.statements[0]
+    assert db.params[0]["embedding"] == "[0.1, 0.2, 0.3]"
+
+
+def test_find_near_duplicate_serializes_numpy_vectors_for_pgvector():
+    np = pytest.importorskip("numpy")
+    db = _FakeDb(None)
+
+    find_near_duplicate(
+        db,
+        media_id=7,
+        embedding=np.asarray([0.1, 0.2, 0.3], dtype=np.float32),
+    )
+
+    serialized = db.params[0]["embedding"]
+    assert serialized.startswith("[")
+    assert "," in serialized
 
 
 def test_find_near_duplicate_ignores_match_below_threshold():

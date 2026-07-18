@@ -50,12 +50,9 @@ def test_failed_job_marks_media_failed(db):
         created_at=datetime.now(timezone.utc),
     )
 
-    with (
-        patch("find_api.core.recovery.get_redis_connection"),
-        patch(
-            "find_api.core.recovery.Job.fetch",
-            return_value=job_with_status("failed"),
-        ),
+    with patch(
+        "find_api.core.recovery._get_job_status",
+        return_value="failed",
     ):
         reconciled = reconcile_abandoned_analysis_jobs(db)
 
@@ -73,12 +70,9 @@ def test_finished_job_without_media_update_marks_media_failed(db):
         created_at=datetime.now(timezone.utc),
     )
 
-    with (
-        patch("find_api.core.recovery.get_redis_connection"),
-        patch(
-            "find_api.core.recovery.Job.fetch",
-            return_value=job_with_status("finished"),
-        ),
+    with patch(
+        "find_api.core.recovery._get_job_status",
+        return_value="finished",
     ):
         reconciled = reconcile_abandoned_analysis_jobs(db)
 
@@ -96,12 +90,9 @@ def test_active_job_does_not_false_fail_old_media(db):
         created_at=datetime.now(timezone.utc) - timedelta(days=1),
     )
 
-    with (
-        patch("find_api.core.recovery.get_redis_connection"),
-        patch(
-            "find_api.core.recovery.Job.fetch",
-            return_value=job_with_status("started"),
-        ),
+    with patch(
+        "find_api.core.recovery._get_job_status",
+        return_value="started",
     ):
         reconciled = reconcile_abandoned_analysis_jobs(db)
 
@@ -119,9 +110,9 @@ def test_missing_old_job_marks_media_failed(db):
         created_at=datetime.now(timezone.utc) - timedelta(seconds=1800),
     )
 
-    with (
-        patch("find_api.core.recovery.get_redis_connection"),
-        patch("find_api.core.recovery.Job.fetch", side_effect=Exception("missing")),
+    with patch(
+        "find_api.core.recovery._get_job_status",
+        return_value=None,
     ):
         reconciled = reconcile_abandoned_analysis_jobs(db)
 
@@ -139,9 +130,9 @@ def test_missing_fresh_job_stays_active(db):
         created_at=datetime.now(timezone.utc),
     )
 
-    with (
-        patch("find_api.core.recovery.get_redis_connection"),
-        patch("find_api.core.recovery.Job.fetch", side_effect=Exception("missing")),
+    with patch(
+        "find_api.core.recovery._get_job_status",
+        return_value=None,
     ):
         reconciled = reconcile_abandoned_analysis_jobs(db)
 

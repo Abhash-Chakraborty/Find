@@ -10,7 +10,9 @@ from typing import Union, List
 import logging
 
 from find_api.core.config import settings
+from find_api.core.hardware import current_torch_device
 from find_api.core.model_manager import get_model_manager
+from find_api.core.runtime_profile import current_accel_mode
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,7 @@ class CLIPEmbedder:
         pretrained = settings.CLIP_PRETRAINED
         logger.info("Loading SigLIP model: %s (%s)", model_name, pretrained)
 
-        device = "cuda" if settings.USE_GPU and torch.cuda.is_available() else "cpu"
+        device = current_torch_device()
 
         model, _, preprocess = open_clip.create_model_and_transforms(
             model_name, pretrained=pretrained, device=device
@@ -47,7 +49,7 @@ class CLIPEmbedder:
     def _config_key(self) -> str:
         return (
             f"model={settings.CLIP_MODEL}|pretrained={settings.CLIP_PRETRAINED}|"
-            f"gpu={settings.USE_GPU}"
+            f"accel={current_accel_mode()}"
         )
 
     def embed_image(self, image: Union[Image.Image, np.ndarray]) -> np.ndarray:

@@ -1,0 +1,183 @@
+name: Publish release images
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Image tag to publish"
+        required: true
+        type: string
+      backend_profile:
+        description: "Backend profile used when publish_all is false"
+        required: false
+        default: nvidia
+        type: string
+      publish_all:
+        description: "Publish every modular backend profile"
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to publish"
+        required: true
+        default: "edge"
+      backend_profile:
+        description: "Profile to publish (tag releases publish every profile)"
+        required: true
+        default: "nvidia"
+        type: choice
+        options:
+          - no-ai
+          - mock
+          - cpu
+          - nvidia
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}-${{ inputs.image_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    name: Resolve immutable image metadata
+    runs-on: ubuntu-latest
+    outputs:
+      owner: ${{ steps.meta.outputs.owner }}
+      tag: ${{ steps.meta.outputs.tag }}
+      sha_tag: ${{ steps.meta.outputs.sha_tag }}
+      profiles: ${{ steps.meta.outputs.profiles }}
+    steps:
+      - name: Check out the selected revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Resolve tags
+        id: meta
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.image_tag }}
+          REQUESTED_PROFILE: ${{ inputs.backend_profile }}
+          PUBLISH_ALL: ${{ inputs.publish_all }}
+        run: |
+          owner="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          tag="${REQUESTED_TAG:-${GITHUB_REF_NAME#v}}"
+          if [[ ! "${tag}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Image tag contains unsupported characters." >&2
+            exit 1
+          fi
+          echo "owner=${owner}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=sha-$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] || [ "${PUBLISH_ALL}" = "true" ]; then
+            echo 'profiles=["no-ai","mock","cpu","nvidia"]' >> "$GITHUB_OUTPUT"
+          else
+            echo "profiles=[\"${REQUESTED_PROFILE}\"]" >> "$GITHUB_OUTPUT"
+          fi
+
+  backend:
+    name: Publish backend (${{ matrix.profile }})
+    needs: metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ${{ fromJSON(needs.metadata.outputs.profiles) }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        if: matrix.profile != 'nvidia'
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish profile
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          provenance: mode=max
+          sbom: true
+          platforms: ${{ matrix.profile == 'nvidia' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          build-args: |
+            BASE_IMAGE=${{ matrix.profile == 'nvidia' && 'nvidia/cuda:12.1.1-runtime-ubuntu22.04' || 'python:3.12-slim' }}
+            PYTHON_VERSION=3.12
+            UV_SYNC_EXTRAS=${{ matrix.profile != 'no-ai' && format('--extra {0}', matrix.profile) || '' }}
+            FIND_BUILD_PROFILE=${{ matrix.profile }}
+          tags: |
+            ghcr.io/${{ needs.metadata.outputs.owner }}/find-backend:${{ needs.metadata.outputs.tag }}-${{ matrix.profile }}
+            ghcr.io/${{ needs.metadata.outputs.owner }}/find-backend:${{ needs.metadata.outputs.sha_tag }}-${{ matrix.profile }}
+            ghcr.io/${{ needs.metadata.outputs.owner }}/find-backend:${{ matrix.profile }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.metadata.outputs.tag }}
+            io.find.runtime.profile=${{ matrix.profile }}
+
+  web:
+    name: Publish web image
+    needs: metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish web
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: production
+          push: true
+          provenance: mode=max
+          sbom: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ needs.metadata.outputs.owner }}/find-web:${{ needs.metadata.outputs.tag }}
+            ghcr.io/${{ needs.metadata.outputs.owner }}/find-web:${{ needs.metadata.outputs.sha_tag }}
+            ghcr.io/${{ needs.metadata.outputs.owner }}/find-web:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.metadata.outputs.tag }}

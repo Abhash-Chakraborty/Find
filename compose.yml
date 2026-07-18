@@ -1,0 +1,77 @@
+services:
+  db:
+    extends:
+      file: compose.base.yml
+      service: db
+  redis:
+    extends:
+      file: compose.base.yml
+      service: redis
+  minio:
+    extends:
+      file: compose.base.yml
+      service: minio
+  api:
+    extends:
+      file: compose.base.yml
+      service: api
+    image: find-backend:nvidia
+    build:
+      args:
+        BASE_IMAGE: "${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}"
+        FIND_BUILD_PROFILE: nvidia
+        UV_SYNC_EXTRAS: "--extra nvidia"
+    environment:
+      FIND_BUILD_PROFILE: nvidia
+      ML_MODE: full
+      AI_ENABLED: "${AI_ENABLED:-true}"
+      ACCEL_MODE: "${ACCEL_MODE:-auto}"
+      USE_GPU: "true"
+    volumes:
+      - model_cache:/root/.cache
+    gpus: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  worker:
+    extends:
+      file: compose.base.yml
+      service: worker
+    image: find-backend:nvidia
+    build:
+      args:
+        BASE_IMAGE: "${BACKEND_BASE_IMAGE:-nvidia/cuda:12.1.1-runtime-ubuntu22.04}"
+        FIND_BUILD_PROFILE: nvidia
+        UV_SYNC_EXTRAS: "--extra nvidia"
+    environment:
+      FIND_BUILD_PROFILE: nvidia
+      ML_MODE: full
+      AI_ENABLED: "${AI_ENABLED:-true}"
+      ACCEL_MODE: "${ACCEL_MODE:-auto}"
+      USE_GPU: "true"
+    volumes:
+      - model_cache:/root/.cache
+    gpus: all
+    deploy:
+      resources:
+        limits:
+          memory: ${WORKER_MEMORY_LIMIT:-8G}
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  web:
+    extends:
+      file: compose.base.yml
+      service: web
+
+volumes:
+  db_data:
+  redis_data:
+  minio_data:
+  model_cache:

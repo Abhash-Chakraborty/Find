@@ -1,5 +1,14 @@
 minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - baseline-browser-mapping
+  # Security patches must not wait for the normal seven-day release-age gate.
+  - form-data
+  - undici
+  - vite
 allowBuilds:
   sharp: true
+overrides:
+  form-data: 4.0.6
+  postcss: ^8.5.14
+  undici: 7.28.0
+  vite: 8.0.16

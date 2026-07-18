@@ -2,10 +2,15 @@
 Application configuration using Pydantic settings
 """
 
+import os
 from typing import Literal, Optional
 
-from pydantic import field_validator
+from PIL import Image
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+PILLOW_MAX_IMAGE_PIXELS = Image.MAX_IMAGE_PIXELS or 89_478_485
 
 
 class Settings(BaseSettings):
@@ -32,23 +37,58 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
 
+    # Queue mode — "redis" for Docker/RQ, "sqlite" for desktop mode
+    QUEUE_MODE: Literal["redis", "sqlite"] = "redis"
+    QUEUE_DB_PATH: str = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "queue.db",
+    )
+
+    # Runtime/build profile. Docker images set this explicitly so the API can
+    # distinguish installed capabilities from hardware that merely exists on
+    # the host. ``development`` keeps source checkouts backwards compatible.
+    FIND_BUILD_PROFILE: Literal[
+        "development", "no-ai", "mock", "cpu", "nvidia"
+    ] = "development"
+
     # ML Models
-    ML_MODE: Literal["full", "mock"] = "full"
+    ML_MODE: Literal["disabled", "full", "mock", "remote"] = "full"
+    # Instance-wide kill switch. The persisted dashboard preference overrides
+    # this value at job boundaries; it never installs a missing runtime.
+    AI_ENABLED: bool = True
+    # GPS extraction is privacy-sensitive and therefore opt-in. The persisted
+    # dashboard preference overrides this value at job boundaries.
+    MAP_ENABLED: bool = False
+    REMOTE_ML_URL: Optional[str] = None
+    REMOTE_ML_API_KEY: Optional[str] = None
+    REMOTE_ML_STRIP_EXIF: bool = True
+    REMOTE_ML_FEATURES: str = "embed,caption,detect,ocr,cluster"
     ML_MODEL_IDLE_TTL_SECONDS: int = 300
     ML_MAX_LOADED_MODELS: int = 5
+    MODEL_CACHE_DIR: str = ""
+    ML_OFFLINE_ONLY: bool = False
     CLIP_MODEL: str = "ViT-B-16-SigLIP"
     CLIP_PRETRAINED: str = "webli"
-    BLIP_MODEL: str = "microsoft/Florence-2-base"
+    BLIP_MODEL: str = "Salesforce/blip-image-captioning-base"
     YOLO_MODEL: str = "yolo26n.pt"
     USE_GPU: bool = False
     YOLO_HALF: bool = True
+    # Hardware acceleration mode for ML inference:
+    #   auto = use the best available accelerator, else CPU (default)
+    #   gpu  = prefer GPU; automatically fall back to CPU if unavailable
+    #   cpu  = force CPU
+    ACCEL_MODE: Literal["auto", "gpu", "cpu"] = "auto"
 
     # Processing
     MAX_UPLOAD_SIZE_MB: int = 50
     MAX_BULK_FILES: int = 200
     MAX_BULK_TOTAL_SIZE_MB: int = 500
     MAX_BULK_COMPRESSION_RATIO: int = 100
+    MAX_IMAGE_PIXELS: int = PILLOW_MAX_IMAGE_PIXELS
     WORKER_TIMEOUT: int = 600
+    # Trashed assets older than this many days are eligible for permanent
+    # auto-purge (via POST /trash/purge). 0 disables age-based purging.
+    TRASH_RETENTION_DAYS: int = 30
     BATCH_SIZE: int = 1
     EMBEDDING_DIM: int = 768  # SigLIP ViT-B-16 dimension
 
@@ -62,11 +102,24 @@ class Settings(BaseSettings):
     SESSION_TTL_HOURS: int = 24
     INVITE_TTL_HOURS: int = 48
 
+    # Storage
+    STORAGE_BACKEND: Literal["minio", "local"] = "minio"
+    LOCAL_STORAGE_PATH: str = "./storage/uploads"
+    STORAGE_ENDPOINT: Optional[str] = None
+    STORAGE_ACCESS_KEY: Optional[str] = None
+    STORAGE_SECRET_KEY: Optional[str] = None
+    STORAGE_BUCKET: Optional[str] = None
+    STORAGE_SECURE: Optional[bool] = None
+    STORAGE_PUBLIC_ENDPOINT: Optional[str] = None
+    STORAGE_PUBLIC_READ: Optional[bool] = None
+    STORAGE_AUTO_CREATE_BUCKET: bool = True
+
     @field_validator(
         "ML_MODEL_IDLE_TTL_SECONDS",
         "ML_MAX_LOADED_MODELS",
         "SESSION_TTL_HOURS",
         "INVITE_TTL_HOURS",
+        "MAX_IMAGE_PIXELS",
     )
     @classmethod
     def validate_positive_int(cls, value: int, info):
@@ -74,6 +127,78 @@ class Settings(BaseSettings):
         if value <= 0:
             raise ValueError(f"{info.field_name} must be greater than 0")
         return value
+
+    @field_validator("MAX_IMAGE_PIXELS")
+    @classmethod
+    def validate_image_pixel_ceiling(cls, value: int):
+        """Keep the request-local cap at or below Pillow's process ceiling."""
+        if value > PILLOW_MAX_IMAGE_PIXELS:
+            raise ValueError(
+                "MAX_IMAGE_PIXELS cannot exceed Pillow's built-in safety ceiling "
+                f"of {PILLOW_MAX_IMAGE_PIXELS} pixels"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_remote_ml_config(self):
+        """Require explicit self-hosted endpoint credentials for remote mode."""
+        if self.ML_MODE != "remote":
+            return self
+        if not self.REMOTE_ML_URL or not self.REMOTE_ML_URL.strip():
+            raise ValueError("ML_MODE=remote requires REMOTE_ML_URL")
+        if not self.REMOTE_ML_API_KEY or not self.REMOTE_ML_API_KEY.strip():
+            raise ValueError("ML_MODE=remote requires REMOTE_ML_API_KEY")
+        return self
+
+    @model_validator(mode="after")
+    def apply_storage_aliases(self):
+        """Prefer neutral STORAGE_* values while preserving MINIO_* compatibility."""
+        if self.STORAGE_ENDPOINT:
+            self.MINIO_ENDPOINT = self.STORAGE_ENDPOINT
+        if self.STORAGE_ACCESS_KEY:
+            self.MINIO_ACCESS_KEY = self.STORAGE_ACCESS_KEY
+        if self.STORAGE_SECRET_KEY:
+            self.MINIO_SECRET_KEY = self.STORAGE_SECRET_KEY
+        if self.STORAGE_BUCKET:
+            self.MINIO_BUCKET = self.STORAGE_BUCKET
+        if self.STORAGE_SECURE is not None:
+            self.MINIO_SECURE = self.STORAGE_SECURE
+        if self.STORAGE_PUBLIC_ENDPOINT:
+            self.MINIO_PUBLIC_ENDPOINT = self.STORAGE_PUBLIC_ENDPOINT
+        if self.STORAGE_PUBLIC_READ is not None:
+            self.MINIO_PUBLIC_READ = self.STORAGE_PUBLIC_READ
+
+        return self
+
+    @model_validator(mode="after")
+    def reject_default_secrets_in_production(self):
+        """Fail closed when known-default credentials are used in production.
+
+        These defaults are convenient for local development but are publicly
+        known, so a production deployment that forgets to override them would
+        ship with guessable database/object-store credentials.
+
+        Runs after :meth:`apply_storage_aliases` so it checks the effective
+        credentials (STORAGE_* values already copied onto MINIO_*).
+        """
+        if self.ENVIRONMENT.lower() != "production":
+            return self
+
+        insecure: list[str] = []
+        if "find123" in self.DATABASE_URL:
+            insecure.append("DATABASE_URL (default password)")
+        if self.MINIO_ACCESS_KEY == "minioadmin":
+            insecure.append("MINIO_ACCESS_KEY/STORAGE_ACCESS_KEY")
+        if self.MINIO_SECRET_KEY == "minioadmin":
+            insecure.append("MINIO_SECRET_KEY/STORAGE_SECRET_KEY")
+
+        if insecure:
+            raise ValueError(
+                "Refusing to start in production with default credentials: "
+                + ", ".join(insecure)
+                + ". Set strong, unique values for these via environment variables."
+            )
+        return self
 
 
 settings = Settings()

@@ -24,6 +24,7 @@ _GCM_IV_SIZE = 12
 _GCM_TAG_SIZE = 16
 _CHUNK_SIZE = 1024 * 1024
 _VAULT_VERIFIER_PLAINTEXT = b"find-vault-verifier-v1"
+_VAULT_BLOB_AAD_VERSION = "vault:v1"
 
 
 def derive_master_key(passphrase: str, salt: bytes) -> bytes:
@@ -60,6 +61,17 @@ def verify_master_key(master_key: bytes, nonce: bytes, ciphertext: bytes) -> boo
     return plaintext == _VAULT_VERIFIER_PLAINTEXT
 
 
+def build_vault_aad(media_id: int, file_hash: str) -> bytes:
+    """Return canonical AEAD associated data for one encrypted vault blob."""
+    if media_id <= 0:
+        raise ValueError("media_id must be a positive integer")
+    if not file_hash:
+        raise ValueError("file_hash must not be empty")
+    return (
+        f"{_VAULT_BLOB_AAD_VERSION}|media_id:{media_id}|file_hash:{file_hash}"
+    ).encode("utf-8")
+
+
 def get_session_key(token: str) -> bytes:
     """Return a cached vault session key if it is still valid."""
     with _sessions_lock:
@@ -93,7 +105,12 @@ def delete_session_key(token: str) -> bool:
         return active_vault_sessions.pop(token, None) is not None
 
 
-def encrypt_file(master_key: bytes, source_path: str, dest_path: str) -> bytes:
+def encrypt_file(
+    master_key: bytes,
+    source_path: str,
+    dest_path: str,
+    associated_data: bytes | None = None,
+) -> bytes:
     """Encrypt a file on disk with AES-256-GCM and append the tag to the output."""
     source = Path(source_path)
     destination = Path(dest_path)
@@ -102,6 +119,8 @@ def encrypt_file(master_key: bytes, source_path: str, dest_path: str) -> bytes:
     iv = os.urandom(_GCM_IV_SIZE)
     cipher = Cipher(algorithms.AES(master_key), modes.GCM(iv))
     encryptor = cipher.encryptor()
+    if associated_data is not None:
+        encryptor.authenticate_additional_data(associated_data)
 
     with source.open("rb") as source_handle, destination.open("wb") as dest_handle:
         while True:
@@ -122,7 +141,10 @@ def encrypt_file(master_key: bytes, source_path: str, dest_path: str) -> bytes:
 
 
 def decrypt_file_stream(
-    master_key: bytes, iv: bytes, encrypted_path: str
+    master_key: bytes,
+    iv: bytes,
+    encrypted_path: str,
+    associated_data: bytes | None = None,
 ) -> Iterator[bytes]:
     """Yield decrypted chunks only after AES-GCM tag verification succeeds."""
     encrypted_file = Path(encrypted_path)
@@ -144,6 +166,8 @@ def decrypt_file_stream(
             handle.seek(0)
             cipher = Cipher(algorithms.AES(master_key), modes.GCM(iv, tag))
             decryptor = cipher.decryptor()
+            if associated_data is not None:
+                decryptor.authenticate_additional_data(associated_data)
 
             remaining = file_size - _GCM_TAG_SIZE
             with verified_plaintext.open("wb") as output:

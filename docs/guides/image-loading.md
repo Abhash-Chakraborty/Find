@@ -36,6 +36,30 @@ The following views should display thumbnail-sized images rather than originals:
 
 In all these views, the goal is to render many images simultaneously without fetching large files.
 
+## Gallery Performance Target
+
+For a local library with 1,000 indexed images on a typical contributor laptop,
+common gallery interactions should remain comfortably interactive:
+
+- Initial gallery, search, cluster, and people grid render should mount only the
+  visible rows plus a small overscan buffer.
+- Loading another page of gallery or search results should complete without
+  mounting every previously loaded card again.
+- Scrolling a loaded grid should keep the main thread responsive, with no long
+  tasks above 100 ms during normal browsing.
+- Preview and download actions should continue to use the full-resolution
+  original, even when the card that opened the preview was rendered from a
+  thumbnail.
+
+Implementation tracking:
+
+| Work area | Status |
+|---|---|
+| Thumbnail generation during image analysis | Implemented in the worker thumbnail path and backfill job. |
+| API thumbnail URLs for gallery/search/clusters/people | Implemented through `thumbnail_url` fields and `/api/image/{id}/thumbnail`. |
+| Frontend thumbnail usage in grid views | Grid views prefer `thumbnail_url`; preview/download flows use original URLs. |
+| Grid virtualization/pagination tuning | Gallery/search/clusters/people use paginated API calls where available and dependency-free row virtualization in large grids. |
+
 ### Full-resolution views
 
 - **Preview modal** - when a user clicks an image to inspect it in detail, the
@@ -72,6 +96,22 @@ the thumbnail/original split clear when adding new views.
 | `GET /api/image/{media_id}` | Returns image detail JSON, including original `url` and `thumbnail_url` | Preview modal can use the original `url` for inspection/download. |
 | `GET /api/image/{media_id}/thumbnail` | Redirects to the stored thumbnail when present, otherwise falls back to the original | Safe default for grid/list image elements. |
 | `POST /api/thumbnails/backfill` | Queues thumbnail generation for existing media without thumbnails | Maintenance action; not used for normal image rendering. |
+
+## Manual Benchmark
+
+Run this before and after gallery rendering changes:
+
+1. Seed or upload at least 1,000 local images, then ensure thumbnails are present
+   by running the normal analysis flow or `POST /api/thumbnails/backfill`.
+2. Open browser DevTools Performance, enable screenshots, and throttle nothing.
+3. Record the Gallery page while loading the first page, clicking `Load more`
+   until at least 120 items are loaded, scrolling from top to bottom, opening a
+   preview, and downloading one image.
+4. Repeat for Search results, Cluster detail, and a People detail modal when the
+   data set has enough matching images.
+5. Confirm grid images request thumbnail URLs, preview/download requests use
+   original URLs, visible card counts stay bounded while scrolling, and no normal
+   browse interaction produces a long task above 100 ms.
 
 ## See Also
 

@@ -8,6 +8,7 @@ from typing import Tuple, Dict
 import logging
 
 from find_api.core.config import settings
+from find_api.core.runtime_profile import current_accel_mode
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,11 @@ class ImageClusterer:
     def _fit_predict(self, embeddings: np.ndarray, metric: str) -> np.ndarray:
         backend = settings.CLUSTERING_BACKEND.lower()
 
-        if settings.USE_GPU and backend in {"auto", "cuml"}:
+        if (
+            settings.USE_GPU
+            and current_accel_mode() != "cpu"
+            and backend in {"auto", "cuml"}
+        ):
             try:
                 labels = self._fit_predict_cuml(embeddings, metric)
                 logger.info("Clustering used cuML GPU backend")

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy import text
@@ -17,7 +19,7 @@ SIMILARITY_THRESHOLD = 0.97
 def find_near_duplicate(
     db: Session,
     media_id: int,
-    embedding: list[float],
+    embedding: Iterable[float],
 ) -> int | None:
     """Query pgvector for a near-duplicate of a newly indexed image."""
     result = db.execute(
@@ -33,7 +35,9 @@ def find_near_duplicate(
         """
         ),
         {
-            "embedding": str(embedding),
+            # pgvector accepts JSON-style vectors. SQLAlchemy may return a NumPy
+            # array here, whose string form uses whitespace instead of commas.
+            "embedding": json.dumps([float(value) for value in embedding]),
             "media_id": media_id,
         },
     ).fetchone()
@@ -62,12 +66,28 @@ def flag_as_duplicate(db: Session, media_id: int, duplicate_of: int) -> None:
         raise
 
 
-def list_duplicate_pairs(db: Session, page: int, limit: int) -> dict[str, Any]:
-    """Return paginated near-duplicate image pairs."""
+def list_duplicate_pairs(
+    db: Session,
+    page: int,
+    limit: int,
+    scope_user_id: int | None = None,
+) -> dict[str, Any]:
+    """Return paginated near-duplicate image pairs.
+
+    When ``scope_user_id`` is provided (shared-mode regular user), only
+    pairs whose duplicate image was uploaded by that user are returned.
+    """
     offset = (page - 1) * limit
+    scope_clause = (
+        " AND m.uploader_user_id = :scope_user_id" if scope_user_id is not None else ""
+    )
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    if scope_user_id is not None:
+        params["scope_user_id"] = scope_user_id
+
     rows = db.execute(
         text(
-            """
+            f"""
             SELECT
                 m.id AS duplicate_id,
                 m.filename AS duplicate_name,
@@ -76,15 +96,23 @@ def list_duplicate_pairs(db: Session, page: int, limit: int) -> dict[str, Any]:
             FROM media m
             JOIN media o ON o.id = m.duplicate_of
             WHERE m.duplicate_of IS NOT NULL
+            {scope_clause}
             ORDER BY m.id DESC
             LIMIT :limit OFFSET :offset
         """
         ),
-        {"limit": limit, "offset": offset},
+        params,
     ).mappings()
 
+    count_params: dict[str, Any] = {}
+    if scope_user_id is not None:
+        count_params["scope_user_id"] = scope_user_id
     total = db.execute(
-        text("SELECT COUNT(*) FROM media WHERE duplicate_of IS NOT NULL")
+        text(
+            "SELECT COUNT(*) FROM media m "
+            "WHERE m.duplicate_of IS NOT NULL" + scope_clause
+        ),
+        count_params,
     ).scalar()
 
     return {
@@ -95,12 +123,29 @@ def list_duplicate_pairs(db: Session, page: int, limit: int) -> dict[str, Any]:
     }
 
 
-def clear_duplicate_flag(db: Session, media_id: int) -> bool:
-    """Clear a media row duplicate flag when the user keeps both images."""
+def clear_duplicate_flag(
+    db: Session,
+    media_id: int,
+    scope_user_id: int | None = None,
+) -> bool:
+    """Clear a media row duplicate flag when the user keeps both images.
+
+    When ``scope_user_id`` is provided, the update only affects media owned
+    by that user; returns False (→ 404) for media owned by someone else.
+    """
+    scope_clause = (
+        " AND uploader_user_id = :scope_user_id" if scope_user_id is not None else ""
+    )
+    params: dict[str, Any] = {"media_id": media_id}
+    if scope_user_id is not None:
+        params["scope_user_id"] = scope_user_id
     try:
         result = db.execute(
-            text("UPDATE media SET duplicate_of = NULL WHERE id = :media_id"),
-            {"media_id": media_id},
+            text(
+                "UPDATE media SET duplicate_of = NULL "
+                "WHERE id = :media_id" + scope_clause
+            ),
+            params,
         )
         db.commit()
         return result.rowcount > 0

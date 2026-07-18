@@ -7,9 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import logging
+from pathlib import Path
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from fastapi.staticfiles import StaticFiles
+from find_api import __version__
 from find_api.routers.duplicates import router as duplicates_router
 from find_api.core.database import init_db
 from find_api.core.recovery import run_analysis_recovery_loop
@@ -23,13 +26,18 @@ from find_api.routers import (
     config,
     feedback,
     gallery,
+    map,
     ml,
     people,
     search,
     status,
+    timeline,
     upload,
     vault,
 )
+from find_api.routers import album
+from find_api.routers import shared_link
+from find_api.routers import partner
 
 # Configure logging
 logging.basicConfig(
@@ -58,8 +66,8 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     init_db()
 
-    # Initialize MinIO storage
-    logger.info("Initializing MinIO storage...")
+    # Initialize configured storage backend
+    logger.info("Initializing %s storage...", settings.STORAGE_BACKEND)
     init_storage()
 
     # Start ML model cleanup
@@ -71,11 +79,21 @@ async def lifespan(app: FastAPI):
 
     recovery_task = asyncio.create_task(run_analysis_recovery_loop())
 
+    sqlite_worker_thread = None
+    if settings.QUEUE_MODE == "sqlite":
+        from find_api.workers.sqlite_worker import start_worker_thread
+
+        sqlite_worker_thread = start_worker_thread()
+
     logger.info("Find API started successfully!")
 
     try:
         yield
     finally:
+        if sqlite_worker_thread is not None:
+            from find_api.workers.sqlite_worker import stop_worker_thread
+
+            stop_worker_thread(sqlite_worker_thread)
         recovery_task.cancel()
         await asyncio.gather(recovery_task, return_exceptions=True)
 
@@ -86,7 +104,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Find API",
     description="Local-first AI image intelligence platform",
-    version="1.0.0",
+    version=__version__,
     lifespan=lifespan,
 )
 app.state.limiter = limiter
@@ -106,10 +124,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if settings.STORAGE_BACKEND.lower() == "local":
+    local_storage_path = Path(settings.LOCAL_STORAGE_PATH).resolve()
+    local_storage_path.mkdir(parents=True, exist_ok=True)
+    app.mount(
+        "/files",
+        StaticFiles(directory=str(local_storage_path)),
+        name="local-files",
+    )
+
 # Include routers
 app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(gallery.router, prefix="/api", tags=["gallery"])
+app.include_router(timeline.router, prefix="/api", tags=["timeline"])
+app.include_router(map.router, prefix="/api", tags=["map"])
+app.include_router(album.router, prefix="/api", tags=["albums"])
+app.include_router(shared_link.router, prefix="/api", tags=["shared-links"])
+app.include_router(partner.router, prefix="/api", tags=["partners"])
 app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(clusters.router, prefix="/api", tags=["clusters"])
 app.include_router(cluster.router, prefix="/api", tags=["cluster-ops"])
@@ -127,7 +159,7 @@ async def root():
     """Root endpoint"""
     return {
         "message": "Find API - Local-first AI image intelligence",
-        "version": "1.0.0",
+        "version": __version__,
         "status": "operational",
     }
 

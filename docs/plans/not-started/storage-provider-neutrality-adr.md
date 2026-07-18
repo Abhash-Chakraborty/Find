@@ -14,8 +14,8 @@ This note evaluates the current storage architecture only from:
 
 - `backend/src/find_api/core/storage.py`
 - `backend/src/find_api/core/config.py`
-- `docker-compose.yml`
-- `docker-compose.light.yml`
+- `compose.yml`
+- `compose.mock.yml`
 - `docs/`
 
 It does not propose a storage migration in this PR. The goal is to document the current coupling, compare realistic options, and recommend an architectural direction that keeps Find local-first.
@@ -371,8 +371,8 @@ After the abstraction lands, validate RustFS as the leading replacement candidat
 - Current repository files reviewed in this ADR:
   - `backend/src/find_api/core/storage.py`
   - `backend/src/find_api/core/config.py`
-  - `docker-compose.yml`
-  - `docker-compose.light.yml`
+  - `compose.yml`
+  - `compose.mock.yml`
 - MinIO GitHub repository archive notice: https://github.com/minio/minio
 - RustFS SDK overview: https://docs.rustfs.com/developer/sdk/
 - RustFS Docker installation docs: https://docs.rustfs.com/installation/docker/index.html

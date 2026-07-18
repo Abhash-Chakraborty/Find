@@ -21,6 +21,9 @@
     "clientKind": "git",
     "useIgnoreFile": true
   },
+  "files": {
+    "includes": ["**", "!!src-tauri/gen", "!!src-tauri/target"]
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",

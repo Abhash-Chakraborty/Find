@@ -7,7 +7,7 @@ from find_api.models.cluster import Cluster
 from find_api.models.media import Media
 
 
-def _seed_media(db, *, filename: str) -> Media:
+def _seed_media(db, *, filename: str, is_hidden: bool = False) -> Media:
     media = Media(
         file_hash=hashlib.sha256(filename.encode()).hexdigest(),
         minio_key=f"images/test/{filename}",
@@ -17,6 +17,8 @@ def _seed_media(db, *, filename: str) -> Media:
         status="indexed",
         width=800,
         height=600,
+        is_hidden=is_hidden,
+        vault_state="hidden_encrypted" if is_hidden else "visible",
         created_at=datetime.now(timezone.utc),
     )
     db.add(media)
@@ -93,3 +95,52 @@ def test_update_cluster_label_trims_empty_to_null(client, db):
 
     db.refresh(cluster)
     assert cluster.label is None
+
+
+def test_clusters_exclude_hidden_members_and_adjust_member_count(client, db):
+    visible = _seed_media(db, filename="visible-member.jpg")
+    hidden = _seed_media(db, filename="hidden-member.jpg", is_hidden=True)
+    _seed_cluster(db, member_ids=[visible.id, hidden.id])
+
+    body = client.get("/api/clusters").json()
+
+    assert body["total"] == 1
+    cluster = body["clusters"][0]
+    assert cluster["member_count"] == 1
+    sample_ids = [sample["id"] for sample in cluster["samples"]]
+    assert visible.id in sample_ids
+    assert hidden.id not in sample_ids
+
+
+def test_hidden_only_cluster_is_not_exposed(client, db):
+    hidden = _seed_media(db, filename="hidden-only.jpg", is_hidden=True)
+    _seed_cluster(db, member_ids=[hidden.id])
+
+    body = client.get("/api/clusters").json()
+
+    assert body["total"] == 0
+    assert body["clusters"] == []
+
+
+def test_cluster_detail_excludes_hidden_members_and_adjusts_member_count(client, db):
+    visible = _seed_media(db, filename="detail-visible.jpg")
+    hidden = _seed_media(db, filename="detail-hidden.jpg", is_hidden=True)
+    cluster = _seed_cluster(db, member_ids=[visible.id, hidden.id])
+
+    body = client.get(f"/api/cluster/{cluster.id}").json()
+
+    assert body["id"] == cluster.id
+    assert body["member_count"] == 1
+    member_ids = [member["id"] for member in body["members"]]
+    assert visible.id in member_ids
+    assert hidden.id not in member_ids
+
+
+def test_hidden_only_cluster_detail_returns_404(client, db):
+    hidden = _seed_media(db, filename="detail-hidden-only.jpg", is_hidden=True)
+    cluster = _seed_cluster(db, member_ids=[hidden.id])
+
+    response = client.get(f"/api/cluster/{cluster.id}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Cluster not found"

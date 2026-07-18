@@ -151,6 +151,49 @@ vi.mock("@/components/status-indicator", () => ({
   ),
 }));
 
+vi.mock("@/components/gallery-date-filter", () => ({
+  GalleryDateFilter: ({
+    sortOrder,
+    dateRange,
+    onSortOrderChange,
+    onDateFilterChange,
+  }: {
+    sortOrder: string;
+    dateRange: string | null;
+    onSortOrderChange: (order: string) => void;
+    onDateFilterChange: (
+      preset: string | null,
+      start: string | null,
+      end: string | null,
+    ) => void;
+  }) => (
+    <div data-testid="gallery-date-filter">
+      <button
+        type="button"
+        data-testid={`sort-${sortOrder}`}
+        onClick={() => {
+          onSortOrderChange(sortOrder === "newest" ? "oldest" : "newest");
+        }}
+      >
+        {sortOrder === "newest" ? "Newest first" : "Oldest first"}
+      </button>
+      <button
+        type="button"
+        data-testid={`date-range-${dateRange || "all"}`}
+        onClick={() => {
+          onDateFilterChange(
+            dateRange === "last_30_days" ? null : "last_30_days",
+            null,
+            null,
+          );
+        }}
+      >
+        {dateRange || "All dates"}
+      </button>
+    </div>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -484,6 +527,198 @@ describe("Gallery — URL-state restoration", () => {
         expect(screen.getByTestId("modal-filename")).toHaveTextContent(
           "forest.jpg",
         );
+      });
+    });
+  });
+
+  // ── 4. Date filtering and sorting ────────────────────────────────────────
+
+  describe("date filtering and sorting UI", () => {
+    it("renders sort order and date range filter controls", async () => {
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /newest first/i }),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole("button", { name: /all dates/i }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("passes default sort_order='newest' to getGallery", async () => {
+      const { getGallery } = await import("@/lib/api");
+
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getGallery).toHaveBeenCalledWith(
+          expect.objectContaining({ sortOrder: "newest" }),
+        );
+      });
+    });
+
+    it("restores sort_order from ?sort_order=oldest URL param", async () => {
+      const { getGallery } = await import("@/lib/api");
+      setParams({ sort_order: "oldest" });
+
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getGallery).toHaveBeenCalledWith(
+          expect.objectContaining({ sortOrder: "oldest" }),
+        );
+      });
+    });
+
+    it("restores date_range from ?date_range=last_30_days URL param", async () => {
+      const { getGallery } = await import("@/lib/api");
+      setParams({ date_range: "last_30_days" });
+
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getGallery).toHaveBeenCalledWith(
+          expect.objectContaining({ dateRange: "last_30_days" }),
+        );
+      });
+    });
+
+    it("restores date_range from ?date_range=last_60_days URL param", async () => {
+      const { getGallery } = await import("@/lib/api");
+      setParams({ date_range: "last_60_days" });
+
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getGallery).toHaveBeenCalledWith(
+          expect.objectContaining({ dateRange: "last_60_days" }),
+        );
+      });
+    });
+
+    it("restores date_range from ?date_range=last_90_days URL param", async () => {
+      const { getGallery } = await import("@/lib/api");
+      setParams({ date_range: "last_90_days" });
+
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getGallery).toHaveBeenCalledWith(
+          expect.objectContaining({ dateRange: "last_90_days" }),
+        );
+      });
+    });
+
+    it("restores custom date range from ?date_range=custom&date_start=YYYY-MM-DD&date_end=YYYY-MM-DD", async () => {
+      const { getGallery } = await import("@/lib/api");
+      setParams({
+        date_range: "custom",
+        date_start: "2025-05-01",
+        date_end: "2025-05-31",
+      });
+
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getGallery).toHaveBeenCalledWith(
+          expect.objectContaining({
+            dateRange: "custom",
+            dateStart: "2025-05-01",
+            dateEnd: "2025-05-31",
+          }),
+        );
+      });
+    });
+
+    it("date filters work together with status filters", async () => {
+      const { getGallery } = await import("@/lib/api");
+      setParams({
+        status: "indexed",
+        date_range: "last_30_days",
+      });
+
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getGallery).toHaveBeenCalledWith(
+          expect.objectContaining({
+            status: "indexed",
+            dateRange: "last_30_days",
+          }),
+        );
+      });
+    });
+
+    it("date filters work together with liked filters", async () => {
+      const { getGallery } = await import("@/lib/api");
+      setParams({
+        liked: "true",
+        date_range: "last_60_days",
+      });
+
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getGallery).toHaveBeenCalledWith(
+          expect.objectContaining({
+            liked: true,
+            dateRange: "last_60_days",
+          }),
+        );
+      });
+    });
+
+    it("all filters combine: status + liked + sort + date", async () => {
+      const { getGallery } = await import("@/lib/api");
+      setParams({
+        status: "processing",
+        liked: "true",
+        sort_order: "oldest",
+        date_range: "last_90_days",
+      });
+
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getGallery).toHaveBeenCalledWith(
+          expect.objectContaining({
+            status: "processing",
+            liked: true,
+            sortOrder: "oldest",
+            dateRange: "last_90_days",
+          }),
+        );
+      });
+    });
+
+    it("media deep-link works with all filter types combined", async () => {
+      const { getGallery } = await import("@/lib/api");
+      setParams({
+        media: "4",
+        status: "indexed",
+        liked: "true",
+        sort_order: "oldest",
+        date_range: "custom",
+        date_start: "2025-05-01",
+        date_end: "2025-05-31",
+      });
+
+      render(<GalleryPage />, { wrapper: makeWrapper() });
+
+      await waitFor(() => {
+        expect(getGallery).toHaveBeenCalledWith(
+          expect.objectContaining({
+            status: "indexed",
+            liked: true,
+            sortOrder: "oldest",
+            dateRange: "custom",
+            dateStart: "2025-05-01",
+            dateEnd: "2025-05-31",
+          }),
+        );
+        expect(screen.getByRole("dialog")).toBeInTheDocument();
       });
     });
   });
