@@ -2,8 +2,8 @@
 Tests for /api/ml/ endpoints.
 """
 
-import json
 import io
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -116,7 +116,8 @@ class TestMockedInference:
             "stage_status": {},
         }
         with patch(
-            "find_api.routers.ml.extract_image_metadata", return_value=mock_result
+            "find_api.workers.processors.extract_image_metadata",
+            return_value=mock_result,
         ):
             resp = client_with_key.post(
                 "/api/ml/analyze",
@@ -128,7 +129,8 @@ class TestMockedInference:
 
     def test_embed_returns_vector(self, client_with_key):
         with patch(
-            "find_api.routers.ml.generate_hybrid_embedding", return_value=[0.1] * 768
+            "find_api.workers.processors.generate_hybrid_embedding",
+            return_value=[0.1] * 768,
         ):
             resp = client_with_key.post(
                 "/api/ml/embed",
@@ -151,7 +153,7 @@ class TestMockedInference:
 class TestTransportErrors:
     def test_analyze_ml_failure_returns_500(self, client_with_key):
         with patch(
-            "find_api.routers.ml.extract_image_metadata",
+            "find_api.workers.processors.extract_image_metadata",
             side_effect=RuntimeError("error"),
         ):
             resp = client_with_key.post(
