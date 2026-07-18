@@ -24,6 +24,10 @@ backend/vault_storage
 **/*.sqlite3
 .env
 
+# Read-only local comparison checkout. It must never enter a build context.
+reference-app
+@reference-app
+
 # Logs and temporary files
 **/*.log
 **/*.tmp

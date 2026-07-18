@@ -15,6 +15,7 @@ const { mockPush, mockReplace, mockSearchParams } = vi.hoisted(() => {
 
 const apiMocks = vi.hoisted(() => ({
   getGallery: vi.fn(),
+  getGalleryCounts: vi.fn(),
   getImageDetail: vi.fn(),
   toggleLike: vi.fn(),
   deleteImage: vi.fn(),
@@ -46,6 +47,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 vi.mock("@/lib/api", () => ({
   getGallery: apiMocks.getGallery,
+  getGalleryCounts: apiMocks.getGalleryCounts,
   getImageDetail: apiMocks.getImageDetail,
   toggleLike: apiMocks.toggleLike,
   deleteImage: apiMocks.deleteImage,
@@ -91,6 +93,13 @@ describe("Gallery empty states", () => {
     mockPush.mockReset();
     mockReplace.mockReset();
     apiMocks.getGallery.mockReset();
+    apiMocks.getGalleryCounts.mockReset();
+    apiMocks.getGalleryCounts.mockResolvedValue({
+      all: 0,
+      indexed: 0,
+      processing: 0,
+      failed: 0,
+    });
     apiMocks.getImageDetail.mockReset();
     apiMocks.toggleLike.mockReset();
     apiMocks.deleteImage.mockReset();
@@ -119,7 +128,7 @@ describe("Gallery empty states", () => {
   it("keeps the active filter when clearing liked-only empty results", async () => {
     mockSearchParams.set("status", "processing");
     mockSearchParams.set("liked", "true");
-    apiMocks.getGallery.mockResolvedValueOnce({
+    apiMocks.getGallery.mockResolvedValue({
       items: [],
       total: 0,
       page: 1,
@@ -154,12 +163,14 @@ describe("Gallery empty states", () => {
     renderWithQueryClient();
 
     await waitFor(() => {
-      expect(apiMocks.getGallery).toHaveBeenCalledWith({
-        page: 1,
-        limit: 24,
-        status: "failed",
-        liked: true,
-      });
+      expect(apiMocks.getGallery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page: 1,
+          limit: 24,
+          status: "failed",
+          liked: true,
+        }),
+      );
     });
   });
 });

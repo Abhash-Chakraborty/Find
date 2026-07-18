@@ -80,6 +80,7 @@ class ModelManager:
         self._loading: Dict[str, threading.Event] = {}
         self.failed_loads: Dict[str, Dict[str, Any]] = {}
         self.unavailable_models: Dict[str, ModelLoadFailure] = {}
+        self.runtime_status: Dict[str, Any] | None = None
         self._lock = threading.RLock()
         self.gpu_lock = asyncio.Lock()
         self._cleanup_thread = None
@@ -120,6 +121,9 @@ class ModelManager:
                     try:
                         time.sleep(interval_seconds)
                         self.unload_idle_models(ttl_seconds)
+                        # Keep the process heartbeat fresh even when no models
+                        # are loaded and the worker is otherwise idle.
+                        self.publish_status()
                     except Exception as e:
                         logger.error(f"Error in model cleanup thread: {e}")
 
@@ -304,13 +308,20 @@ class ModelManager:
             self._loading.clear()
             self.failed_loads.clear()
             self.unavailable_models.clear()
+            self.runtime_status = None
             self.max_loaded_models = settings.ML_MAX_LOADED_MODELS
+            self.publish_status()
+
+    def set_runtime_status(self, status: Dict[str, Any]) -> None:
+        """Publish the runtime snapshot most recently applied by this process."""
+        with self._lock:
+            self.runtime_status = status.copy()
             self.publish_status()
 
     def get_status(self) -> Dict[str, Any]:
         """Return current process model-manager status."""
         with self._lock:
-            return {
+            status = {
                 "process": self.process_name,
                 "loaded_models": list(self.models.keys()),
                 "in_flight": {
@@ -320,6 +331,9 @@ class ModelManager:
                 "max_loaded_models": self.max_loaded_models,
                 "updated_at": time.time(),
             }
+            if self.runtime_status is not None:
+                status["runtime"] = self.runtime_status.copy()
+            return status
 
     def publish_status(self):
         """Best-effort publish of this process model state for API observability."""

@@ -9,9 +9,10 @@ import {
 } from "@tanstack/react-query";
 import axios from "axios";
 import {
+  Archive,
   Check,
   Download,
-  Eye,
+  FolderPlus,
   Heart,
   ImageOff,
   Lock,
@@ -19,18 +20,21 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { AddToAlbumModal } from "@/components/add-to-album-modal";
+import { GalleryDateFilter } from "@/components/gallery-date-filter";
 import {
   ImagePreviewModal,
   type PreviewMedia,
 } from "@/components/image-preview-modal";
 import { StatusIndicator } from "@/components/status-indicator";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import {
   api,
+  type DateRangePreset,
   deleteImage,
   deleteImagesBulk,
   type GalleryCounts,
@@ -39,13 +43,21 @@ import {
   getGalleryCounts,
   getImageDetail,
   reprocessImage,
+  type SortOrder,
+  setArchive,
   toggleLike,
+  trashImage,
 } from "@/lib/api";
 import {
   MINIO_URL_REFRESH_INTERVAL_MS,
   MINIO_URL_STALE_TIME_MS,
   resolveMediaUrl,
 } from "@/lib/media";
+import {
+  type GalleryFilter,
+  type GalleryFilterState,
+  galleryStore,
+} from "@/store/galleryStore";
 import { vaultStore } from "@/store/vaultStore";
 
 const GALLERY_LIMIT = 24;
@@ -56,8 +68,6 @@ const GALLERY_CARD_ACTION_SKELETON_KEYS = [
   "retry",
   "delete",
 ];
-
-type GalleryFilter = "all" | "indexed" | "processing" | "failed";
 
 type GalleryEmptyState = {
   title: string;
@@ -162,6 +172,60 @@ const getFilterFromStatusParam = (status: string | null): GalleryFilter => {
 };
 
 /**
+ * Maps a raw URL sort_order parameter to a strongly-typed SortOrder.
+ * @param sortOrder - The raw string parameter from the URL.
+ * @returns The resolved SortOrder type.
+ */
+const getSortOrderFromParam = (sortOrder: string | null): SortOrder => {
+  if (sortOrder === "oldest") {
+    return "oldest";
+  }
+  return "newest";
+};
+
+/**
+ * Maps a raw URL date_range parameter to a strongly-typed DateRangePreset.
+ * @param dateRange - The raw string parameter from the URL.
+ * @returns The resolved DateRangePreset type or undefined if not set.
+ */
+const getDateRangeFromParam = (
+  dateRange: string | null,
+): DateRangePreset | undefined => {
+  if (
+    dateRange === "last_30_days" ||
+    dateRange === "last_60_days" ||
+    dateRange === "last_90_days" ||
+    dateRange === "custom"
+  ) {
+    return dateRange;
+  }
+  return undefined;
+};
+
+/**
+ * Maps a strongly-typed SortOrder back to a URL-friendly string.
+ * @param sortOrder - The active SortOrder type.
+ * @returns The string value to use in the URL, or null if it's the default.
+ */
+const getSortOrderParam = (sortOrder: SortOrder): string | null => {
+  if (sortOrder === "newest") {
+    return null;
+  }
+  return sortOrder;
+};
+
+/**
+ * Maps a strongly-typed DateRangePreset back to a URL-friendly string.
+ * @param dateRange - The active DateRangePreset type, undefined, or null.
+ * @returns The string value to use in the URL, or null if not set.
+ */
+const getDateRangeParam = (
+  dateRange: DateRangePreset | undefined | null,
+): string | null => {
+  return dateRange || null;
+};
+
+/**
  * Maps a strongly-typed GalleryFilter back to a URL-friendly status string.
  * @param filter - The active GalleryFilter type.
  * @returns The string value to use in the URL, or null if no filter should be applied.
@@ -174,11 +238,6 @@ const getStatusParamFromFilter = (filter: GalleryFilter): string | null => {
   return filter === "indexed" ? "completed" : filter;
 };
 
-type GalleryThumbnailProps = {
-  src: string;
-  alt: string;
-};
-
 type GallerySkeletonGridProps = {
   count: number;
   label?: string;
@@ -186,60 +245,6 @@ type GallerySkeletonGridProps = {
 
 function buildSkeletonKeys(prefix: string, count: number) {
   return Array.from({ length: count }, (_, index) => `${prefix}-${index + 1}`);
-}
-
-/**
- * Keeps the thumbnail area stable when no preview URL exists or an image fails to load.
- */
-function GalleryImageFallback() {
-  return (
-    <div
-      className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[color:var(--surface-soft)] text-[color:var(--near-white)]"
-      role="img"
-      aria-label="No preview available"
-    >
-      <ImageOff className="h-7 w-7" />
-      <span className="text-xs">No preview</span>
-    </div>
-  );
-}
-
-/**
- * Shows a lightweight, theme-aware skeleton while each thumbnail image loads.
- */
-function GalleryThumbnail({ src, alt }: GalleryThumbnailProps) {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
-
-  if (hasError) {
-    return <GalleryImageFallback />;
-  }
-
-  return (
-    <>
-      {!isLoaded && (
-        <div
-          className="absolute inset-0 animate-pulse bg-[color:var(--surface-soft)]"
-          aria-hidden="true"
-        />
-      )}
-      <Image
-        src={src}
-        alt={alt}
-        fill
-        className={`object-cover transition duration-500 group-hover:scale-[1.035] ${
-          isLoaded ? "opacity-100" : "opacity-0"
-        }`}
-        sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 16vw"
-        unoptimized
-        onLoad={() => setIsLoaded(true)}
-        onError={() => {
-          setIsLoaded(true);
-          setHasError(true);
-        }}
-      />
-    </>
-  );
 }
 
 /**
@@ -306,6 +311,7 @@ function GalleryPageContent() {
     filename?: string;
   } | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [addToAlbumOpen, setAddToAlbumOpen] = useState(false);
   const [deletionError, setDeletionError] = useState<string | null>(null);
   const [hasOpenedFromQuery, setHasOpenedFromQuery] = useState(false);
   const [querySelectedItem, setQuerySelectedItem] =
@@ -317,12 +323,44 @@ function GalleryPageContent() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const filter = getFilterFromStatusParam(searchParams.get("status"));
-  const likedOnly = searchParams.get("liked") === "true";
+  const filter = galleryStore((state) => state.filter);
+  const likedOnly = galleryStore((state) => state.likedOnly);
+  const sortOrder = galleryStore((state) => state.sortOrder);
+  const dateRange = galleryStore((state) => state.dateRange);
+  const dateStart = galleryStore((state) => state.dateStart);
+  const dateEnd = galleryStore((state) => state.dateEnd);
+  const setGalleryFilters = galleryStore((state) => state.setFilters);
+  const parsedGalleryFilters = useMemo<GalleryFilterState>(() => {
+    const parsedDateRange = getDateRangeFromParam(
+      searchParams.get("date_range"),
+    );
+    return {
+      filter: getFilterFromStatusParam(searchParams.get("status")),
+      likedOnly: searchParams.get("liked") === "true",
+      sortOrder: getSortOrderFromParam(searchParams.get("sort_order")),
+      dateRange: parsedDateRange,
+      dateStart:
+        parsedDateRange === "custom" ? searchParams.get("date_start") : null,
+      dateEnd:
+        parsedDateRange === "custom" ? searchParams.get("date_end") : null,
+    };
+  }, [searchParams]);
 
-  // The query key includes filter + likedOnly so any URL filter change
+  useEffect(() => {
+    setGalleryFilters(parsedGalleryFilters);
+  }, [parsedGalleryFilters, setGalleryFilters]);
+
+  // The query key includes filter + likedOnly + sort/date params so any URL filter change
   // automatically resets the infinite query back to page 1.
-  const galleryQueryKey = ["gallery-infinite", filter, likedOnly] as const;
+  const galleryQueryKey = [
+    "gallery-infinite",
+    filter,
+    likedOnly,
+    sortOrder,
+    dateRange,
+    dateStart,
+    dateEnd,
+  ] as const;
 
   const { data: counts } = useQuery<GalleryCounts>({
     queryKey: ["gallery-counts", likedOnly],
@@ -351,6 +389,10 @@ function GalleryPageContent() {
         limit: GALLERY_LIMIT,
         status: filter === "all" ? undefined : filter,
         liked: likedOnly ? true : undefined,
+        sortOrder,
+        dateRange,
+        dateStart: dateRange === "custom" ? dateStart || undefined : undefined,
+        dateEnd: dateRange === "custom" ? dateEnd || undefined : undefined,
       }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
@@ -448,9 +490,25 @@ function GalleryPageContent() {
   }, [allItems]);
 
   const buildGalleryHref = useCallback(
-    (nextState: { filter?: GalleryFilter; likedOnly?: boolean }) => {
+    (nextState: {
+      filter?: GalleryFilter;
+      likedOnly?: boolean;
+      sortOrder?: SortOrder;
+      dateRange?: DateRangePreset | undefined | null;
+      dateStart?: string | null;
+      dateEnd?: string | null;
+    }) => {
       const nextFilter = nextState.filter ?? filter;
       const nextLikedOnly = nextState.likedOnly ?? likedOnly;
+      const nextSortOrder = nextState.sortOrder ?? sortOrder;
+      // Use !== undefined check to allow explicit null values to override existing dateRange
+      const nextDateRange =
+        nextState.dateRange !== undefined ? nextState.dateRange : dateRange;
+      // Use !== undefined check to allow explicit null values to override existing dates
+      const nextDateStart =
+        nextState.dateStart !== undefined ? nextState.dateStart : dateStart;
+      const nextDateEnd =
+        nextState.dateEnd !== undefined ? nextState.dateEnd : dateEnd;
       const nextParams = new URLSearchParams(searchParams.toString());
       const statusParam = getStatusParamFromFilter(nextFilter);
 
@@ -466,14 +524,65 @@ function GalleryPageContent() {
         nextParams.delete("liked");
       }
 
+      // Handle sort order
+      const sortOrderParam = getSortOrderParam(nextSortOrder);
+      if (sortOrderParam) {
+        nextParams.set("sort_order", sortOrderParam);
+      } else {
+        nextParams.delete("sort_order");
+      }
+
+      // Handle date range
+      const dateRangeParam = getDateRangeParam(nextDateRange);
+      if (dateRangeParam) {
+        nextParams.set("date_range", dateRangeParam);
+      } else {
+        nextParams.delete("date_range");
+      }
+
+      // Enforce invariant: only store date_start/date_end when dateRange is "custom"
+      if (nextDateRange === "custom") {
+        if (nextDateStart) {
+          nextParams.set("date_start", nextDateStart);
+        } else {
+          nextParams.delete("date_start");
+        }
+
+        if (nextDateEnd) {
+          nextParams.set("date_end", nextDateEnd);
+        } else {
+          nextParams.delete("date_end");
+        }
+      } else {
+        // Clear date_start/date_end if not using custom range
+        nextParams.delete("date_start");
+        nextParams.delete("date_end");
+      }
+
       const queryString = nextParams.toString();
       return queryString ? `${pathname}?${queryString}` : pathname;
     },
-    [filter, likedOnly, pathname, searchParams],
+    [
+      filter,
+      likedOnly,
+      sortOrder,
+      dateRange,
+      dateStart,
+      dateEnd,
+      pathname,
+      searchParams,
+    ],
   );
 
   const updateGalleryParams = useCallback(
-    (nextState: { filter?: GalleryFilter; likedOnly?: boolean }) => {
+    (nextState: {
+      filter?: GalleryFilter;
+      likedOnly?: boolean;
+      sortOrder?: SortOrder;
+      dateRange?: DateRangePreset | null;
+      dateStart?: string | null;
+      dateEnd?: string | null;
+    }) => {
       router.push(buildGalleryHref(nextState), {
         scroll: false,
       });
@@ -649,6 +758,72 @@ function GalleryPageContent() {
     },
   });
 
+  const bulkArchiveMutation = useMutation({
+    mutationFn: (mediaIds: number[]) =>
+      Promise.all(mediaIds.map((id) => setArchive(id, true))),
+    onMutate: (mediaIds: number[]) => {
+      const previousData =
+        queryClient.getQueryData<InfiniteData<GalleryResponse>>(
+          galleryQueryKey,
+        );
+      queryClient.setQueryData<InfiniteData<GalleryResponse>>(
+        galleryQueryKey,
+        (old) => removeMediaFromGalleryCache(mediaIds, old),
+      );
+      return { previousData };
+    },
+    onError: (_e, _v, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(galleryQueryKey, context.previousData);
+      }
+      toast.error("Couldn't archive selected images.");
+    },
+    onSuccess: (result) => {
+      toast.success(
+        `Archived ${result.length} image${result.length === 1 ? "" : "s"}.`,
+      );
+      handleClearSelection();
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
+      queryClient.invalidateQueries({ queryKey: ["archive"] });
+    },
+  });
+
+  const bulkTrashMutation = useMutation({
+    mutationFn: (mediaIds: number[]) =>
+      Promise.all(mediaIds.map((id) => trashImage(id))),
+    onMutate: (mediaIds: number[]) => {
+      const previousData =
+        queryClient.getQueryData<InfiniteData<GalleryResponse>>(
+          galleryQueryKey,
+        );
+      queryClient.setQueryData<InfiniteData<GalleryResponse>>(
+        galleryQueryKey,
+        (old) => removeMediaFromGalleryCache(mediaIds, old),
+      );
+      return { previousData };
+    },
+    onError: (_e, _v, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(galleryQueryKey, context.previousData);
+      }
+      toast.error("Couldn't move selected images to trash.");
+    },
+    onSuccess: (result) => {
+      toast.success(
+        `Moved ${result.length} image${result.length === 1 ? "" : "s"} to trash.`,
+      );
+      handleClearSelection();
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
+      queryClient.invalidateQueries({ queryKey: ["trash"] });
+    },
+  });
+
   const reprocessMutation = useMutation({
     mutationFn: (mediaId: number) => reprocessImage(mediaId),
     onSuccess: ({ media_id }) => {
@@ -662,6 +837,24 @@ function GalleryPageContent() {
         "Retry failed. The queue may be unavailable — please try again.",
       );
     },
+  });
+
+  const downloadMutation = useMutation({
+    mutationFn: async (item: { id: number; filename: string }) => {
+      const response = await api.get<Blob>(`/api/image/${item.id}/original`, {
+        responseType: "blob",
+      });
+      const objectUrl = URL.createObjectURL(response.data);
+      try {
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = item.filename;
+        anchor.click();
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    },
+    onError: () => toast.error("Download failed. Please try again."),
   });
 
   const moveToVaultMutation = useMutation({
@@ -898,49 +1091,71 @@ function GalleryPageContent() {
           </p>
         </div>
 
-        <div className="frost-panel delayed-enter mb-8 flex flex-col items-center justify-between gap-4 rounded-3xl px-4 py-3 md:flex-row">
-          <div className="flex flex-wrap justify-center gap-1">
-            {filters.map(({ label, value }) => (
-              <Link
-                key={value}
-                href={buildGalleryHref({ filter: value })}
-                scroll={false}
-                aria-current={filter === value ? "page" : undefined}
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                  filter === value
-                    ? "bg-white text-black"
-                    : "text-[color:var(--silver)] hover:bg-[color:var(--frost-soft)] hover:text-[color:var(--near-white)]"
-                }`}
-              >
-                {label}
-                {counts ? (
-                  <span
-                    className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-xs ${
-                      filter === value
-                        ? "bg-black/15 text-black"
-                        : "bg-[color:var(--frost-soft)] text-[color:var(--silver)]"
-                    }`}
-                  >
-                    {counts[value]}
-                  </span>
-                ) : null}
-              </Link>
-            ))}
+        <div className="frost-panel delayed-enter mb-8 flex flex-col gap-4 rounded-3xl px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap justify-center gap-1">
+              {filters.map(({ label, value }) => (
+                <Link
+                  key={value}
+                  href={buildGalleryHref({ filter: value })}
+                  scroll={false}
+                  aria-current={filter === value ? "page" : undefined}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                    filter === value
+                      ? "bg-white text-black"
+                      : "text-[color:var(--silver)] hover:bg-[color:var(--frost-soft)] hover:text-[color:var(--near-white)]"
+                  }`}
+                >
+                  {label}
+                  {counts ? (
+                    <span
+                      className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-xs ${
+                        filter === value
+                          ? "bg-black/15 text-black"
+                          : "bg-[color:var(--frost-soft)] text-[color:var(--silver)]"
+                      }`}
+                    >
+                      {counts[value]}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              aria-pressed={likedOnly}
+              onClick={handleLikedOnlyChange}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-colors ${
+                likedOnly
+                  ? "border border-[var(--red-soft)] bg-[var(--red-soft)] text-[#ff9bab]"
+                  : "border border-[var(--frost)] text-[color:var(--silver)] hover:bg-[color:var(--frost-soft)] hover:text-[color:var(--near-white)]"
+              }`}
+            >
+              <Heart className={`h-4 w-4 ${likedOnly ? "fill-current" : ""}`} />
+              {likedOnly ? "Liked" : "All images"}
+            </button>
           </div>
 
-          <button
-            type="button"
-            aria-pressed={likedOnly}
-            onClick={handleLikedOnlyChange}
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-colors ${
-              likedOnly
-                ? "border border-[var(--red-soft)] bg-[var(--red-soft)] text-[#ff9bab]"
-                : "border border-[var(--frost)] text-[color:var(--silver)] hover:bg-[color:var(--frost-soft)] hover:text-[color:var(--near-white)]"
-            }`}
-          >
-            <Heart className={`h-4 w-4 ${likedOnly ? "fill-current" : ""}`} />
-            {likedOnly ? "Liked" : "All images"}
-          </button>
+          {/* Date filter row */}
+          <div className="flex flex-wrap gap-2">
+            <GalleryDateFilter
+              sortOrder={sortOrder}
+              dateRange={dateRange}
+              dateStart={dateStart}
+              dateEnd={dateEnd}
+              onSortOrderChange={(newOrder) => {
+                updateGalleryParams({ sortOrder: newOrder });
+              }}
+              onDateFilterChange={(newRange, newStart, newEnd) => {
+                updateGalleryParams({
+                  dateRange: newRange,
+                  dateStart: newStart,
+                  dateEnd: newEnd,
+                });
+              }}
+            />
+          </div>
         </div>
 
         {isInitialGalleryLoading && (
@@ -1015,6 +1230,39 @@ function GalleryPageContent() {
                   </span>
                   <button
                     type="button"
+                    data-testid="add-selected-to-album"
+                    onClick={() => setAddToAlbumOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] px-4 py-2 text-xs font-semibold transition hover:bg-[var(--frost)]"
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    Add to album
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="archive-selected"
+                    onClick={() =>
+                      bulkArchiveMutation.mutate(Array.from(selectedIds))
+                    }
+                    disabled={bulkArchiveMutation.isPending}
+                    className="inline-flex items-center gap-2 rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] px-4 py-2 text-xs font-semibold transition hover:bg-[var(--frost)] disabled:opacity-50"
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                    Archive
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="trash-selected"
+                    onClick={() =>
+                      bulkTrashMutation.mutate(Array.from(selectedIds))
+                    }
+                    disabled={bulkTrashMutation.isPending}
+                    className="inline-flex items-center gap-2 rounded-full border border-[var(--frost)] bg-[color:var(--frost-soft)] px-4 py-2 text-xs font-semibold transition hover:bg-[var(--frost)] disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Move to trash
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setBulkDeleteOpen(true)}
                     disabled={
                       deleteMutation.isPending || bulkDeleteMutation.isPending
@@ -1028,32 +1276,38 @@ function GalleryPageContent() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-              {allItems.map((item) => {
-                const imageSrc = resolveMediaUrl(
+            <TimelineMediaView
+              items={allItems}
+              order={sortOrder}
+              getId={(item) => item.id}
+              getDate={(item) => item.created_at}
+              getWidth={(item) => item.width}
+              getHeight={(item) => item.height}
+              getThumbnailUrl={(item) =>
+                resolveMediaUrl(
                   item.thumbnail_url ?? item.url,
                   item.minio_key,
                   item.id,
                   !item.thumbnail_url,
-                );
-                const originalUrl = resolveMediaUrl(item.url, item.minio_key);
-                const downloadUrl = originalUrl ?? item.url ?? "";
+                )
+              }
+              getOriginalUrl={(item) => `/api/image/${item.id}/original`}
+              getAlt={(item) => item.filename}
+              getOpenLabel={(item) => `View ${item.filename}`}
+              onOpenItem={(item) => {
+                setQuerySelectedItem(null);
+                setSelectedMediaId(item.id);
+              }}
+              renderItemActions={(item) => {
                 const isSelected = selectedIds.has(item.id);
-
                 return (
-                  <article
-                    key={item.id}
-                    className={`frost-panel card-hover group relative overflow-hidden rounded-2xl ${
-                      isSelected ? "ring-2 ring-[color:var(--blue)]" : ""
-                    }`}
-                  >
+                  <div className="flex flex-wrap items-center justify-end gap-1 text-white">
+                    <StatusIndicator status={item.status} />
                     <button
                       type="button"
                       onClick={() => handleToggleSelection(item.id)}
-                      className={`absolute left-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-full border backdrop-blur-md transition ${
-                        isSelected
-                          ? "border-[color:var(--blue)] bg-[color:var(--blue)] text-white"
-                          : "border-white/30 bg-black/45 text-white hover:bg-black/65"
+                      className={`icon-button h-8 w-8 ${
+                        isSelected ? "bg-[color:var(--blue)] text-white" : ""
                       }`}
                       aria-label={
                         isSelected
@@ -1062,148 +1316,80 @@ function GalleryPageContent() {
                       }
                       aria-pressed={isSelected}
                     >
-                      {isSelected ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <span className="h-3.5 w-3.5 rounded-full border border-current" />
-                      )}
+                      <Check className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
-                      className="relative block aspect-square w-full overflow-hidden bg-[color:var(--surface-soft)] text-left focus:outline-none"
-                      onClick={() => {
-                        setQuerySelectedItem(null);
-                        setSelectedMediaId(item.id);
-                      }}
-                      aria-label={`View ${item.filename}`}
+                      onClick={() => handleToggleLike(item.id)}
+                      disabled={likeMutation.isPending}
+                      className="icon-button h-8 w-8"
+                      aria-label={item.liked ? "Unlike image" : "Like image"}
                     >
-                      {imageSrc ? (
-                        <GalleryThumbnail
-                          key={imageSrc}
-                          src={imageSrc}
-                          alt={item.filename}
-                        />
-                      ) : (
-                        <GalleryImageFallback />
-                      )}
-
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/12 to-transparent opacity-60 transition-opacity group-hover:opacity-90" />
-                      <StatusIndicator
-                        status={item.status}
-                        className="absolute bottom-3 right-3"
+                      <Heart
+                        className={`h-3.5 w-3.5 ${
+                          item.liked ? "fill-current" : ""
+                        }`}
                       />
-                      <div className="absolute inset-0 grid place-items-center opacity-0 transition duration-200 group-hover:opacity-100">
-                        <span className="icon-button h-10 w-10 bg-[color:var(--overlay)] text-white backdrop-blur-md">
-                          <Eye className="h-4 w-4" />
-                        </span>
-                      </div>
                     </button>
-
-                    <div className="space-y-3 p-3">
-                      <p className="truncate text-xs font-medium text-[color:var(--near-white)]">
-                        {item.filename}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleLike(item.id)}
-                          disabled={likeMutation.isPending}
-                          className={`icon-button h-8 w-8 ${
-                            item.liked
-                              ? "border-[var(--red)] bg-[var(--red-soft)] text-[color:var(--red)]"
-                              : "text-[color:var(--silver)]"
-                          } ${
-                            likeMutation.isPending
-                              ? "cursor-not-allowed opacity-70"
-                              : ""
-                          }`}
-                          aria-label={
-                            item.liked ? "Unlike image" : "Like image"
-                          }
-                        >
-                          <Heart
-                            className={`h-3.5 w-3.5 ${
-                              item.liked ? "fill-current" : ""
-                            }`}
-                          />
-                        </button>
-                        {downloadUrl && (
-                          <a
-                            href={downloadUrl}
-                            download={item.filename}
-                            className="icon-button h-8 w-8 text-[color:var(--silver)]"
-                            aria-label="Download image"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </a>
-                        )}
-                        {(item.status === "failed" ||
-                          (item.status === "indexed" && !item.caption)) && (
-                          <button
-                            type="button"
-                            onClick={() => reprocessMutation.mutate(item.id)}
-                            disabled={
-                              reprocessMutation.isPending &&
-                              reprocessMutation.variables === item.id
-                            }
-                            className={`icon-button h-8 w-8 text-[color:var(--silver)] ${
-                              reprocessMutation.isPending &&
-                              reprocessMutation.variables === item.id
-                                ? "cursor-not-allowed opacity-70"
-                                : ""
-                            }`}
-                            aria-label="Retry analysis"
-                          >
-                            <RotateCcw
-                              className={`h-3.5 w-3.5 ${
-                                reprocessMutation.isPending &&
-                                reprocessMutation.variables === item.id
-                                  ? "animate-spin"
-                                  : ""
-                              }`}
-                            />
-                          </button>
-                        )}
-                        {isVaultUnlocked && vaultSessionToken && (
-                          <button
-                            type="button"
-                            onClick={() => moveToVaultMutation.mutate(item.id)}
-                            disabled={
-                              moveToVaultMutation.isPending &&
-                              moveToVaultMutation.variables === item.id
-                            }
-                            className={`icon-button h-8 w-8 text-[color:var(--silver)] ${
-                              moveToVaultMutation.isPending &&
-                              moveToVaultMutation.variables === item.id
-                                ? "cursor-not-allowed opacity-70"
-                                : ""
-                            }`}
-                            aria-label="Move to Vault"
-                            title="Move to Vault"
-                          >
-                            <Lock className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleDeleteRequest(item.id, item.filename)
-                          }
-                          disabled={deleteMutation.isPending}
-                          className={`icon-button h-8 w-8 text-[color:var(--silver)] ${
-                            deleteMutation.isPending
-                              ? "cursor-not-allowed opacity-70"
-                              : ""
-                          }`}
-                          aria-label="Delete image"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </article>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadMutation.mutate({
+                          id: item.id,
+                          filename: item.filename,
+                        })
+                      }
+                      disabled={downloadMutation.isPending}
+                      className="icon-button h-8 w-8"
+                      aria-label="Download image"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                    {(item.status === "failed" ||
+                      (item.status === "indexed" && !item.caption)) && (
+                      <button
+                        type="button"
+                        onClick={() => reprocessMutation.mutate(item.id)}
+                        disabled={
+                          reprocessMutation.isPending &&
+                          reprocessMutation.variables === item.id
+                        }
+                        className="icon-button h-8 w-8"
+                        aria-label="Retry analysis"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {isVaultUnlocked && vaultSessionToken && (
+                      <button
+                        type="button"
+                        onClick={() => moveToVaultMutation.mutate(item.id)}
+                        disabled={
+                          moveToVaultMutation.isPending &&
+                          moveToVaultMutation.variables === item.id
+                        }
+                        className="icon-button h-8 w-8"
+                        aria-label="Move to Vault"
+                      >
+                        <Lock className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDeleteRequest(item.id, item.filename)
+                      }
+                      disabled={deleteMutation.isPending}
+                      className="icon-button h-8 w-8"
+                      aria-label="Delete image"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 );
-              })}
+              }}
+            />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
               {buildSkeletonKeys(
                 "gallery-loading-more",
                 loadingMoreSkeletonCount,
@@ -1256,6 +1442,14 @@ function GalleryPageContent() {
               setQuerySelectedItem(null);
             }
           }}
+        />
+      )}
+
+      {addToAlbumOpen && selectedCount > 0 && (
+        <AddToAlbumModal
+          mediaIds={Array.from(selectedIds)}
+          onClose={() => setAddToAlbumOpen(false)}
+          onAdded={() => handleClearSelection()}
         />
       )}
 

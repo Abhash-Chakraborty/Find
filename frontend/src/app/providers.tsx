@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useState } from "react";
 import { Toaster } from "sonner";
+import { UploadQueueMonitor } from "@/components/upload-status-indicator";
 import { vaultStore } from "@/store/vaultStore";
 
 interface ProvidersProps {
@@ -48,6 +49,7 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <UploadQueueMonitor />
       {children}
       <Toaster position="top-right" richColors theme="system" />
     </QueryClientProvider>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   CheckCircle,
@@ -11,50 +11,25 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
+import { UploadStatusRing } from "@/components/upload-status-indicator";
 import {
   extractErrorMessage,
-  getJobStatus,
-  type JobStatus,
-  type UploadResponse,
-  type UploadResult,
+  getRuntimeConfig,
   uploadImages,
   uploadImagesBulk,
 } from "@/lib/api";
+import {
+  getUploadItemProgress,
+  type UploadQueueItem,
+  useUploadQueueStore,
+} from "@/store/uploadQueueStore";
 
 type UploadMode = "single" | "bulk";
-type ProcessingState = "queued" | "processing" | "indexed" | "failed";
 
-type UploadListItem = UploadResult & {
-  jobStatus?: JobStatus["status"];
-  processingState?: ProcessingState;
-  processingStage?: string;
-};
-
-function hydrateResults(response: UploadResponse) {
-  return response.results.map<UploadListItem>((result) => ({
-    ...result,
-    jobStatus: result.status === "uploaded" ? "queued" : undefined,
-    processingState: result.status === "uploaded" ? "queued" : undefined,
-  }));
-}
-
-function getProcessingState(jobStatus?: JobStatus["status"]): ProcessingState {
-  if (jobStatus === "finished") {
-    return "indexed";
-  }
-  if (jobStatus === "failed") {
-    return "failed";
-  }
-  if (jobStatus === "started") {
-    return "processing";
-  }
-  return "queued";
-}
-
-function getDisplayStatus(item: UploadListItem) {
+function getDisplayStatus(item: UploadQueueItem) {
   if (item.status === "duplicate") {
     return "duplicate";
   }
@@ -73,7 +48,7 @@ function getDisplayStatus(item: UploadListItem) {
   return "queued";
 }
 
-function getDisplayStage(item: UploadListItem) {
+function getDisplayStage(item: UploadQueueItem) {
   if (item.status !== "uploaded") {
     return null;
   }
@@ -86,51 +61,7 @@ function getDisplayStage(item: UploadListItem) {
   return item.processingStage ?? item.processingState ?? "queued";
 }
 
-const STAGE_PROGRESS: Record<string, number> = {
-  queued: 8,
-  started: 16,
-  processing: 20,
-  "loading image": 22,
-  "extracting exif": 34,
-  "generating mock metadata": 48,
-  "detecting objects": 48,
-  "generating caption": 62,
-  "running ocr": 74,
-  "generating embedding": 88,
-  "indexing complete": 96,
-  "detecting faces": 96,
-  "clustering queued": 98,
-  indexed: 100,
-  failed: 100,
-};
-
-function normalizeStage(stage?: string) {
-  return stage?.trim().toLowerCase();
-}
-
-function getItemProgress(item: UploadListItem): number {
-  if (item.status === "failed" || item.processingState === "failed") {
-    return 100;
-  }
-  if (item.processingState === "indexed") {
-    return 100;
-  }
-
-  const stage = normalizeStage(item.processingStage);
-  const stageProgress = stage ? STAGE_PROGRESS[stage] : undefined;
-  if (stageProgress !== undefined) {
-    return stageProgress;
-  }
-  if (item.processingState === "processing" || item.jobStatus === "started") {
-    return STAGE_PROGRESS.processing ?? 20;
-  }
-  if (item.processingState === "queued" || item.jobStatus === "queued") {
-    return STAGE_PROGRESS.queued ?? 8;
-  }
-  return 0;
-}
-
-function getStatusClasses(item: UploadListItem) {
+function getStatusClasses(item: UploadQueueItem) {
   if (item.status === "duplicate") {
     return "accent-badge status-pending";
   }
@@ -147,9 +78,26 @@ function getStatusClasses(item: UploadListItem) {
 }
 
 export default function UploadPage() {
-  const [uploadedFiles, setUploadedFiles] = useState<UploadListItem[]>([]);
+  const uploadedFiles = useUploadQueueStore((state) => state.items);
+  const uploadPhase = useUploadQueueStore((state) => state.phase);
+  const uploadProgress = useUploadQueueStore((state) => state.uploadProgress);
+  const beginUpload = useUploadQueueStore((state) => state.beginUpload);
+  const setUploadProgress = useUploadQueueStore(
+    (state) => state.setUploadProgress,
+  );
+  const completeUpload = useUploadQueueStore((state) => state.completeUpload);
+  const failUpload = useUploadQueueStore((state) => state.failUpload);
   const [mode, setMode] = useState<UploadMode>("single");
   const queryClient = useQueryClient();
+  const runtime = useQuery({
+    queryKey: ["runtime-config"],
+    queryFn: getRuntimeConfig,
+    retry: false,
+  });
+  const localAiActive =
+    runtime.data?.ai_enabled &&
+    (runtime.data.applied_mode === "full" ||
+      runtime.data.applied_mode === "mock");
 
   const parsedUploadLimit = Number(
     process.env.NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB ?? "50",
@@ -167,50 +115,7 @@ export default function UploadPage() {
       ? Math.floor(parsedBulkLimit)
       : 200;
 
-  const uploadMutation = useMutation({
-    mutationFn: uploadImages,
-    onSuccess: (data) => {
-      setUploadedFiles((prev) => [...hydrateResults(data), ...prev]);
-      void queryClient.invalidateQueries({ queryKey: ["gallery"] });
-      toast.success(
-        `Queued ${data.total} file${data.total === 1 ? "" : "s"} for analysis`,
-      );
-    },
-    onError: (error) => {
-      toast.error(extractErrorMessage(error, "Upload failed"));
-    },
-  });
-
-  const bulkUploadMutation = useMutation({
-    mutationFn: uploadImagesBulk,
-    onSuccess: (data) => {
-      setUploadedFiles((prev) => [...hydrateResults(data), ...prev]);
-      void queryClient.invalidateQueries({ queryKey: ["gallery"] });
-      const uploadedCount = data.results.filter(
-        (item) => item.status === "uploaded",
-      ).length;
-      const failedResults = data.results.filter(
-        (item) => item.status === "failed" && item.error,
-      );
-      toast.success(
-        `Archive accepted (${uploadedCount} new upload${
-          uploadedCount === 1 ? "" : "s"
-        })`,
-      );
-      if (failedResults.length > 0) {
-        toast.error(
-          failedResults.length === 1
-            ? failedResults[0]?.error
-            : `${failedResults.length} files failed. ${failedResults[0]?.error}`,
-        );
-      }
-    },
-    onError: (error) => {
-      toast.error(extractErrorMessage(error, "Bulk upload failed"));
-    },
-  });
-
-  const isUploading = uploadMutation.isPending || bulkUploadMutation.isPending;
+  const isUploading = uploadPhase === "uploading";
 
   const activeJobs = useMemo(
     () =>
@@ -224,97 +129,30 @@ export default function UploadPage() {
     [uploadedFiles],
   );
 
-  useEffect(() => {
-    if (activeJobs.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const pollJobs = async () => {
-      const jobStatuses = await Promise.all(
-        activeJobs.map(async (item) => {
-          if (!item.job_id) {
-            return null;
-          }
-
-          try {
-            return await getJobStatus(item.job_id);
-          } catch {
-            return {
-              job_id: item.job_id,
-              status: "failed",
-              error: "Could not reach the job status endpoint.",
-            } as JobStatus;
-          }
-        }),
-      );
-
-      if (cancelled) {
-        return;
-      }
-
-      if (
-        jobStatuses.some(
-          (job) => job?.status === "finished" || job?.status === "failed",
-        )
-      ) {
-        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
-      }
-
-      setUploadedFiles((current) =>
-        current.map((item) => {
-          if (!item.job_id) {
-            return item;
-          }
-
-          const job = jobStatuses.find(
-            (entry) => entry?.job_id === item.job_id,
-          );
-          if (!job) {
-            return item;
-          }
-
-          const processingState = getProcessingState(job.status);
-          return {
-            ...item,
-            jobStatus: job.status,
-            processingState,
-            processingStage: job.stage,
-            error:
-              processingState === "failed"
-                ? (job.error ?? item.error)
-                : item.error,
-          };
-        }),
-      );
-    };
-
-    void pollJobs();
-    const intervalId = window.setInterval(() => {
-      void pollJobs();
-    }, 3000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [activeJobs, queryClient]);
-
   const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
+    async (acceptedFiles: File[]) => {
       if (acceptedFiles.length === 0) {
         toast.error("No valid images selected");
         return;
       }
-
-      uploadMutation.mutate(acceptedFiles);
+      beginUpload();
+      try {
+        const data = await uploadImages(acceptedFiles, setUploadProgress);
+        completeUpload(data);
+        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
+        toast.success(
+          `Queued ${data.total} file${data.total === 1 ? "" : "s"} for library processing`,
+        );
+      } catch (error) {
+        failUpload();
+        toast.error(extractErrorMessage(error, "Upload failed"));
+      }
     },
-    [uploadMutation],
+    [beginUpload, completeUpload, failUpload, queryClient, setUploadProgress],
   );
 
   const onBulkDrop = useCallback(
-    (acceptedFiles: File[]) => {
+    async (acceptedFiles: File[]) => {
       if (acceptedFiles.length === 0) {
         toast.error("No archive selected");
         return;
@@ -326,9 +164,33 @@ export default function UploadPage() {
         return;
       }
 
-      bulkUploadMutation.mutate(archive);
+      beginUpload();
+      try {
+        const data = await uploadImagesBulk(archive, setUploadProgress);
+        completeUpload(data);
+        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
+        const uploadedCount = data.results.filter(
+          (item) => item.status === "uploaded",
+        ).length;
+        const failedResults = data.results.filter(
+          (item) => item.status === "failed" && item.error,
+        );
+        toast.success(
+          `Archive accepted (${uploadedCount} new upload${uploadedCount === 1 ? "" : "s"})`,
+        );
+        if (failedResults.length > 0) {
+          toast.error(
+            failedResults.length === 1
+              ? failedResults[0]?.error
+              : `${failedResults.length} files failed. ${failedResults[0]?.error}`,
+          );
+        }
+      } catch (error) {
+        failUpload();
+        toast.error(extractErrorMessage(error, "Bulk upload failed"));
+      }
     },
-    [bulkUploadMutation],
+    [beginUpload, completeUpload, failUpload, queryClient, setUploadProgress],
   );
 
   const {
@@ -409,11 +271,11 @@ export default function UploadPage() {
     trackedUploads.length > 0
       ? Math.round(
           trackedUploads.reduce((total, item) => {
-            return total + getItemProgress(item);
+            return total + getUploadItemProgress(item);
           }, 0) / trackedUploads.length,
         )
       : isUploading
-        ? (STAGE_PROGRESS.queued ?? 8)
+        ? uploadProgress
         : 0;
 
   const progressLabel = isUploading
@@ -428,14 +290,22 @@ export default function UploadPage() {
   return (
     <div className="page-shell">
       <div className="container-shell max-w-3xl py-10 md:py-14">
-        <div className="page-enter mb-10 text-center">
-          <h1 className="section-heading mb-4 text-5xl font-medium md:text-6xl">
-            Upload
-          </h1>
-          <p className="muted-copy mx-auto max-w-xl text-sm leading-6">
-            Add images to analyze. Search and clustering update as jobs finish.
-          </p>
-        </div>
+        <header className="page-enter mb-7 flex flex-wrap items-baseline gap-2 border-b border-[var(--frost)] pb-5">
+          <span className="text-sm font-semibold text-[color:var(--blue)]">
+            Library
+          </span>
+          <span aria-hidden="true" className="text-[color:var(--muted)]">
+            /
+          </span>
+          <h1 className="section-heading text-4xl font-medium">Upload</h1>
+          <span className="text-sm text-[color:var(--silver)]">
+            {runtime.isPending
+              ? "Checking local processing mode"
+              : localAiActive
+                ? "Local AI analysis is active"
+                : "Photos will import without AI analysis"}
+          </span>
+        </header>
 
         <div className="delayed-enter mb-5 flex justify-center">
           <div className="frost-panel flex rounded-full p-1">
@@ -511,9 +381,9 @@ export default function UploadPage() {
 
         {(isUploading || activeJobs.length > 0) && (
           <div className="frost-panel mt-8 rounded-2xl px-4 py-3">
-            <div className="mb-2 flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-2">
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[color:var(--silver)]" />
+                <UploadStatusRing size={46} />
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--near-white)]">
                     {progressLabel}
@@ -526,20 +396,6 @@ export default function UploadPage() {
               <span className="shrink-0 text-xs tabular-nums text-[color:var(--silver)]">
                 {progressPercent}%
               </span>
-            </div>
-
-            <div
-              aria-label={`${progressLabel} progress`}
-              aria-valuemax={100}
-              aria-valuemin={0}
-              aria-valuenow={progressPercent}
-              className="h-1 w-full overflow-hidden rounded-full bg-[color:var(--surface-hover)]"
-              role="progressbar"
-            >
-              <div
-                className="h-full rounded-full bg-[color:var(--near-white)] transition-[width] duration-500 ease-out"
-                style={{ width: `${progressPercent}%` }}
-              />
             </div>
           </div>
         )}

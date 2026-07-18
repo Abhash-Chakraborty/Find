@@ -12,6 +12,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     text as sa_text,
+    Float,
 )
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
@@ -38,9 +39,31 @@ class Media(Base):
     liked = Column(
         Boolean, nullable=False, default=False, server_default=sa_text("false")
     )
+    ranking_boost = Column(Float, nullable=False, default=0.0, server_default="0")
     is_hidden = Column(
         Boolean, nullable=False, default=False, server_default=sa_text("false")
     )
+    # Archive state — archived assets are kept but excluded from the main
+    # timeline/search; surfaced only in the dedicated archive view.
+    is_archived = Column(
+        Boolean,
+        nullable=False,
+        index=True,
+        default=False,
+        server_default=sa_text("false"),
+    )
+    # Soft-delete (trash) — non-null means the asset is in the trash and is
+    # excluded from every browse surface until restored or purged.
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    vault_state = Column(
+        String(32),
+        nullable=False,
+        index=True,
+        default="visible",
+        server_default="visible",
+    )
+    hidden_at = Column(DateTime(timezone=True), nullable=True)
+    encrypted_at = Column(DateTime(timezone=True), nullable=True)
 
     # Status tracking
     status = Column(String(50), default="pending", index=True)
@@ -58,6 +81,10 @@ class Media(Base):
     width = Column(Integer)
     height = Column(Integer)
     exif_json = Column(JSON)  # EXIF data
+    # Optional local-only GPS coordinates. They are populated only when the
+    # operator enables map metadata; no reverse-geocoding service is contacted.
+    latitude = Column(Float, nullable=True, index=True)
+    longitude = Column(Float, nullable=True, index=True)
 
     # AI-generated metadata
     metadata_json = Column(JSON)  # Contains: caption, objects, ocr_text, faces, etc.

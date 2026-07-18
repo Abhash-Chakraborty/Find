@@ -2,12 +2,16 @@ import logging
 
 import cv2
 import numpy as np
-from insightface.app import FaceAnalysis
 from PIL import Image
 from typing import Dict, List, Union
 
-from find_api.core.config import settings
+from find_api.core.hardware import (
+    detect_capabilities,
+    preload_onnx_runtime_libraries,
+    resolve_execution,
+)
 from find_api.core.model_manager import get_model_manager
+from find_api.core.runtime_profile import current_accel_mode
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +27,18 @@ class FaceDetector:
         """Loader function for ModelManager"""
         logger.info("Loading InsightFace model: antelopev2")
 
-        # providers: ['CUDAExecutionProvider'] if GPU else ['CPUExecutionProvider']
-        providers = (
-            ["CUDAExecutionProvider"] if settings.USE_GPU else ["CPUExecutionProvider"]
-        )
+        # The NVIDIA artifact gets CUDA/cuDNN from the locked PyTorch wheels.
+        # Make those libraries visible to ONNX Runtime before InsightFace opens
+        # any model sessions. This is a no-op in CPU-only artifacts.
+        preload_onnx_runtime_libraries()
+        from insightface.app import FaceAnalysis
+
+        # Resolve ONNX execution providers from the accel mode, with automatic
+        # CPU fallback (the EP list always ends with CPUExecutionProvider, and
+        # collapses to CPU-only when no GPU is available).
+        plan = resolve_execution(current_accel_mode(), detect_capabilities())
+        providers = plan.providers
+        use_gpu = plan.using_gpu
 
         # InsightFace's antelopev2 release currently extracts ONNX files under
         # antelopev2/antelopev2. Try the documented name first so fresh installs
@@ -37,7 +49,7 @@ class FaceDetector:
             logger.info("Retrying InsightFace with nested antelopev2 model layout")
             app = FaceAnalysis(name="antelopev2/antelopev2", providers=providers)
 
-        app.prepare(ctx_id=0 if settings.USE_GPU else -1, det_size=(640, 640))
+        app.prepare(ctx_id=0 if use_gpu else -1, det_size=(640, 640))
 
         return app
 
@@ -50,7 +62,7 @@ class FaceDetector:
                 # Convert PIL to BGR numpy array (cv2 format)
                 image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
-            config_key = f"model=antelopev2|gpu={settings.USE_GPU}"
+            config_key = f"model=antelopev2|accel={current_accel_mode()}"
             with self.manager.use_model(
                 "insightface", self._load_model, config_key=config_key
             ) as app:

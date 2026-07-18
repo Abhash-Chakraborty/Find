@@ -11,13 +11,15 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ImagePreviewModal,
   type PreviewMedia,
 } from "@/components/image-preview-modal";
 import { FeedbackActions } from "@/components/person-feedback-actions";
+import { TimelineMediaView } from "@/components/timeline-media-view";
+import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
   getPeople,
   getPersonImages,
@@ -27,6 +29,7 @@ import {
   updatePersonName,
 } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
+import { useAiAvailability } from "@/lib/use-ai-availability";
 
 // ─── Person Card Component ────────────────────────────────────────────────────
 
@@ -188,6 +191,7 @@ export default function PeoplePage() {
   const queryClient = useQueryClient();
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [previewMedia, setPreviewMedia] = useState<PreviewMedia | null>(null);
+  const personTimelineScrollRef = useRef<HTMLDivElement | null>(null);
 
   const {
     data: people,
@@ -199,6 +203,7 @@ export default function PeoplePage() {
     queryFn: getPeople,
     refetchInterval: 15000,
   });
+  const { aiUnavailable, unavailableMessage } = useAiAvailability();
 
   const selectedPersonQuery = useQuery({
     queryKey: ["person-images", selectedPersonId],
@@ -248,12 +253,15 @@ export default function PeoplePage() {
     <div className="page-shell bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
       <div className="container-shell py-10 md:py-14">
         {/* Page header */}
-        <div className="page-enter mb-10 flex flex-col gap-6 border-b border-[var(--frost)] pb-8 md:flex-row md:items-end md:justify-between">
+        <div className="page-enter mb-8 flex flex-col gap-4 border-b border-[var(--frost)] pb-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
-            <h1 className="section-heading mb-4 text-5xl font-medium text-[color:var(--near-white)] md:text-6xl">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--blue)]">
+              Library / People
+            </p>
+            <h1 className="section-heading text-3xl font-medium text-[color:var(--near-white)]">
               People
             </h1>
-            <p className="muted-copy text-sm leading-6 text-[color:var(--silver)]">
+            <p className="muted-copy mt-2 text-sm leading-6 text-[color:var(--silver)]">
               Photos grouped by person, detected and clustered entirely on your
               device.
             </p>
@@ -275,7 +283,8 @@ export default function PeoplePage() {
             <button
               type="button"
               onClick={() => clusterMutation.mutate()}
-              disabled={clusterMutation.isPending}
+              disabled={clusterMutation.isPending || aiUnavailable}
+              title={unavailableMessage ?? undefined}
               className="white-pill px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {clusterMutation.isPending ? (
@@ -287,6 +296,13 @@ export default function PeoplePage() {
             </button>
           </div>
         </div>
+
+        {aiUnavailable && (
+          <div className="mb-6 rounded-2xl border border-[color:var(--frost)] bg-[color:var(--surface-soft)] px-5 py-4 text-sm text-[color:var(--silver)]">
+            Face detection is not included in this build. Photos still import
+            normally; enable a local AI profile in Settings to group people.
+          </div>
+        )}
 
         {/* Loading state rendering layout */}
         {isLoading && (
@@ -317,7 +333,8 @@ export default function PeoplePage() {
             <button
               type="button"
               onClick={() => clusterMutation.mutate()}
-              disabled={clusterMutation.isPending}
+              disabled={clusterMutation.isPending || aiUnavailable}
+              title={unavailableMessage ?? undefined}
               className="white-pill px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" />
@@ -348,8 +365,12 @@ export default function PeoplePage() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {people.map((person) => (
+            <VirtualizedGrid
+              items={people}
+              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              estimateRowHeight={360}
+              getKey={(person) => person.id}
+              renderItem={(person) => (
                 <PersonCard
                   key={person.id}
                   person={person}
@@ -358,8 +379,8 @@ export default function PeoplePage() {
                     queryClient.invalidateQueries({ queryKey: ["people"] })
                   }
                 />
-              ))}
-            </div>
+              )}
+            />
           </div>
         )}
       </div>
@@ -406,7 +427,10 @@ export default function PeoplePage() {
               )}
             </div>
 
-            <div className="max-h-[calc(90dvh-76px)] overflow-y-auto bg-[hsl(var(--background))] p-6">
+            <div
+              ref={personTimelineScrollRef}
+              className="max-h-[calc(90dvh-76px)] overflow-y-auto bg-[hsl(var(--background))] p-6"
+            >
               {selectedPersonQuery.isLoading && (
                 <div className="flex items-center justify-center py-24">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -420,76 +444,49 @@ export default function PeoplePage() {
               )}
 
               {selectedPersonQuery.data && (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                  {selectedPersonQuery.data.images.map((img) => {
+                <TimelineMediaView
+                  items={selectedPersonQuery.data.images}
+                  scrollContainerRef={personTimelineScrollRef}
+                  getId={(img) => img.media_id}
+                  getDate={() => null}
+                  getThumbnailUrl={(img) =>
+                    resolveMediaUrl(img.thumbnail_url, null, img.media_id, true)
+                  }
+                  getOriginalUrl={(img) =>
+                    `/api/image/${img.media_id}/original`
+                  }
+                  getAlt={(img) => img.filename}
+                  getOpenLabel={(img) => `Preview ${img.filename}`}
+                  onOpenItem={(img) =>
+                    setPreviewMedia({
+                      id: img.media_id,
+                      filename: img.filename,
+                    })
+                  }
+                  renderItemActions={(img) => {
                     const faceIds = img.faces.map((face) => face.id);
-                    const imageSrc = resolveMediaUrl(
-                      img.thumbnail_url,
-                      null,
-                      img.media_id,
-                      true,
-                    );
-
                     return (
-                      <article
-                        key={img.media_id}
-                        className="frost-panel card-hover group overflow-hidden rounded-3xl border border-[var(--frost)]"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedPersonId === null) return;
+                          wrongPersonMutation.mutate({
+                            personId: selectedPersonId,
+                            faceIds,
+                          });
+                        }}
+                        disabled={
+                          faceIds.length === 0 || wrongPersonMutation.isPending
+                        }
+                        className="frost-button px-3 py-2 text-xs font-medium disabled:opacity-50"
                       >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPreviewMedia({
-                              id: img.media_id,
-                              filename: img.filename,
-                            })
-                          }
-                          className="block w-full text-left"
-                          aria-label={`Preview ${img.filename}`}
-                        >
-                          <div className="relative aspect-square overflow-hidden bg-[color:var(--surface-soft)]">
-                            {imageSrc ? (
-                              <Image
-                                src={imageSrc}
-                                alt={img.filename}
-                                fill
-                                className="object-cover transition-transform duration-300 group-hover:scale-105"
-                                sizes="(max-width: 768px) 50vw, 25vw"
-                                unoptimized
-                              />
-                            ) : null}
-                          </div>
-                        </button>
-                        <div className="space-y-3 border-t border-[var(--frost-soft)] bg-[color:var(--surface-soft)] p-3">
-                          <p className="text-xs text-[color:var(--silver)]">
-                            {img.faces.length}{" "}
-                            {img.faces.length === 1 ? "face" : "faces"} detected
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (selectedPersonId === null) {
-                                return;
-                              }
-                              wrongPersonMutation.mutate({
-                                personId: selectedPersonId,
-                                faceIds,
-                              });
-                            }}
-                            disabled={
-                              faceIds.length === 0 ||
-                              wrongPersonMutation.isPending
-                            }
-                            className="frost-button w-full justify-center px-3 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {wrongPersonMutation.isPending
-                              ? "Saving..."
-                              : "Wrong person"}
-                          </button>
-                        </div>
-                      </article>
+                        {wrongPersonMutation.isPending
+                          ? "Saving…"
+                          : "Wrong person"}
+                      </button>
                     );
-                  })}
-                </div>
+                  }}
+                />
               )}
             </div>
           </div>

@@ -5,12 +5,13 @@ Object detection using Ultralytics YOLO
 from ultralytics import YOLO
 from PIL import Image
 import numpy as np
-import torch
 from typing import List, Dict, Union
 import logging
 
 from find_api.core.config import settings
+from find_api.core.hardware import current_torch_device
 from find_api.core.model_manager import get_model_manager
+from find_api.core.runtime_profile import current_accel_mode
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,9 @@ class ObjectDetector:
         """Loader function for ModelManager"""
         logger.info(f"Loading YOLO model: {settings.YOLO_MODEL}")
         model = YOLO(settings.YOLO_MODEL)  # Auto-downloads from Ultralytics
-        if settings.USE_GPU:
-            model.to("cuda")
+        device = current_torch_device()
+        if device != "cpu":
+            model.to(device)
         return model
 
     def detect(
@@ -39,7 +41,7 @@ class ObjectDetector:
         """
         try:
             config_key = (
-                f"model={settings.YOLO_MODEL}|gpu={settings.USE_GPU}|"
+                f"model={settings.YOLO_MODEL}|accel={current_accel_mode()}|"
                 f"half={settings.YOLO_HALF}"
             )
             with self.manager.use_model(
@@ -52,12 +54,13 @@ class ObjectDetector:
                 # the async lock here without an event loop.
                 # For now, we rely on the single-worker architecture for serialization.
 
-                use_cuda = settings.USE_GPU and torch.cuda.is_available()
+                device = current_torch_device()
+                use_cuda = device == "cuda"
                 results = model(
                     image,
                     conf=conf_threshold,
                     verbose=False,
-                    device=0 if use_cuda else None,
+                    device=0 if use_cuda else (device if device != "cpu" else None),
                     half=use_cuda and settings.YOLO_HALF,
                 )
 

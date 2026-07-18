@@ -3,8 +3,7 @@ Database configuration and session management
 """
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from find_api.core.config import settings
 import logging
 
@@ -39,8 +38,22 @@ def init_db():
     """
     try:
         # Import all models to register them for metadata creation
-        from find_api.models import media, cluster, face, person, feedback  # noqa: F401
-        from find_api.models import user, session, invite, join_request  # noqa: F401
+        from find_api.models import (  # noqa: F401
+            album,
+            app_setting,
+            cluster,
+            face,
+            feedback,
+            invite,
+            join_request,
+            media,
+            partner_share,
+            person,
+            session,
+            shared_link,
+            user,
+            vault,
+        )
 
         # pgvector must exist before SQLAlchemy creates vector columns.
         if engine.dialect.name == "postgresql":
@@ -63,6 +76,36 @@ def init_db():
                     text(
                         "ALTER TABLE IF EXISTS media "
                         "ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT false"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS vault_state VARCHAR(32) NOT NULL DEFAULT 'visible'"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMP WITH TIME ZONE"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS encrypted_at TIMESTAMP WITH TIME ZONE"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE"
                     )
                 )
                 conn.execute(
@@ -99,6 +142,18 @@ def init_db():
                     text(
                         "ALTER TABLE IF EXISTS media "
                         "ADD COLUMN IF NOT EXISTS thumbnail_height INTEGER"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION"
                     )
                 )
                 conn.execute(
@@ -187,13 +242,57 @@ def init_db():
                 )
                 conn.execute(
                     text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_vault_state "
+                        "ON media (vault_state)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_is_archived "
+                        "ON media (is_archived)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_deleted_at "
+                        "ON media (deleted_at)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_latitude "
+                        "ON media (latitude)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_longitude "
+                        "ON media (longitude)"
+                    )
+                )
+                conn.execute(
+                    text(
                         "CREATE TABLE IF NOT EXISTS vault_config ("
                         "id INTEGER PRIMARY KEY CHECK (id = 1), "
                         "salt BYTEA NOT NULL, "
                         "verifier_nonce BYTEA NOT NULL, "
                         "verifier_ciphertext BYTEA NOT NULL, "
+                        "recovery_code_hash VARCHAR(255), "
+                        "storage_mode VARCHAR(32) NOT NULL DEFAULT 'protected', "
                         "created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()"
                         ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_config "
+                        "ADD COLUMN IF NOT EXISTS recovery_code_hash VARCHAR(255)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_config "
+                        "ADD COLUMN IF NOT EXISTS storage_mode VARCHAR(32) NOT NULL DEFAULT 'protected'"
                     )
                 )
                 conn.execute(
@@ -202,13 +301,53 @@ def init_db():
                         "media_id INTEGER PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE, "
                         "encrypted_path TEXT NOT NULL, "
                         "iv BYTEA NOT NULL, "
+                        "encryption_algorithm VARCHAR(64) NOT NULL DEFAULT 'AES-256-GCM', "
+                        "key_derivation VARCHAR(128), "
+                        "ciphertext_size INTEGER, "
                         "created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()"
                         ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_metadata "
+                        "ADD COLUMN IF NOT EXISTS encryption_algorithm VARCHAR(64) NOT NULL DEFAULT 'AES-256-GCM'"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_metadata "
+                        "ADD COLUMN IF NOT EXISTS key_derivation VARCHAR(128)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_metadata "
+                        "ADD COLUMN IF NOT EXISTS ciphertext_size INTEGER"
                     )
                 )
                 conn.execute(text("UPDATE media SET liked = false WHERE liked IS NULL"))
                 conn.execute(
                     text("UPDATE media SET is_hidden = false WHERE is_hidden IS NULL")
+                )
+                conn.execute(
+                    text(
+                        "UPDATE media SET vault_state = CASE "
+                        "WHEN is_hidden THEN 'hidden_encrypted' "
+                        "ELSE 'visible' END "
+                    )
+                )
+                conn.execute(
+                    text(
+                        "UPDATE media SET hidden_at = created_at "
+                        "WHERE is_hidden = true AND hidden_at IS NULL"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "UPDATE media SET encrypted_at = hidden_at "
+                        "WHERE is_hidden = true AND encrypted_at IS NULL"
+                    )
                 )
                 conn.execute(
                     text(

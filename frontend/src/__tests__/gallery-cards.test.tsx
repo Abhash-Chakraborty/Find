@@ -51,8 +51,9 @@ describe("Gallery card states (light mode)", () => {
     // Mock getGallery to return a promise that never resolves immediately
     vi.mocked(api.getGallery).mockImplementation(() => new Promise(() => {}));
     renderWithClient(<GalleryPage />);
-    // The loading spinner is an SVG with class containing 'loader-circle'
-    const loader = document.querySelector(".lucide-loader-circle");
+    // Initial loading now renders an accessible skeleton grid (role=status)
+    // rather than a single spinner icon.
+    const loader = screen.getByRole("status", { name: /loading gallery/i });
     expect(loader).toBeInTheDocument();
   });
 
@@ -199,6 +200,57 @@ describe("Gallery card states (light mode)", () => {
 
     await waitFor(() => {
       expect(api.deleteImagesBulk).toHaveBeenCalledWith([1, 2]);
+    });
+  });
+
+  it("can archive selected gallery cards", async () => {
+    vi.mocked(api.getGallery).mockResolvedValue({
+      items: mockItems,
+      total: 3,
+      page: 1,
+      limit: 24,
+    });
+    vi.mocked(api.setArchive).mockResolvedValue({ id: 1, is_archived: true });
+
+    renderWithClient(<GalleryPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select image1.jpg")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText("Select image1.jpg"));
+    fireEvent.click(screen.getByLabelText("Select image2.jpg"));
+    fireEvent.click(screen.getByRole("button", { name: /archive/i }));
+
+    await waitFor(() => {
+      expect(api.setArchive).toHaveBeenCalledWith(1, true);
+      expect(api.setArchive).toHaveBeenCalledWith(2, true);
+    });
+  });
+
+  it("can move selected gallery cards to trash", async () => {
+    vi.mocked(api.getGallery).mockResolvedValue({
+      items: mockItems,
+      total: 3,
+      page: 1,
+      limit: 24,
+    });
+    vi.mocked(api.trashImage).mockResolvedValue({
+      id: 1,
+      deleted_at: "2026-06-29T00:00:00+00:00",
+    });
+
+    renderWithClient(<GalleryPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select image1.jpg")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText("Select image1.jpg"));
+    fireEvent.click(screen.getByRole("button", { name: /move to trash/i }));
+
+    await waitFor(() => {
+      expect(api.trashImage).toHaveBeenCalledWith(1);
     });
   });
 });

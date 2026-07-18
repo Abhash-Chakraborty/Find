@@ -92,6 +92,25 @@ class TestOCRExtractor:
             assert "y2" in bbox
             assert all(isinstance(v, (int, float)) for v in bbox.values())
 
+    def test_extract_text_and_boxes_runs_inference_once(
+        self, ocr_extractor, simple_image, monkeypatch
+    ):
+        """The combined method should run the OCR model a single time."""
+        calls = {"count": 0}
+        original_run = ocr_extractor._run_ocr
+
+        def _counting_run(ocr, image):
+            calls["count"] += 1
+            return original_run(ocr, image)
+
+        monkeypatch.setattr(ocr_extractor, "_run_ocr", _counting_run)
+
+        text, blocks = ocr_extractor.extract_text_and_boxes(simple_image)
+
+        assert calls["count"] == 1
+        assert isinstance(text, str)
+        assert isinstance(blocks, list)
+
     @pytest.mark.slow
     def test_paddleocr_api_compatibility(self, ocr_extractor, image_with_text):
         """Test that the supported PaddleOCR stack is usable through the public API.

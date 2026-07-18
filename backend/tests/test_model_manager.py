@@ -155,6 +155,9 @@ def test_unavailable_stage_records_safe_metadata_and_continues(monkeypatch):
         def extract_text_with_boxes(self, _image):
             return []
 
+        def extract_text_and_boxes(self, _image):
+            return "detected text", []
+
     object_detector_module.get_object_detector = lambda: BrokenDetector()
     captioner_module.get_image_captioner = lambda: Captioner()
     ocr_module.get_ocr_extractor = lambda: OcrExtractor()
@@ -164,6 +167,7 @@ def test_unavailable_stage_records_safe_metadata_and_continues(monkeypatch):
     )
     monkeypatch.setitem(sys.modules, "find_api.ml.captioner", captioner_module)
     monkeypatch.setitem(sys.modules, "find_api.ml.ocr", ocr_module)
+    monkeypatch.setattr("find_api.workers.processors.current_ml_mode", lambda: "full")
 
     metadata = extract_image_metadata(Image.new("RGB", (8, 8)))
 

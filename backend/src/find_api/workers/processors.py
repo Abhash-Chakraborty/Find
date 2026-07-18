@@ -9,8 +9,8 @@ from typing import Any, Dict, List
 import numpy as np
 from PIL import Image
 
-from find_api.core.config import settings
 from find_api.core.model_manager import ModelUnavailableError
+from find_api.core.runtime_profile import current_ml_mode
 from find_api.ml.mock_embedder import get_mock_embedder
 from find_api.utils.errors import sanitize_error
 
@@ -79,10 +79,17 @@ def _remote_embed_image(image: Image.Image, metadata: Dict[str, Any]) -> List[fl
 # Existing helpers
 # ---------------------------------------------------------------------------
 
-def _safe_normalize_embedding(vector: np.ndarray, *, fallback: np.ndarray | None = None) -> np.ndarray:
+def _safe_normalize_embedding(
+    vector: np.ndarray,
+    *,
+    fallback: np.ndarray | None = None,
+) -> np.ndarray:
     """Return a finite normalized embedding or a finite fallback vector."""
     clean_vector = np.nan_to_num(
-        np.asarray(vector, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0,
+        np.asarray(vector, dtype=np.float32),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
     )
     norm = np.linalg.norm(clean_vector)
 
@@ -93,6 +100,7 @@ def _safe_normalize_embedding(vector: np.ndarray, *, fallback: np.ndarray | None
         return _safe_normalize_embedding(fallback)
 
     return np.zeros_like(clean_vector, dtype=np.float32)
+
 
 def _record_stage_error(metadata: Dict[str, Any], stage: str, error: Exception) -> None:
     """Store a safe, user-facing stage failure without stack traces."""
@@ -110,9 +118,13 @@ def extract_image_metadata(
     image: Image.Image,
     on_stage: Callable[[str], None] | None = None,
 ) -> Dict[str, Any]:
-    """Run all ML models to extract metadata from image."""
+    """
+    Run all ML models to extract metadata from image
+    """
+    mode = current_ml_mode()
+    
     # ---- Mock mode ----
-    if settings.ML_MODE.lower() == "mock":
+    if mode == "mock":
         if on_stage:
             on_stage("generating mock metadata")
         return {
@@ -128,12 +140,16 @@ def extract_image_metadata(
                 "embedding": {"status": "pending", "error": None},
             },
         }
-
+        
     # ---- Remote mode ----
-    if settings.ML_MODE.lower() == "remote":
+    if mode == "remote":
         if on_stage:
             on_stage("sending to remote ML server")
         return _remote_analyze_image(image)
+
+    # Protect local execution
+    if mode != "full":
+        raise RuntimeError(f"AI metadata extraction is unavailable in mode '{mode}'.")
 
     # ---- Full / local mode ----
     metadata: Dict[str, Any] = {
@@ -162,7 +178,6 @@ def extract_image_metadata(
         caption = get_image_captioner().generate_caption(image)
         metadata["caption"] = caption
         metadata["stage_status"]["captioning"] = {"status": "success", "error": None}
-        metadata["stage_status"]["captioning"] = {"status": "success", "error": None}
     except Exception as e:
         metadata["caption"] = ""
         _record_stage_error(metadata, "caption", e)
@@ -172,8 +187,9 @@ def extract_image_metadata(
         if on_stage: on_stage("running OCR")
         from find_api.ml.ocr import get_ocr_extractor
         ocr = get_ocr_extractor()
-        metadata["ocr_text"] = ocr.extract_text(image)
-        metadata["text_blocks"] = ocr.extract_text_with_boxes(image)
+        ocr_text, text_blocks = ocr.extract_text_and_boxes(image)
+        metadata["ocr_text"] = ocr_text
+        metadata["text_blocks"] = text_blocks
         metadata["stage_status"]["ocr"] = {"status": "success", "error": None}
     except Exception as e:
         metadata["ocr_text"] = ""
@@ -183,22 +199,46 @@ def extract_image_metadata(
 
     return metadata
 
-def generate_hybrid_embedding(image: Image.Image, metadata: Dict[str, Any]) -> List[float]:
-    """Generate hybrid embedding from image, caption, detected objects, and OCR text."""
-    # ---- Mock mode ----
-    if settings.ML_MODE.lower() == "mock":
-        return get_mock_embedder().embed_metadata(image, metadata)
 
+def generate_hybrid_embedding(
+    image: Image.Image, metadata: Dict[str, Any]
+) -> List[float]:
+    """
+    Generate hybrid embedding from image, caption, detected objects, and OCR text.
+
+        Weighted average depends on which text signals are present:
+      - image + caption + objects  →  equal thirds  (1/3 each)
+      - image + caption only       →  halves         (1/2 each)
+      - image + objects only       →  halves         (1/2 each)
+      - image only                 →  image vector directly
+
+        When OCR text is present, we apply OCR-aware weights and normalise them
+        across active signals to prioritize text relevance for document-like images.
+    """
+    mode = current_ml_mode()
+    
+    # ---- Mock mode ----
+    if mode == "mock":
+        logger.info("Using mock embedding generator")
+        return get_mock_embedder().embed_metadata(image, metadata)
+        
     # ---- Remote mode ----
-    if settings.ML_MODE.lower() == "remote":
+    if mode == "remote":
         return _remote_embed_image(image, metadata)
+
+    # Protect local execution
+    if mode != "full":
+        raise RuntimeError(f"AI embedding generation is unavailable in mode '{mode}'.")
 
     # ---- Full / local mode ----
     try:
         from find_api.ml.clip_embedder import get_clip_embedder
         embedder = get_clip_embedder()
 
+        # --- 1. Image vector (always computed) ---
         image_embedding = _safe_normalize_embedding(embedder.embed_image(image))
+
+        # --- 2. Build text signals — only non-empty strings qualify ---
         caption = (metadata.get("caption") or "").strip()
 
         raw_objects = metadata.get("objects") or []
@@ -225,9 +265,12 @@ def generate_hybrid_embedding(image: Image.Image, metadata: Dict[str, Any]) -> L
 
         if text_inputs:
             if len(text_inputs) == 1:
-                signal_vectors[text_signal_names[0]] = _safe_normalize_embedding(embedder.embed_text(text_inputs[0]))
+                signal_vectors[text_signal_names[0]] = _safe_normalize_embedding(
+                    embedder.embed_text(text_inputs[0])
+                )
             else:
-                for name, vec in zip(text_signal_names, embedder.embed_text(text_inputs)):
+                text_embeddings = embedder.embed_text(text_inputs)
+                for name, vec in zip(text_signal_names, text_embeddings):
                     signal_vectors[name] = _safe_normalize_embedding(vec)
 
         active_signals = list(signal_vectors.keys())
@@ -239,12 +282,27 @@ def generate_hybrid_embedding(image: Image.Image, metadata: Dict[str, Any]) -> L
             else:
                 hybrid_vector = image_embedding
         else:
-            hybrid_vector = sum(signal_vectors.values()) / len(signal_vectors)
+            # Preserve prior behavior for non-OCR assets.
+            n = len(signal_vectors)
+            hybrid_vector = sum(signal_vectors.values()) / n
 
-        return _safe_normalize_embedding(hybrid_vector, fallback=image_embedding).tolist()
+        hybrid_vector = _safe_normalize_embedding(
+            hybrid_vector,
+            fallback=image_embedding,
+        )
+
+        logger.info(
+            "Hybrid embedding generated (signals=%d: %s, ocr_weighting=%s)",
+            len(active_signals),
+            active_signals,
+            has_ocr,
+        )
+        return hybrid_vector.tolist()
+
     except Exception:
         logger.exception("CLIP embedding failed")
         raise
+
 
 def has_person_object(metadata: Dict[str, Any]) -> bool:
     """Return true when object detection found a person-like object."""
@@ -254,11 +312,15 @@ def has_person_object(metadata: Dict[str, Any]) -> bool:
         if label in PERSON_OBJECT_LABELS: return True
     return False
 
+
 def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
     """Detect faces in image and store them in the database."""
     from find_api.models.face import Face
 
-    if settings.ML_MODE.lower() in ("mock", "remote"):
+    # Mock mode / Remote mode - skip face detection entirely
+    # This keeps light/mock/remote mode working without downloading face models
+    if current_ml_mode() != "full":
+        logger.info("Non-full AI mode: skipping face detection for media %s", media_id)
         return 0
 
     try:

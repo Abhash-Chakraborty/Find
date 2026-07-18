@@ -1,0 +1,49 @@
+name: Promote canary to main
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: Optional promotion PR title
+        required: false
+        default: "release: promote canary to main"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  promotion:
+    name: Open audited promotion PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
+    steps:
+      - name: Require the release automation token
+        shell: bash
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "Add RELEASE_PR_TOKEN before using automated promotions." >&2
+            exit 1
+          fi
+
+      - name: Create or report promotion PR
+        shell: bash
+        env:
+          TITLE: ${{ inputs.title }}
+        run: |
+          existing="$(gh pr list --repo "${GITHUB_REPOSITORY}" --base main --head canary --state open --json url --jq '.[0].url // empty')"
+          if [ -n "${existing}" ]; then
+            echo "Promotion PR already open: ${existing}"
+            exit 0
+          fi
+          gh pr create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --base main \
+            --head canary \
+            --title "${TITLE}" \
+            --label promotion \
+            --body "Maintainer-controlled promotion from the tested canary branch. Only reviewed changes intended for the next production release should be included. Merging starts the three-hour release quiet period."

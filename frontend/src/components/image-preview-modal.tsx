@@ -9,6 +9,7 @@ import {
   Download,
   Heart,
   ImageOff,
+  Info,
   Loader2,
   RotateCcw,
   Trash2,
@@ -16,7 +17,14 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import {
   type AnalysisStageName,
@@ -35,6 +43,7 @@ import {
   MINIO_URL_STALE_TIME_MS,
   resolveMediaUrl,
 } from "@/lib/media";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { formatBytes, formatDate } from "@/lib/utils";
 import { StatusIndicator } from "./status-indicator";
 
@@ -67,6 +76,10 @@ type ImagePreviewModalProps = {
   onNext?: () => void;
   hasPrevious?: boolean;
   hasNext?: boolean;
+  /** Context actions such as Archive, Restore, or Remove from album. */
+  actions?: React.ReactNode;
+  /** Keep the viewer addressable at /image/:id while it is open. */
+  syncUrl?: boolean;
 };
 
 const ANALYSIS_STAGE_ORDER: AnalysisStageName[] = [
@@ -214,12 +227,45 @@ export function ImagePreviewModal({
   onNext,
   hasPrevious = false,
   hasNext = false,
+  actions,
+  syncUrl = true,
 }: ImagePreviewModalProps) {
   const queryClient = useQueryClient();
   const [likedOverride, setLikedOverride] = useState<boolean | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [captionCopied, setCaptionCopied] = useState(false);
   const [ocrCopied, setOcrCopied] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const returnUrlRef = useRef<string | null>(null);
+
+  useBodyScrollLock();
+
+  useEffect(() => {
+    if (!syncUrl || typeof window === "undefined") return;
+
+    returnUrlRef.current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    return () => {
+      if (window.location.pathname.startsWith("/image/")) {
+        window.history.replaceState(
+          window.history.state,
+          "",
+          returnUrlRef.current ?? "/timeline",
+        );
+      }
+    };
+  }, [syncUrl]);
+
+  useEffect(() => {
+    if (!syncUrl || !returnUrlRef.current || typeof window === "undefined") {
+      return;
+    }
+    const returnTo = encodeURIComponent(returnUrlRef.current);
+    window.history.replaceState(
+      { ...window.history.state, findImageViewer: true },
+      "",
+      `/image/${media.id}?return=${returnTo}`,
+    );
+  }, [media.id, syncUrl]);
 
   useEffect(() => {
     if (!captionCopied) return;
@@ -367,24 +413,19 @@ export function ImagePreviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex h-dvh w-full items-center justify-center bg-black/75 p-2 backdrop-blur-2xl md:p-4"
+      className="fixed inset-0 z-[100] h-dvh w-full bg-black"
       role="presentation"
     >
-      <button
-        type="button"
-        className="absolute inset-0 h-full w-full cursor-default"
-        onClick={onClose}
-        aria-label="Close detail view"
-      />
       <div
-        className="frost-panel page-enter relative grid h-[calc(100dvh-1rem)] w-full max-w-7xl grid-rows-[minmax(0,1fr)_minmax(320px,42dvh)] overflow-hidden rounded-3xl bg-[color:var(--void)] md:h-[calc(100dvh-2rem)] md:grid-cols-[minmax(0,1fr)_minmax(380px,430px)] md:grid-rows-1"
+        data-testid="image-preview-modal"
+        className="page-enter relative h-dvh w-full overflow-hidden bg-black"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Image details"
       >
-        <div className="relative min-h-0 bg-[color:var(--image-stage)]">
+        <div className="absolute inset-0 bg-[color:var(--image-stage)]">
           {isDetailLoading ? (
             <div className="flex h-full w-full items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-[color:var(--silver)]" />
@@ -394,8 +435,8 @@ export function ImagePreviewModal({
               src={imageSrc}
               alt={media.filename}
               fill
-              className="object-contain p-3 md:p-6"
-              sizes="(max-width: 1024px) 100vw, 72vw"
+              className="object-contain"
+              sizes="100vw"
               unoptimized
             />
           ) : (
@@ -441,9 +482,63 @@ export function ImagePreviewModal({
               {media.filename}
             </p>
           </div>
+
+          <div className="absolute right-4 top-4 z-30 flex gap-2">
+            <button
+              type="button"
+              data-testid="preview-details-toggle"
+              onClick={() => setDetailsOpen((current) => !current)}
+              className="icon-button bg-black/60 text-white backdrop-blur-md"
+              aria-label={
+                detailsOpen ? "Hide image details" : "Show image details"
+              }
+              aria-expanded={detailsOpen}
+            >
+              <Info className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="icon-button bg-black/60 text-white backdrop-blur-md"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="absolute left-4 top-4 z-30 flex gap-2">
+            <button
+              type="button"
+              onClick={() => likeMutation.mutate(media.id)}
+              disabled={likeMutation.isPending}
+              className="icon-button bg-black/60 text-white backdrop-blur-md"
+              aria-label={detailLiked ? "Unlike image" : "Like image"}
+              aria-pressed={detailLiked}
+            >
+              <Heart
+                className={`h-5 w-5 ${detailLiked ? "fill-current" : ""}`}
+              />
+            </button>
+            {downloadUrl && (
+              <a
+                href={downloadUrl}
+                download={media.filename}
+                rel="noopener noreferrer"
+                className="icon-button bg-black/60 text-white backdrop-blur-md"
+                aria-label="Download image"
+              >
+                <Download className="h-5 w-5" />
+              </a>
+            )}
+          </div>
         </div>
 
-        <aside className="flex min-h-0 flex-col border-t border-[var(--frost)] bg-[color:var(--overlay-strong)] md:border-l md:border-t-0">
+        <aside
+          inert={!detailsOpen}
+          aria-hidden={!detailsOpen}
+          className={`absolute bottom-0 right-0 top-0 z-20 flex w-full max-w-[430px] flex-col border-l border-[var(--frost)] bg-[color:var(--overlay-strong)] shadow-2xl backdrop-blur-2xl transition-transform duration-300 ${
+            detailsOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+        >
           <div className="flex items-start justify-between gap-4 border-b border-[var(--frost)] px-5 py-5 md:px-6">
             <div className="min-w-0">
               <div className="mb-3 flex items-center gap-2">
@@ -820,6 +915,7 @@ export function ImagePreviewModal({
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
+                {actions}
                 {(status === "failed" ||
                   (status === "indexed" && !caption)) && (
                   <button

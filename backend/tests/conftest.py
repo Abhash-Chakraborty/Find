@@ -27,6 +27,10 @@ for p in _patches:
 
 from fastapi.testclient import TestClient  # noqa: E402
 from find_api.core.database import Base, get_db  # noqa: E402
+from find_api.core.dependencies import (  # noqa: E402
+    get_admin_user,
+    get_required_user,
+)
 from find_api.main import app  # noqa: E402
 
 
@@ -84,6 +88,13 @@ def client(db):
 
     original_lifespan = app.router.lifespan_context
     app.dependency_overrides[get_db] = _override_db
+    # Default tests run in local (single-user) mode: no admin exists, so the
+    # auth dependencies are permissive. Overriding them here keeps that
+    # behavior even when a test injects a mock/partial DB (where the real
+    # is_shared_mode() query would misfire). test_auth.py opts back into the
+    # real dependencies via its own fixture.
+    app.dependency_overrides[get_required_user] = lambda: None
+    app.dependency_overrides[get_admin_user] = lambda: None
     app.router.lifespan_context = _noop_lifespan
 
     fake_job = MagicMock(id="test-job-123")

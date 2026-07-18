@@ -204,7 +204,7 @@ The roadmap should be broken into implementation issues after this architecture 
 
 - Desktop shell bootstrap and sidecar lifecycle management.
 - Local data-store replacement plan.
-- Model cache and first-run download UX.
+- [Model cache and first-run download UX](./model-cache-design.md)
 - Mobile PWA installability and pairing flow.
 - Remote-acceleration trust model and settings UI.
 

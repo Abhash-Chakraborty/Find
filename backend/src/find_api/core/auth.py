@@ -30,6 +30,27 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
+# Precomputed bcrypt hash of a random throwaway secret. Used to spend the
+# same CPU cost as a real password check when the username does not exist,
+# so login timing does not reveal whether an account is present.
+_DUMMY_PASSWORD_HASH = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode(
+    "utf-8"
+)
+
+
+def verify_password_constant_time(plain: str, hashed: Optional[str]) -> bool:
+    """Verify a password, always doing bcrypt work even when no hash exists.
+
+    Pass ``None`` (or an empty hash) when the user was not found: a dummy
+    hash is verified instead and the result is always False, keeping the
+    response time indistinguishable from a wrong-password attempt.
+    """
+    if not hashed:
+        bcrypt.checkpw(plain.encode("utf-8"), _DUMMY_PASSWORD_HASH.encode("utf-8"))
+        return False
+    return verify_password(plain, hashed)
+
+
 def hash_token(raw: str) -> str:
     """Return the SHA-256 hex digest of a raw token string.
 

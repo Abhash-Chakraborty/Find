@@ -18,19 +18,35 @@ def _load_migrate_db():
     fake_config_mod = types.ModuleType("find_api.core.config")
     fake_config_mod.settings = fake_settings
 
+    # Temporarily shim find_api.core.config so migrate_db imports the fake
+    # settings during exec. CRITICAL: restore the original sys.modules entries
+    # afterward — this runs at import/collection time, and leaving the fake in
+    # place pollutes every later test module that imports the real `Settings`
+    # (manifested as "cannot import name 'Settings' (unknown location)").
+    keys = ("find_api", "find_api.core", "find_api.core.config")
+    saved = {k: sys.modules.get(k) for k in keys}
+
     sys.modules.setdefault("find_api", types.ModuleType("find_api"))
     sys.modules.setdefault("find_api.core", types.ModuleType("find_api.core"))
     sys.modules["find_api.core.config"] = fake_config_mod
 
-    spec = importlib.util.spec_from_file_location(
-        "migrate_db",
-        os.path.join(os.path.dirname(__file__), "..", "migrate_db.py"),
-    )
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "migrate_db",
+            os.path.join(os.path.dirname(__file__), "..", "migrate_db.py"),
+        )
+        assert spec is not None
+        assert spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    finally:
+        # Restore real modules (or remove the shim if there was none).
+        for key, original in saved.items():
+            if original is None:
+                sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = original
 
 
 _mod = _load_migrate_db()

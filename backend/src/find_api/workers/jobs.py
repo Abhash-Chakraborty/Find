@@ -5,19 +5,32 @@ Background worker jobs for image processing
 from PIL import Image
 import io
 import logging
-from datetime import datetime
-import numpy as np
+from datetime import datetime, timezone
 from rq import get_current_job
 
 from find_api.core.database import SessionLocal
-from find_api.core.queue import clear_clustering_job_state, enqueue_clustering_job
+from find_api.core.queue import (
+    clear_clustering_job_state,
+    clear_feedback_ranking_job_state,
+    enqueue_clustering_job,
+)
 from find_api.core.storage import get_file, upload_thumbnail
 from find_api.core.model_manager import get_model_manager
+from find_api.core.runtime_profile import (
+    RuntimeUnavailableError,
+    bind_runtime,
+    load_runtime_preferences,
+    reset_runtime,
+    resolve_runtime,
+)
 from find_api.core.config import settings
 from find_api.models.media import Media
 from find_api.services.query_cache import invalidate_query_cache
-from find_api.utils.exif import extract_exif_data
+from find_api.utils.exif import extract_exif_data, extract_gps_coordinates
 from find_api.utils.errors import sanitize_error
+
+from sqlalchemy import func
+from find_api.models.feedback import GeneralFeedback
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +44,41 @@ except Exception as e:
     logger.error(f"Failed to start model cleanup thread in worker: {e}")
 
 FACE_CLUSTER_NAME_MATCH_THRESHOLD = 0.72
-ANALYSIS_MODEL_NAMES = ("yolo", "florence-2", "paddleocr", "siglip", "insightface")
+ANALYSIS_MODEL_NAMES = ("yolo", "captioner", "paddleocr", "siglip", "insightface")
 
 
-def cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
+def _begin_worker_runtime(db):
+    """Bind and publish one persisted runtime snapshot for a worker job."""
+    resolution = resolve_runtime(load_runtime_preferences(db))
+    tokens = bind_runtime(resolution)
+    get_model_manager().set_runtime_status(
+        resolution.to_worker_status(source="database")
+    )
+    return resolution, tokens
+
+
+def _metadata_only_payload(profile: str) -> dict:
+    skipped = {"status": "skipped", "error": None}
+    return {
+        "caption": "",
+        "objects": [],
+        "ocr_text": "",
+        "text_blocks": [],
+        "ai_disabled": True,
+        "runtime_profile": profile,
+        "stage_status": {
+            "object_detection": skipped.copy(),
+            "captioning": skipped.copy(),
+            "ocr": skipped.copy(),
+            "embedding": skipped.copy(),
+        },
+    }
+
+
+def cosine_similarity(left, right) -> float:
     """Return cosine similarity for two vectors, guarding empty norms."""
+    import numpy as np
+
     left_norm = np.linalg.norm(left)
     right_norm = np.linalg.norm(right)
     if left_norm == 0 or right_norm == 0:
@@ -96,16 +139,12 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
     Main worker job to analyze an uploaded image
     """
 
-    from find_api.workers.processors import (
-        extract_image_metadata,
-        generate_hybrid_embedding,
-    )
-
     job = get_current_job()
 
     db = SessionLocal()
     media = None
     metadata = None
+    runtime_tokens = None
 
     try:
         if clear_model_failures:
@@ -117,6 +156,10 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
         if not media:
             logger.error(f"Media {media_id} not found")
             return
+
+        runtime, runtime_tokens = _begin_worker_runtime(db)
+        if runtime.applied_mode == "unavailable":
+            raise RuntimeUnavailableError(runtime)
 
         media.status = "processing"
         db.commit()
@@ -139,42 +182,66 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
         set_stage(job, "extracting EXIF")
 
         try:
-            exif_data = extract_exif_data(image)
+            exif_data = extract_exif_data(image, include_gps=runtime.map_enabled)
             media.exif_json = exif_data
+            coordinates = (
+                extract_gps_coordinates(image) if runtime.map_enabled else None
+            )
+            media.latitude = coordinates[0] if coordinates else None
+            media.longitude = coordinates[1] if coordinates else None
         except Exception as e:
             logger.warning(f"Failed to extract EXIF: {e}")
             media.exif_json = {}
 
-        metadata = extract_image_metadata(
-            image,
-            on_stage=lambda stage: set_stage(job, stage),
-        )
+        if runtime.applied_mode == "disabled":
+            set_stage(job, "indexing metadata only")
+            metadata = _metadata_only_payload(runtime.build_profile)
+            media.vector = None
+        else:
+            from find_api.workers.processors import (
+                extract_image_metadata,
+                generate_hybrid_embedding,
+            )
 
-        set_stage(job, "generating embedding")
+            metadata = extract_image_metadata(
+                image,
+                on_stage=lambda stage: set_stage(job, stage),
+            )
 
-        try:
-            media.vector = generate_hybrid_embedding(image, metadata)
-            if "stage_status" in metadata:
-                metadata["stage_status"]["embedding"] = {
-                    "status": "success",
-                    "error": None,
-                }
-        except Exception as e:
-            if "stage_status" in metadata:
-                metadata["stage_status"]["embedding"] = {
-                    "status": "failed",
-                    "error": sanitize_error(e),
-                }
-            raise
+            set_stage(job, "generating embedding")
+
+            try:
+                media.vector = generate_hybrid_embedding(image, metadata)
+                if "stage_status" in metadata:
+                    metadata["stage_status"]["embedding"] = {
+                        "status": "success",
+                        "error": None,
+                    }
+            except Exception as e:
+                if "stage_status" in metadata:
+                    metadata["stage_status"]["embedding"] = {
+                        "status": "failed",
+                        "error": sanitize_error(e),
+                    }
+                raise
 
         set_stage(job, "indexing complete")
 
         media.metadata_json = metadata
         media.status = "indexed"
-        media.processed_at = datetime.utcnow()
+        media.processed_at = datetime.now(timezone.utc)
 
         db.commit()
         invalidate_query_cache()
+
+        if runtime.applied_mode == "disabled":
+            logger.info("Metadata-only processing complete for media %s", media_id)
+            return {
+                "media_id": media_id,
+                "status": "success",
+                "mode": "disabled",
+                "metadata": metadata,
+            }
 
         # near-duplicate detection
         try:
@@ -247,6 +314,8 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
         raise
 
     finally:
+        if runtime_tokens is not None:
+            reset_runtime(runtime_tokens)
         db.close()
 
 
@@ -255,19 +324,36 @@ def cluster_images():
     Background job to cluster all indexed images
     """
 
-    from find_api.ml.clusterer import get_image_clusterer
-    from find_api.models.cluster import Cluster
-    from find_api.core.config import settings
-
     db = SessionLocal()
+    runtime_tokens = None
 
     try:
+        runtime, runtime_tokens = _begin_worker_runtime(db)
+        if runtime.applied_mode == "unavailable":
+            raise RuntimeUnavailableError(runtime)
+        if runtime.applied_mode == "disabled":
+            logger.info("Skipping image clustering because AI is disabled")
+            return {
+                "status": "skipped",
+                "n_clusters": 0,
+                "message": "AI is disabled; clustering was not run",
+            }
+
+        import numpy as np
+
+        from find_api.ml.clusterer import get_image_clusterer
+        from find_api.models.cluster import Cluster
+
         logger.info("Starting clustering job...")
 
         # Step 1: Read data — no DB mutations yet.
         media_rows = (
             db.query(Media.id, Media.vector)
-            .filter(Media.status == "indexed", Media.vector.isnot(None))
+            .filter(
+                Media.status == "indexed",
+                Media.vector.isnot(None),
+                Media.is_hidden.is_(False),
+            )
             .all()
         )
         # Step 2: Validate minimum size BEFORE touching anything.
@@ -366,7 +452,70 @@ def cluster_images():
         raise
 
     finally:
+        if runtime_tokens is not None:
+            reset_runtime(runtime_tokens)
         clear_clustering_job_state()
+        db.close()
+
+
+def process_feedback_ranking():
+    """
+    Background job to compute tiny ranking boosts
+    from accumulated local feedback.
+    """
+
+    db = SessionLocal()
+
+    try:
+        logger.info("Starting feedback ranking update...")
+
+        media_items = db.query(Media).filter(Media.status == "indexed").all()
+
+        feedback_scores = (
+            db.query(
+                GeneralFeedback.media_id,
+                func.avg(GeneralFeedback.rating).label("avg_rating"),
+            )
+            .filter(
+                GeneralFeedback.feedback_type == "search_rating",
+            )
+            .group_by(GeneralFeedback.media_id)
+            .all()
+        )
+
+        score_map = {media_id: avg_rating for media_id, avg_rating in feedback_scores}
+
+        for media in media_items:
+            avg_rating = score_map.get(media.id)
+
+            boost = 0.0
+
+            # tiny boost for liked images
+            if media.liked:
+                boost += 0.02
+
+            # tiny adjustment from ratings
+            if avg_rating is not None:
+                boost += (float(avg_rating) - 3.0) * 0.01
+
+            # keep semantic search dominant
+            boost = max(min(boost, 0.05), -0.05)
+
+            media.ranking_boost = boost
+
+        db.commit()
+
+        logger.info("Feedback ranking update complete")
+
+        return {"status": "success"}
+
+    except Exception as e:
+        logger.error("Feedback ranking failed: %s", e)
+        db.rollback()
+        raise
+
+    finally:
+        clear_feedback_ranking_job_state()
         db.close()
 
 
@@ -381,19 +530,36 @@ def cluster_faces():
     4. Create a Person row for each group
     5. Link each face to its Person group
     """
-    from find_api.ml.clusterer import get_image_clusterer
-    from find_api.models.face import Face
-    from find_api.models.person import Person
-
     db = SessionLocal()
+    runtime_tokens = None
 
     try:
+        runtime, runtime_tokens = _begin_worker_runtime(db)
+        if runtime.applied_mode == "unavailable":
+            raise RuntimeUnavailableError(runtime)
+        if runtime.applied_mode != "full":
+            logger.info("Skipping face clustering in %s mode", runtime.applied_mode)
+            return {
+                "status": "skipped",
+                "n_persons": 0,
+                "message": "Face clustering requires the full AI runtime",
+            }
+
+        import numpy as np
+
+        from find_api.ml.clusterer import get_image_clusterer
+        from find_api.models.face import Face
+        from find_api.models.person import Person
+
         logger.info("Starting face clustering job...")
 
         # Step 1: Load all faces that have embeddings.
         # Check BEFORE changing assignments so names are not lost on no-op runs.
         face_rows = (
-            db.query(Face.id, Face.embedding).filter(Face.embedding.isnot(None)).all()
+            db.query(Face.id, Face.embedding)
+            .join(Media, Media.id == Face.media_id)
+            .filter(Face.embedding.isnot(None), Media.is_hidden.is_(False))
+            .all()
         )
 
         # Need at least 2 faces to cluster
@@ -494,15 +660,15 @@ def cluster_faces():
                 db.flush()
             person_records[label] = person
 
-        # Step 6: Link each face to its Person
-        for face_id, label in zip(face_ids, labels):
-            if int(label) == -1:
-                continue
-            person = person_records[int(label)]
-            db.query(Face).filter(Face.id == face_id).update(
-                {Face.person_id: person.id},
-                synchronize_session=False,
-            )
+        # Step 6: Link each face to its Person in a single bulk write rather
+        # than one UPDATE round-trip per face.
+        face_person_mappings = [
+            {"id": face_id, "person_id": person_records[int(label)].id}
+            for face_id, label in zip(face_ids, labels)
+            if int(label) != -1
+        ]
+        if face_person_mappings:
+            db.bulk_update_mappings(Face, face_person_mappings)
 
         assigned_person_ids = (
             db.query(Face.person_id).filter(Face.person_id.isnot(None)).distinct()
@@ -534,4 +700,6 @@ def cluster_faces():
         raise
 
     finally:
+        if runtime_tokens is not None:
+            reset_runtime(runtime_tokens)
         db.close()

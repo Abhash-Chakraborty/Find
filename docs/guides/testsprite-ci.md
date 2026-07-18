@@ -19,7 +19,7 @@ to the repository.
 - The workflow triggers on pull requests to `main`.
 - Draft pull requests are skipped.
 - Every non-draft PR is tested when the TestSprite secret is available.
-- App PRs start `docker-compose.light.yml` in GitHub Actions.
+- App PRs start `compose.mock.yml` in GitHub Actions.
 - The light stack runs in mock ML mode, so it avoids GPU/model downloads.
 - TestSprite is pointed at `http://127.0.0.1:3000`.
 

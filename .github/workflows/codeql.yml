@@ -2,13 +2,13 @@ name: CodeQL
 
 on:
   push:
-    branches: ["main"]
+    branches: ["canary", "main"]
     paths:
       - "backend/**"
       - "frontend/**"
       - ".github/workflows/codeql.yml"
   pull_request:
-    branches: ["main"]
+    branches: ["canary", "main"]
     paths:
       - "backend/**"
       - "frontend/**"
@@ -24,18 +24,21 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         language: ["python", "javascript-typescript"]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@1ad29ea4a422cce9a242a9fae469541dcd08addc
         with:
           languages: ${{ matrix.language }}
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@1ad29ea4a422cce9a242a9fae469541dcd08addc

@@ -1,18 +1,20 @@
-"""Recovery helpers for abandoned background analysis jobs."""
+"""Recovery helpers for abandoned background analysis jobs.
+
+Works with both the Redis/RQ and SQLite queue backends.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
-from redis import Redis
-from rq.job import Job
 from sqlalchemy.orm import Session
 
 from find_api.core.config import settings
 from find_api.core.database import SessionLocal
-from find_api.core.queue import get_redis_connection
+from find_api.core.queue import get_job
 from find_api.models.media import Media
 
 logger = logging.getLogger(__name__)
@@ -25,24 +27,23 @@ INCOMPLETE_JOB_ERROR_MESSAGE = (
     "Analysis job ended before media processing completed. "
     "Retry analysis to process this image again."
 )
-ACTIVE_JOB_STATUSES = {"queued", "started", "deferred", "scheduled"}
+ACTIVE_JOB_STATUSES = {"queued", "started", "deferred", "scheduled", "running"}
 FAILED_JOB_STATUSES = {"failed", "stopped", "canceled"}
 RECOVERY_INTERVAL_SECONDS = 60
 
 
-def reconcile_abandoned_analysis_jobs(
-    db: Session, *, redis_conn: Redis | None = None
-) -> int:
-    """Reconcile pending/processing media with their active RQ jobs.
+def reconcile_abandoned_analysis_jobs(db: Session, **kwargs: Any) -> int:
+    """Reconcile pending/processing media with their active jobs.
 
-    Media rows keep the current analysis job id so healthy queued/started work can
-    remain active while failed jobs, completed-without-result jobs, and missing stale
-    jobs move back to a truthful failed state.
+    Media rows keep the current analysis job id so healthy queued/started
+    work can remain active while failed jobs, completed-without-result
+    jobs, and missing stale jobs move back to a truthful failed state.
+
+    Works with both Redis/RQ and SQLite queue backends.
     """
     timeout_at = datetime.now(timezone.utc) - timedelta(
         seconds=settings.WORKER_TIMEOUT * 2
     )
-    redis_conn = redis_conn or get_redis_connection()
 
     active_media = (
         db.query(Media).filter(Media.status.in_(["pending", "processing"])).all()
@@ -50,7 +51,7 @@ def reconcile_abandoned_analysis_jobs(
 
     reconciled = 0
     for media in active_media:
-        job_status = _get_job_status(media.analysis_job_id, redis_conn)
+        job_status = _get_job_status(media.analysis_job_id)
 
         if job_status in ACTIVE_JOB_STATUSES:
             continue
@@ -59,6 +60,10 @@ def reconcile_abandoned_analysis_jobs(
             reconciled += 1
             continue
         if job_status == "finished":
+            _mark_failed(media, INCOMPLETE_JOB_ERROR_MESSAGE)
+            reconciled += 1
+            continue
+        if job_status == "completed":
             _mark_failed(media, INCOMPLETE_JOB_ERROR_MESSAGE)
             reconciled += 1
             continue
@@ -89,13 +94,13 @@ async def run_analysis_recovery_loop() -> None:
             db.close()
 
 
-def _get_job_status(job_id: str | None, redis_conn: Redis) -> str | None:
+def _get_job_status(job_id: str | None) -> str | None:
     if not job_id:
         return None
-    try:
-        return Job.fetch(job_id, connection=redis_conn).get_status()
-    except Exception:  # noqa: BLE001
+    job = get_job(job_id)
+    if job is None:
         return None
+    return job.get_status()
 
 
 def _mark_failed(media: Media, message: str) -> None:

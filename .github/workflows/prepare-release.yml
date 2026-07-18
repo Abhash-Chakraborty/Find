@@ -1,0 +1,108 @@
+name: Prepare version release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semantic version change
+        required: true
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+      summary:
+        description: Optional human release-summary bullet
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Create version PR into canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
+    steps:
+      - name: Require the release automation token
+        shell: bash
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "Add a fine-grained RELEASE_PR_TOKEN secret with Contents and Pull requests read/write access." >&2
+            exit 1
+          fi
+
+      - name: Check out canary
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: canary
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build release notes draft
+        shell: bash
+        env:
+          SUMMARY: ${{ inputs.summary }}
+        run: |
+          notes="${RUNNER_TEMP}/release-notes.txt"
+          if [ -n "${SUMMARY}" ]; then
+            printf '%s\n' "${SUMMARY}" > "${notes}"
+          else
+            last_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+            if [ -n "${last_tag}" ]; then
+              git log --no-merges --pretty='format:%s (%h)' "${last_tag}..HEAD" > "${notes}"
+            else
+              git log --no-merges -20 --pretty='format:%s (%h)' > "${notes}"
+            fi
+          fi
+          test -s "${notes}" || printf '%s\n' 'Maintenance release.' > "${notes}"
+
+      - name: Update every version surface
+        id: version
+        run: python scripts/bump_version.py "${{ inputs.bump }}" --notes-file "${RUNNER_TEMP}/release-notes.txt"
+
+      - name: Validate synchronized metadata
+        run: python scripts/bump_version.py --check
+
+      - name: Commit and push release branch
+        id: branch
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          branch="release/v${VERSION}"
+          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+            echo "Release branch ${branch} already exists." >&2
+            exit 1
+          fi
+          git switch -c "${branch}"
+          git config user.name "find-release-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md backend/pyproject.toml backend/src/find_api/__init__.py \
+            backend/uv.lock frontend/package.json frontend/src-tauri/Cargo.toml \
+            frontend/src-tauri/Cargo.lock frontend/src-tauri/tauri.conf.json \
+            frontend/src/components/app-shell.tsx
+          git commit -m "chore: prepare v${VERSION}"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"${branch}"
+          echo "branch=${branch}" >> "${GITHUB_OUTPUT}"
+
+      - name: Open release PR
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ steps.branch.outputs.branch }}
+        run: |
+          gh pr create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --base canary \
+            --head "${BRANCH}" \
+            --title "chore: prepare v${VERSION}" \
+            --label release \
+            --body "Automated semantic-version update for **v${VERSION}**. Review and edit the generated changelog before merging. After this reaches main through the canary promotion, the protected three-hour release timer starts."

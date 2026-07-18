@@ -90,7 +90,7 @@ Check:
 
 ## Common causes
 
-* Florence-2 model failed to load
+* BLIP caption model failed to load
 * empty inference response
 * unsupported/corrupted image
 * model download interruption
@@ -202,6 +202,25 @@ Check:
 ```bash
 nvidia-smi
 ```
+
+## ONNX Runtime requests `libcublasLt.so.11`
+
+An NVIDIA worker that logs `Failed to load library
+libonnxruntime_providers_cuda.so` with a missing `libcublasLt.so.11` has an old
+CUDA 11 ONNX Runtime inside a CUDA 12 artifact. Current locked images use the
+CUDA 12/cuDNN 9 runtime and preload the NVIDIA libraries installed with
+PyTorch. Rebuild and recreate the backend services so an older cached image is
+not reused:
+
+```bash
+docker compose build api worker
+docker compose up -d --force-recreate api worker
+```
+
+Verify `GET /api/status/models` reports an `nvidia` build, `gpu` acceleration,
+and a healthy worker. Do not install CUDA 11 libraries into the container as a
+workaround; that defeats the locked modular artifact and leaves inference on a
+mixed runtime.
 
 ## Slow first startup
 

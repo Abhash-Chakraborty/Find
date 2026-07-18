@@ -2,7 +2,7 @@ name: TestSprite PR Tests
 
 on:
   pull_request:
-    branches: ["main"]
+    branches: ["canary", "main"]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
@@ -36,7 +36,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
 
       - name: Check TestSprite secret
         id: testsprite-secret
@@ -61,7 +63,7 @@ jobs:
           steps.testsprite-secret.outputs.available == 'true' &&
           (github.event_name == 'pull_request' || github.event.inputs.base_url == '')
         run: |
-          docker compose -f docker-compose.light.yml up -d --build --wait --wait-timeout 240
+          docker compose -f compose.mock.yml up -d --build --wait --wait-timeout 240
 
       - name: Wait for local preview
         if: >
@@ -75,13 +77,13 @@ jobs:
             fi
             sleep 2
           done
-          docker compose -f docker-compose.light.yml ps
-          docker compose -f docker-compose.light.yml logs --tail=120
+          docker compose -f compose.mock.yml ps
+          docker compose -f compose.mock.yml logs --tail=120
           exit 1
 
       - name: Run TestSprite
         if: steps.testsprite-secret.outputs.available == 'true'
-        uses: TestSprite/run-action@v1
+        uses: TestSprite/run-action@e1793b89af73cf22d267b025e827fdb94d2c4e7d
         with:
           testsprite-api-key: ${{ secrets.TESTSPRITE_API_KEY }}
           base_url: ${{ github.event.inputs.base_url || 'http://127.0.0.1:3000' }}
@@ -89,4 +91,4 @@ jobs:
 
       - name: Stop local preview stack
         if: always()
-        run: docker compose -f docker-compose.light.yml down -v --remove-orphans
+        run: docker compose -f compose.mock.yml down -v --remove-orphans

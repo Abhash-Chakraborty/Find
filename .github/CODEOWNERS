@@ -1,0 +1,11 @@
+# Default review owner for every change.
+* @Abhash-Chakraborty
+
+# Security, release, dependency, and deployment surfaces require maintainer review.
+/.github/ @Abhash-Chakraborty
+/backend/pyproject.toml @Abhash-Chakraborty
+/backend/uv.lock @Abhash-Chakraborty
+/compose*.yml @Abhash-Chakraborty
+/scripts/bump_version.py @Abhash-Chakraborty
+/LICENSE @Abhash-Chakraborty
+/NOTICE @Abhash-Chakraborty

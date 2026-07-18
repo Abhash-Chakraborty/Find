@@ -10,9 +10,10 @@ permissions:
 jobs:
   label-community-issues:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Add 'needs approval' label for community-created issues
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           script: |
             // author_association is set by GitHub, based on the opener's relationship

@@ -53,6 +53,12 @@ class FakeMedia(Base):
     file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     liked: Mapped[bool] = mapped_column(Boolean, default=False)
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Mirror the asset-state columns the gallery router queries
+    # (_browsable_media_query) so this stand-in stays in sync with the real model.
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
     status: Mapped[str] = mapped_column(String(50), default="pending")
     analysis_job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -92,11 +98,34 @@ def _fresh_db():
 # Patch find_api.routers.gallery.Media so the router uses our FakeMedia.
 # ---------------------------------------------------------------------------
 
-gallery_module.Media = FakeMedia  # type: ignore[assignment]
+_ORIGINAL_GALLERY_MEDIA = gallery_module.Media
 
-test_app = FastAPI()
-test_app.include_router(gallery_module.router, prefix="/api")
-test_app.dependency_overrides[get_db] = get_test_db
+app_under_test = FastAPI()
+app_under_test.include_router(gallery_module.router, prefix="/api")
+app_under_test.dependency_overrides[get_db] = get_test_db
+# Gallery endpoints now depend on get_required_user; this minimal test app
+# has no users table, so force local (single-user) mode by returning None.
+from find_api.core.dependencies import get_required_user  # noqa: E402
+
+app_under_test.dependency_overrides[get_required_user] = lambda: None
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _patch_gallery_media():
+    """Patch gallery_module.Media to FakeMedia for THIS module's tests only.
+
+    The patch is applied at fixture setup (not import time) and undone at
+    teardown, so it can't leak into other test modules during collection. The
+    gallery router resolves ``Media`` as a module global at call time, so
+    patching here is sufficient for this module's requests. Without the
+    teardown, FakeMedia would shadow the real Media in any later module that
+    joins it (e.g. albums join AlbumAsset->Media), producing ambiguous SQL.
+    """
+    gallery_module.Media = FakeMedia  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        gallery_module.Media = _ORIGINAL_GALLERY_MEDIA
 
 
 @pytest.fixture(autouse=True)
@@ -111,7 +140,7 @@ def reset_db():
 
 @pytest.fixture()
 def client():
-    with TestClient(test_app) as c:
+    with TestClient(app_under_test) as c:
         yield c
 
 

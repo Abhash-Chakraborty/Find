@@ -1,0 +1,107 @@
+name: Release main after quiet period
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      emergency:
+        description: Skip the three-hour delay for a critical security or production fix
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate releasable main version
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate synchronized semantic version
+        id: version
+        run: python scripts/bump_version.py --check
+
+      - name: Reject an already released version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+            echo "v${VERSION} already exists. Prepare a patch, minor, or major version PR before promoting again." >&2
+            exit 1
+          fi
+
+  gate:
+    name: ${{ inputs.emergency && 'Emergency release approval' || 'Three-hour release quiet period' }}
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: ${{ inputs.emergency && 'release-emergency' || 'release-delay' }}
+    steps:
+      - run: echo "Release gate completed for v${{ needs.validate.outputs.version }}."
+
+  release:
+    name: Tag and create GitHub release
+    needs: [validate, gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ needs.validate.outputs.version }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Confirm main stayed stable through the gate
+        run: |
+          git fetch origin main --quiet
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" || {
+            echo "main advanced; the newer push owns the release timer." >&2
+            exit 1
+          }
+          python scripts/bump_version.py --check
+          ! git show-ref --verify --quiet "refs/tags/v${VERSION}" || {
+            echo "v${VERSION} already exists." >&2
+            exit 1
+          }
+
+      - name: Create immutable tag and release
+        run: |
+          git config user.name "find-release-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${VERSION}" -m "Find v${VERSION}"
+          git push origin "v${VERSION}"
+          gh release create "v${VERSION}" --verify-tag --generate-notes --title "Find v${VERSION}"
+
+  publish:
+    name: Publish release artifacts
+    needs: release
+    uses: ./.github/workflows/publish.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image_tag: ${{ needs.release.outputs.version }}
+      backend_profile: nvidia
+      publish_all: true
+    secrets: inherit
