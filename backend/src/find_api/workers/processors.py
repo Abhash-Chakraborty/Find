@@ -158,9 +158,10 @@ def extract_image_metadata(
 
     try:
         if on_stage: on_stage("generating caption")
-        caption = get_image_captioner().generate_caption(image)
         from find_api.ml.captioner import get_image_captioner
+        caption = get_image_captioner().generate_caption(image)
         metadata["caption"] = caption
+        metadata["stage_status"]["captioning"] = {"status": "success", "error": None}
         metadata["stage_status"]["captioning"] = {"status": "success", "error": None}
     except Exception as e:
         metadata["caption"] = ""

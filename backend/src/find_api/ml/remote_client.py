@@ -46,7 +46,8 @@ def _image_to_bytes(image: Image.Image, *, strip_exif: bool) -> bytes:
         return _strip_exif(image)
 
     buf = io.BytesIO()
-    image.convert("RGB").save(buf, format="JPEG", quality=92)
+    fmt = image.format or "JPEG"
+    image.save(buf, format=fmt, exif=image.getexif())
     return buf.getvalue()
 
 

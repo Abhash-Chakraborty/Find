@@ -65,9 +65,10 @@ def _load_image(upload: UploadFile) -> Image.Image:
         data = upload.file.read()
         return Image.open(io.BytesIO(data)).convert("RGB")
     except Exception as exc:
+        logger.warning(f"Could not decode uploaded image: {exc}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Could not decode uploaded image: {exc}",
+            detail="Could not decode uploaded image.",
         ) from exc
 
 
@@ -120,7 +121,11 @@ def embed(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="metadata field must be valid JSON.",
         )
-
+    if not isinstance(meta_dict, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="metadata field must be a JSON object.",
+        )
     try:
         from find_api.workers.processors import generate_hybrid_embedding
         embedding = generate_hybrid_embedding(pil_image, meta_dict)
