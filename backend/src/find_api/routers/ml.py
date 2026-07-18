@@ -1,0 +1,175 @@
+"""
+/api/ml/ — Remote ML inference endpoints.
+
+These endpoints turn any Find backend running in full ML mode into a
+remote ML server that other Find instances (ML_MODE=remote) can offload
+work to.
+"""
+
+import json
+import logging
+from typing import Any, Dict, List
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from PIL import Image
+import io
+
+from find_api.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/ml", tags=["remote-ml"])
+
+_bearer_scheme = HTTPBearer(auto_error=False)
+_ML_API_VERSION = "0.1.0"
+
+
+def _require_auth(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+) -> None:
+    """Validate the bearer token against REMOTE_ML_API_KEY."""
+    configured_key = (settings.REMOTE_ML_API_KEY or "").strip()
+
+    if not configured_key:
+        logger.warning("ML request received but REMOTE_ML_API_KEY is not set. Rejecting.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Remote ML endpoints are not configured on this server.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header. Provide: Authorization: Bearer <token>",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    import hmac
+    token_matches = hmac.compare_digest(
+        credentials.credentials.encode(),
+        configured_key.encode(),
+    )
+    if not token_matches:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def _load_image(upload: UploadFile) -> Image.Image:
+    """Read an uploaded file and return a PIL Image."""
+    try:
+        data = upload.file.read()
+        return Image.open(io.BytesIO(data)).convert("RGB")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Could not decode uploaded image: {exc}",
+        ) from exc
+
+
+@router.get("/health")
+def health() -> Dict[str, Any]:
+    """Unauthenticated liveness check."""
+    return {
+        "status": "ok",
+        "ml_mode": settings.ML_MODE,
+        "version": _ML_API_VERSION,
+    }
+
+
+@router.post("/analyze", dependencies=[Depends(_require_auth)])
+def analyze(image: UploadFile = File(...)) -> Dict[str, Any]:
+    """Run object detection, captioning, and OCR on the uploaded image."""
+    pil_image = _load_image(image)
+
+    try:
+        from find_api.workers.processors import extract_image_metadata
+        metadata = extract_image_metadata(pil_image)
+    except Exception as exc:
+        logger.exception("analyze endpoint: extract_image_metadata failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="ML inference failed on the remote server.",
+        ) from exc
+
+    return {
+        "caption": metadata.get("caption", ""),
+        "objects": metadata.get("objects", []),
+        "ocr_text": metadata.get("ocr_text", ""),
+        "text_blocks": metadata.get("text_blocks", []),
+        "stage_status": metadata.get("stage_status", {}),
+    }
+
+
+@router.post("/embed", dependencies=[Depends(_require_auth)])
+def embed(
+    image: UploadFile = File(...),
+    metadata: str = Form(default="{}"),
+) -> Dict[str, Any]:
+    """Generate a hybrid CLIP embedding from the image and optional metadata."""
+    pil_image = _load_image(image)
+
+    try:
+        meta_dict: Dict[str, Any] = json.loads(metadata)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="metadata field must be valid JSON.",
+        )
+
+    try:
+        from find_api.workers.processors import generate_hybrid_embedding
+        embedding = generate_hybrid_embedding(pil_image, meta_dict)
+    except Exception as exc:
+        logger.exception("embed endpoint: generate_hybrid_embedding failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Embedding generation failed on the remote server.",
+        ) from exc
+
+    return {"embedding": embedding}
+
+
+@router.post("/cluster", dependencies=[Depends(_require_auth)])
+def cluster(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Run HDBSCAN clustering on a list of embedding vectors."""
+    embeddings: List[List[float]] = body.get("embeddings", [])
+
+    if not embeddings:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="embeddings must be a non-empty list of float arrays.",
+        )
+
+    try:
+        import numpy as np
+        from sklearn.cluster import HDBSCAN
+
+        X = np.array(embeddings, dtype=np.float32)
+        clusterer = HDBSCAN(
+            min_cluster_size=settings.MIN_CLUSTER_SIZE,
+            min_samples=settings.MIN_SAMPLES,
+        )
+        labels = clusterer.fit_predict(X).tolist()
+
+        n_clusters = len(set(l for l in labels if l >= 0))
+        n_noise = labels.count(-1)
+
+        return {
+            "labels": labels,
+            "info": {
+                "n_clusters": n_clusters,
+                "n_noise": n_noise,
+                "n_points": len(labels),
+            },
+        }
+    except Exception as exc:
+        logger.exception("cluster endpoint: HDBSCAN failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Clustering failed on the remote server.",
+        ) from exc
