@@ -39,6 +39,7 @@ def init_db():
     try:
         # Import all models to register them for metadata creation
         from find_api.models import (  # noqa: F401
+            activity,
             album,
             app_setting,
             cluster,

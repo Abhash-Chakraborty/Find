@@ -26,6 +26,7 @@ from find_api.models.media import Media
 from find_api.models.cluster import Cluster
 from find_api.models.app_setting import AppSetting
 from find_api.models.user import User
+from find_api.services.activity_log import record_activity
 from find_api.routers.config import TRASH_RETENTION_DAYS_KEY
 from find_api.services.query_cache import invalidate_query_cache
 from find_api.workers.jobs import analyze_image, generate_thumbnail_for_media
@@ -700,6 +701,13 @@ def set_archive(
     db.commit()
     invalidate_query_cache()
     db.refresh(media)
+    record_activity(
+        db,
+        "media",
+        "archived" if media.is_archived else "unarchived",
+        user_id=media.uploader_user_id,
+        media_id=media.id,
+    )
 
     return {"id": media.id, "is_archived": media.is_archived}
 
@@ -725,6 +733,9 @@ def trash_image(
         db.commit()
         invalidate_query_cache()
         db.refresh(media)
+        record_activity(
+            db, "media", "trashed", user_id=media.uploader_user_id, media_id=media.id
+        )
 
     return {
         "id": media.id,
@@ -747,6 +758,9 @@ def restore_image(
     db.commit()
     invalidate_query_cache()
     db.refresh(media)
+    record_activity(
+        db, "media", "restored", user_id=media.uploader_user_id, media_id=media.id
+    )
 
     return {"id": media.id, "deleted_at": None}
 

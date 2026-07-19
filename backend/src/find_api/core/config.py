@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     # Trashed assets older than this many days are eligible for permanent
     # auto-purge (via POST /trash/purge). 0 disables age-based purging.
     TRASH_RETENTION_DAYS: int = 30
+    # Activity log rows older than this many days are eligible for auto-purge
+    # (via POST /activity/purge). 0 disables age-based purging.
+    ACTIVITY_RETENTION_DAYS: int = 90
     BATCH_SIZE: int = 1
     EMBEDDING_DIM: int = 768  # SigLIP ViT-B-16 dimension
 

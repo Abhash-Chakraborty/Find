@@ -2,6 +2,7 @@
 Database models
 """
 
+from find_api.models.activity import Activity
 from find_api.models.media import Media
 from find_api.models.cluster import Cluster
 from find_api.models.face import Face
@@ -18,6 +19,7 @@ from find_api.models.app_setting import AppSetting
 from find_api.models.partner_share import PartnerShare
 
 __all__ = [
+    "Activity",
     "Media",
     "Cluster",
     "Face",
