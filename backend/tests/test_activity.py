@@ -170,6 +170,17 @@ class TestArchiveTrashRestoreEvents:
         client.post(f"/api/image/{media.id}/trash")
         assert db.query(Activity).filter(Activity.action == "trashed").count() == 1
 
+    def test_repeated_archive_is_not_double_logged(self, client, db):
+        media = _seed_media(db)
+        client.post(f"/api/image/{media.id}/archive", json={"archived": True})
+        client.post(f"/api/image/{media.id}/archive", json={"archived": True})
+        assert db.query(Activity).filter(Activity.action == "archived").count() == 1
+
+    def test_restore_on_non_trashed_item_is_not_logged(self, client, db):
+        media = _seed_media(db)
+        client.post(f"/api/image/{media.id}/restore")
+        assert db.query(Activity).filter(Activity.action == "restored").count() == 0
+
 
 class TestSettingsEvents:
     def test_change_records_activity(self, client, db):

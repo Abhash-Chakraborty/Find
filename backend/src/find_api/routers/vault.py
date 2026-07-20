@@ -458,6 +458,14 @@ def unlock_vault(
             )
 
     master_key = _load_or_create_master_key(db, payload.passphrase)
+    try:
+        _migrate_legacy_encrypted_items(db, master_key)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Legacy vault migration failed during unlock; continuing with valid credentials",
+            exc_info=True,
+        )
+        db.rollback()
     session_token = secrets.token_urlsafe(32)
     set_session_key(session_token, master_key)
     record_activity(

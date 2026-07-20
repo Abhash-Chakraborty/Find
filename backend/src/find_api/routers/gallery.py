@@ -697,17 +697,19 @@ def set_archive(
     if media.deleted_at is not None:
         raise HTTPException(409, "Cannot archive a trashed image; restore it first.")
 
+    was_archived = media.is_archived
     media.is_archived = bool(request.archived)
     db.commit()
     invalidate_query_cache()
     db.refresh(media)
-    record_activity(
-        db,
-        "media",
-        "archived" if media.is_archived else "unarchived",
-        user_id=media.uploader_user_id,
-        media_id=media.id,
-    )
+    if media.is_archived != was_archived:
+        record_activity(
+            db,
+            "media",
+            "archived" if media.is_archived else "unarchived",
+            user_id=media.uploader_user_id,
+            media_id=media.id,
+        )
 
     return {"id": media.id, "is_archived": media.is_archived}
 
@@ -754,13 +756,15 @@ def restore_image(
     if not can_access_media(media, user):
         raise HTTPException(404, "Image not found")
 
+    was_trashed = media.deleted_at is not None
     media.deleted_at = None
     db.commit()
     invalidate_query_cache()
     db.refresh(media)
-    record_activity(
-        db, "media", "restored", user_id=media.uploader_user_id, media_id=media.id
-    )
+    if was_trashed:
+        record_activity(
+            db, "media", "restored", user_id=media.uploader_user_id, media_id=media.id
+        )
 
     return {"id": media.id, "deleted_at": None}
 
