@@ -62,6 +62,7 @@ describe("AppShell", () => {
       "Archive",
       "Vault",
       "Trash",
+      "Activity",
       "Settings",
     ]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();

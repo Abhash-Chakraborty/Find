@@ -4,6 +4,7 @@ import {
   Archive,
   Copy,
   Heart,
+  History,
   Images,
   Library,
   LockKeyhole,
@@ -55,6 +56,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/archive", label: "Archive", icon: Archive },
       { href: "/vault", label: "Vault", icon: LockKeyhole },
       { href: "/trash", label: "Trash", icon: Trash2 },
+      { href: "/activity", label: "Activity", icon: History },
     ],
   },
   {
