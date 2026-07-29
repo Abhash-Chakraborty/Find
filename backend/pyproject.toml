@@ -101,6 +101,10 @@ torchvision = [
 ]
 
 [tool.uv]
+# setuptools arrives transitively (torch, pip-audit) and resolved to 82.0.1,
+# which is GHSA-affected (<83.0.0). The build-system pin above only governs
+# building this package, not the resolved environment, so constrain it here.
+constraint-dependencies = ["setuptools>=83.0.0"]
 conflicts = [
   [
     { extra = "cpu" },
