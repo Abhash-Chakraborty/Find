@@ -614,6 +614,7 @@ def lock_vault(
     payload: Optional[VaultLockRequest] = Body(default=None),
     authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """Invalidate an active vault session token."""
     session_token = _resolve_session_token(
@@ -621,7 +622,7 @@ def lock_vault(
     )
     if not delete_session_key(session_token):
         raise HTTPException(status_code=401, detail="Invalid or expired vault session")
-    record_activity(db, "vault", "locked")
+    record_activity(db, "vault", "locked", user_id=user.id if user else None)
     return {"status": "locked"}
 
 

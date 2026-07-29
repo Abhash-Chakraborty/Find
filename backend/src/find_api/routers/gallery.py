@@ -703,6 +703,9 @@ def set_archive(
     invalidate_query_cache()
     db.refresh(media)
     if media.is_archived != was_archived:
+        # Attributed to the photo's owner, not the acting user, so "what
+        # happened to my photos" stays correct when an admin acts on
+        # someone else's asset. Deliberate - same reasoning for trash/restore.
         record_activity(
             db,
             "media",
