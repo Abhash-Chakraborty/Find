@@ -34,8 +34,8 @@ mock = [
   "scikit-learn==1.5.0",
 ]
 cpu = [
-  "torch==2.8.0",
-  "torchvision==0.23.0",
+  "torch==2.9.1",
+  "torchvision==0.24.1",
   "transformers>=5.5.0,<6",
   "open-clip-torch>=2.24.0",
   "opencv-python-headless==4.9.0.80",
@@ -50,8 +50,8 @@ cpu = [
   "cython<3",
 ]
 nvidia = [
-  "torch==2.8.0",
-  "torchvision==0.23.0",
+  "torch==2.9.1",
+  "torchvision==0.24.1",
   "transformers>=5.5.0,<6",
   "open-clip-torch>=2.24.0",
   "opencv-python-headless==4.9.0.80",
