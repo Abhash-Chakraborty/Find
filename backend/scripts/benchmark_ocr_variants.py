@@ -28,6 +28,8 @@ import statistics
 import sys
 import time
 from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 
 # Add src to path so this runs standalone like manual_ocr_check.py does
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -37,9 +39,6 @@ try:
 except ImportError:
     print("This script requires psutil. Install with: uv add --dev psutil")
     sys.exit(1)
-
-from PIL import Image, ImageDraw, ImageFont
-import numpy as np
 
 
 VARIANTS = ["mobile", "server"]

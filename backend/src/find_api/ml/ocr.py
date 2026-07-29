@@ -72,7 +72,7 @@ class OCRExtractor:
 
     @staticmethod
     def _normalize_variant(variant: Union[str, None]) -> str:
-        resolved = variant or settings.OCR_VARIANT
+        resolved = settings.OCR_VARIANT if variant is None else variant
         if resolved not in VALID_VARIANTS:
             raise ValueError(
                 f"Unknown OCR variant '{resolved}'. Expected one of {VALID_VARIANTS}."
