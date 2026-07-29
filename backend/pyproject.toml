@@ -5,7 +5,7 @@ description = "FastAPI backend and RQ worker for Find"
 license = "AGPL-3.0-only"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "fastapi>=0.135.1,<0.136",
+  "fastapi>=0.135.1,<0.142",
   "uvicorn[standard]>=0.43.0,<0.44",
   "python-multipart>=0.0.31,<0.1",
   "pydantic>=2.13.1,<3",
