@@ -78,10 +78,6 @@ class Settings(BaseSettings):
     #   gpu  = prefer GPU; automatically fall back to CPU if unavailable
     #   cpu  = force CPU
     ACCEL_MODE: Literal["auto", "gpu", "cpu"] = "auto"
-    # PP-OCRv5 model variant: "server" (heavier, GPU-oriented, PaddleOCR's own
-    # default) vs "mobile" (lightweight, CPU-oriented). Defaults to "server" to
-    # preserve current behavior until benchmark results justify switching the
-    # CPU-pack default — see issue #341.
     # PP-OCRv5 model variant: "server" (heavier, GPU-oriented) vs "mobile"
     # (lightweight, CPU-oriented). Defaults to "mobile" based on recorded
     # CPU benchmark results (~3x faster, ~40-47% less RAM, equal-or-better

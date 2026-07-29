@@ -318,6 +318,22 @@ class ModelManager:
             self.runtime_status = status.copy()
             self.publish_status()
 
+    def merge_runtime_status(self, key: str, value: Any) -> None:
+        """Atomically set a single top-level entry in the shared runtime status.
+
+        Several ML components (CLIP/BLIP/YOLO/OCR) each publish their own
+        top-level key through this same runtime status dict. A caller that
+        instead does ``get_status()`` then ``set_runtime_status()`` from the
+        outside is a read-modify-write race: a concurrent publisher's update
+        can land in between and get silently dropped. Doing the read, merge,
+        and write under the single manager lock closes that window.
+        """
+        with self._lock:
+            merged = dict(self.runtime_status or {})
+            merged[key] = value
+            self.runtime_status = merged
+            self.publish_status()
+
     def get_status(self) -> Dict[str, Any]:
         """Return current process model-manager status."""
         with self._lock:
