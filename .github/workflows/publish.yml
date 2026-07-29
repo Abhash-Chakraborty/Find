@@ -55,7 +55,7 @@ jobs:
       profiles: ${{ steps.meta.outputs.profiles }}
     steps:
       - name: Check out the selected revision
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
 
@@ -95,26 +95,26 @@ jobs:
         profile: ${{ fromJSON(needs.metadata.outputs.profiles) }}
     steps:
       - name: Check out source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
 
       - name: Set up QEMU
         if: matrix.profile != 'nvidia'
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
 
       - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and publish profile
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -146,25 +146,25 @@ jobs:
       packages: write
     steps:
       - name: Check out source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
 
       - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and publish web
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
