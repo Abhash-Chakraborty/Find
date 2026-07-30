@@ -32,7 +32,14 @@ updates:
         patterns: ["*"]
         update-types: ["major"]
 
-  - package-ecosystem: pip
+  # `uv`, not `pip`. The pip ecosystem edits pyproject.toml and stops there --
+  # it has no idea uv.lock exists. backend-check runs `uv sync --locked`, so
+  # every pip-authored PR failed with "The lockfile at `uv.lock` needs to be
+  # updated" the moment it opened. #387 through #391 all died that way, and the
+  # backend pins have been frozen for months as a result (pgvector was still on
+  # 0.2.4, minio on 7.2.3). The uv ecosystem updates the manifest and the
+  # lockfile together, which is the only thing that can pass this repo's CI.
+  - package-ecosystem: uv
     directory: /backend
     target-branch: canary
     schedule:

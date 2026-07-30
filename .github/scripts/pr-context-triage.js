@@ -63,6 +63,20 @@ function parseClosingIssueRefs(text) {
   );
 }
 
+// Deliberate non-closing links. A PR that implements half of a tracking issue
+// has to say "Part of #N" rather than "Closes #N", or merging it auto-closes an
+// issue that is still open work -- so treating only closing keywords as "linked"
+// punished contributors for splitting their work correctly. Keyword-anchored
+// rather than reusing parseIssueRefs, which matches any bare #N and would let a
+// passing mention of an unrelated PR count as a link.
+function parseRelatedIssueRefs(text) {
+  return uniqueNumbers(
+    [...(text || "").matchAll(/\b(?:part of|related to|relates to|refs?|references|towards|toward|see)\b\s*:?\s*#(\d+)\b/gi)].map(
+      (match) => Number(match[1]),
+    ),
+  );
+}
+
 function tokenize(text) {
   return new Set(
     (text || "")
@@ -214,10 +228,15 @@ module.exports = async function run({ github, context, core }) {
   const comments = await listAllComments(github, repo, issueNumber);
 
   const closingIssueNumbers = parseClosingIssueRefs(pr.body || "");
+  const relatedIssueNumbers = parseRelatedIssueRefs(pr.body || "");
   const referencedIssueNumbers = parseIssueRefs([pr.title, pr.body].filter(Boolean).join("\n"));
   const nonClosingRefs = referencedIssueNumbers.filter(
     (number) => !closingIssueNumbers.includes(number),
   );
+  // Either kind of explicit link counts as linked. Only the closing set is used
+  // for assignee sync further down, since that acts on the issue the PR owns.
+  const hasLinkedIssue =
+    closingIssueNumbers.length > 0 || relatedIssueNumbers.length > 0;
 
   if (isDependabot) {
     await removeLabelIfPresent(
@@ -227,7 +246,7 @@ module.exports = async function run({ github, context, core }) {
       labelSet,
       "needs linked issue",
     );
-  } else if (closingIssueNumbers.length === 0) {
+  } else if (!hasLinkedIssue) {
     await addLabelIfMissing(
       github,
       repo,
@@ -292,9 +311,16 @@ module.exports = async function run({ github, context, core }) {
     triggerMacroscope && !hasHardBlockLabel && hasReviewLabel && (!hasTriggerComment || forceReview);
 
   if (shouldTriggerReview) {
+    // Hand the reviewer both kinds of link. A "Part of #N" PR is still meant to
+    // be judged against #N, so reporting "none linked yet" sent the review off
+    // without the one issue that defines the acceptance criteria.
+    const allLinkedIssues = uniqueNumbers([
+      ...closingIssueNumbers,
+      ...relatedIssueNumbers,
+    ]);
     const linkedIssuesText =
-      closingIssueNumbers.length > 0
-        ? closingIssueNumbers.map((number) => `#${number}`).join(", ")
+      allLinkedIssues.length > 0
+        ? allLinkedIssues.map((number) => `#${number}`).join(", ")
         : "none linked yet";
     const sourceLabelText = [...ELIGIBLE_REVIEW_LABELS].filter((label) => labelSet.has(label)).join(", ");
     const triggerBody = [
