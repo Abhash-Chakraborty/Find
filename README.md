@@ -103,14 +103,11 @@ This project is open for **GSSoC'26** contributions.
 
 ### Option A: full real-ML stack
 
-From the repository root, ensure that you have copied `.env.example` to `.env` and configured the required environment variables before running the commands below.
+From repository root, copy the environment template and fill in the values before starting anything:
 
 ```bash
 cp .env.example .env
-# Configure the required environment variables
-```
-
-From repository root:
+# then edit .env — see the comments in .env.example for what each value does
 ```
 
 ```bash
