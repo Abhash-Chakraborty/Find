@@ -5,10 +5,18 @@ Tests for /api/ml/ endpoints.
 import io
 import json
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+
+# Generated per run rather than committed as a literal. A hardcoded string of
+# this shape trips the secret scanner that gates every PR, and these tests only
+# need the fixture and the request headers to agree on some value.
+VALID_TOKEN = f"pytest-remote-ml-{uuid4().hex}"
+AUTH = {"Authorization": f"Bearer {VALID_TOKEN}"}
+WRONG_AUTH = {"Authorization": "Bearer wrong-token"}
 
 
 @pytest.fixture()
@@ -17,7 +25,7 @@ def client_with_key(monkeypatch):
 
     mock_settings = MagicMock()
     mock_settings.ML_MODE = "full"
-    mock_settings.REMOTE_ML_API_KEY = "test-secret-token-abc123"
+    mock_settings.REMOTE_ML_API_KEY = VALID_TOKEN
     mock_settings.MIN_CLUSTER_SIZE = 2
     mock_settings.MIN_SAMPLES = 1
     monkeypatch.setattr(cfg_module, "settings", mock_settings)
@@ -62,11 +70,6 @@ def _make_jpeg_bytes(width: int = 8, height: int = 8) -> bytes:
     buf = io.BytesIO()
     img.save(buf, format="JPEG")
     return buf.getvalue()
-
-
-VALID_TOKEN = "test-secret-token-abc123"
-AUTH = {"Authorization": f"Bearer {VALID_TOKEN}"}
-WRONG_AUTH = {"Authorization": "Bearer wrong-token"}
 
 
 class TestHealthEndpoint:
