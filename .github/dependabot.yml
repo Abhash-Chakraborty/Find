@@ -1,4 +1,20 @@
 version: 2
+
+# Each ecosystem is split into two groups: one for minor/patch updates and one
+# for majors.
+#
+# A single all-in-one group repeatedly produced PRs that could not merge,
+# because one breaking major took the whole batch down with it and blocked the
+# routine security patches riding along:
+#
+#   - #369 bundled a torch major that does not exist on the pinned
+#     pytorch-cu128 index, so `uv sync --locked` failed on every runner and the
+#     other 20 python updates were stuck behind it.
+#   - #375 / #380 bundled tailwindcss 3 -> 4 and typescript 5 -> 7, which fail
+#     `frontend-check`, blocking the axios and react patches in the same PR.
+#
+# Keeping majors separate means the safe half stays mergeable on its own, and
+# each breaking upgrade gets reviewed on its own terms.
 updates:
   - package-ecosystem: github-actions
     directory: /
@@ -11,8 +27,19 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      actions-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
-  - package-ecosystem: pip
+  # `uv`, not `pip`. The pip ecosystem edits pyproject.toml and stops there --
+  # it has no idea uv.lock exists. backend-check runs `uv sync --locked`, so
+  # every pip-authored PR failed with "The lockfile at `uv.lock` needs to be
+  # updated" the moment it opened. #387 through #391 all died that way, and the
+  # backend pins have been frozen for months as a result (pgvector was still on
+  # 0.2.4, minio on 7.2.3). The uv ecosystem updates the manifest and the
+  # lockfile together, which is the only thing that can pass this repo's CI.
+  - package-ecosystem: uv
     directory: /backend
     target-branch: canary
     schedule:
@@ -23,6 +50,28 @@ updates:
     groups:
       python-runtime:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      python-runtime-major:
+        patterns: ["*"]
+        update-types: ["major"]
+    # torch/torchvision resolve from the pinned pytorch-cpu and pytorch-cu128
+    # indexes (see [tool.uv.sources] in backend/pyproject.toml), and cu128 lags
+    # PyPI. Dependabot reads PyPI, so it proposes versions the nvidia extra
+    # cannot resolve at all -- #369 proposed torch 2.13.0, which cu128 does not
+    # publish, and `uv sync --locked` failed on every runner. That was a minor
+    # bump, so the major/minor split above would not have caught it.
+    #
+    # TRADEOFF, read before removing: `ignore` suppresses Dependabot *security*
+    # update PRs for these packages as well as version updates. A future torch
+    # CVE will therefore still raise an alert in the Security tab, but will NOT
+    # open a PR on its own -- someone has to act on the alert by hand. That is
+    # accepted here only because a torch bump has to be hand-verified against
+    # the real ML stack regardless (transformers, open-clip-torch, timm,
+    # ultralytics, insightface). #382 tracks the current open torch advisories
+    # and the 2.11.0 evaluation; keep that issue alive while this ignore exists.
+    ignore:
+      - dependency-name: torch
+      - dependency-name: torchvision
 
   - package-ecosystem: npm
     directory: /frontend
@@ -35,6 +84,10 @@ updates:
     groups:
       frontend-runtime:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      frontend-runtime-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
   - package-ecosystem: cargo
     directory: /frontend/src-tauri
@@ -44,6 +97,10 @@ updates:
     groups:
       desktop-runtime:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      desktop-runtime-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
   - package-ecosystem: docker
     directory: /backend

@@ -9,6 +9,14 @@ allowBuilds:
   sharp: true
 overrides:
   form-data: 4.0.6
-  postcss: ^8.5.14
+  # postcss <=8.5.17 is a high advisory (GHSA-r28c-9q8g-f849). The Tailwind v3
+  # PostCSS toolchain resolved against 8.5.14 and stayed there because the old
+  # floor still satisfied it; raise the floor so every consumer collapses onto
+  # one patched copy.
+  postcss: ^8.5.20
+  # sharp <0.35.0 is vulnerable (GHSA high); Next pulls it in transitively for
+  # image optimisation, so pin the whole tree forward rather than waiting for
+  # Next to bump its own floor.
+  sharp: ^0.35.3
   undici: 7.28.0
   vite: 8.0.16
