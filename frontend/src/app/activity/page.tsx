@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   activityTone,
   describeActivity,
@@ -132,9 +133,11 @@ export default function ActivityPage() {
 
   const clearMutation = useMutation({
     mutationFn: clearActivity,
-    onSuccess: () => {
+    onSuccess: (res) => {
+      toast.success(`Cleared ${res.deleted_count} item(s)`);
       queryClient.invalidateQueries({ queryKey: ["activity"] });
     },
+    onError: () => toast.error("Couldn't clear activity"),
   });
 
   const items = data?.pages.flatMap((page) => page.items) ?? [];
