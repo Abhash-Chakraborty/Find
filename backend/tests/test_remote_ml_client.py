@@ -14,6 +14,7 @@ from find_api.ml.remote_client import (
     remote_analyze,
     remote_cluster,
     remote_embed,
+    remote_embed_text,
 )
 
 
@@ -128,3 +129,40 @@ class TestRemoteCluster:
             mock_client.post.return_value = mock_resp
             result = remote_cluster([[0.1, 0.2], [0.3, 0.4]])
         assert result["labels"] == [0, 0]
+
+
+class TestRemoteEmbedText:
+    """Search embeds the query with the same model that produced the stored
+    image vectors. Without a remote text path, remote mode fell through to
+    get_clip_embedder() -- the exact runtime a remote deployment lacks.
+    """
+
+    def test_embed_text_success(self, monkeypatch):
+        import find_api.ml.remote_client as rc
+
+        monkeypatch.setattr(rc, "settings", _mock_settings())
+
+        with patch("httpx.Client") as mock_cls:
+            mock_client = mock_cls.return_value.__enter__.return_value
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {"embedding": [0.25] * 768}
+            mock_resp.raise_for_status.return_value = None
+            mock_client.post.return_value = mock_resp
+            result = remote_embed_text("a red bicycle")
+
+        assert len(result) == 768
+        _, kwargs = mock_client.post.call_args
+        assert kwargs["json"] == {"text": "a red bicycle"}
+        assert kwargs["headers"]["Authorization"] == "Bearer secret"
+
+    def test_embed_text_401_raises_auth_error(self, monkeypatch):
+        import find_api.ml.remote_client as rc
+
+        monkeypatch.setattr(rc, "settings", _mock_settings())
+
+        with patch("httpx.Client") as mock_cls:
+            mock_client = mock_cls.return_value.__enter__.return_value
+            mock_client.post.return_value.status_code = 403
+            with pytest.raises(RemoteMLAuthError):
+                remote_embed_text("query")

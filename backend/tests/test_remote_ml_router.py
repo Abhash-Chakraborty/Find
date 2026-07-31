@@ -4,6 +4,7 @@ Tests for /api/ml/ endpoints.
 
 import io
 import json
+import types
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -165,3 +166,43 @@ class TestTransportErrors:
                 files={"image": ("img.jpg", _make_jpeg_bytes(), "image/jpeg")},
             )
         assert resp.status_code == 500
+
+
+class TestEmbedTextEndpoint:
+    """Search in remote mode depends on this endpoint, so it carries the same
+    auth contract as the other protected routes.
+    """
+
+    def test_embed_text_requires_auth(self, client_with_key):
+        response = client_with_key.post("/api/ml/embed_text", json={"text": "hello"})
+        assert response.status_code == 401
+
+    def test_embed_text_rejects_wrong_token(self, client_with_key):
+        response = client_with_key.post(
+            "/api/ml/embed_text", json={"text": "hello"}, headers=WRONG_AUTH
+        )
+        assert response.status_code == 401
+
+    def test_embed_text_rejects_empty_text(self, client_with_key):
+        response = client_with_key.post(
+            "/api/ml/embed_text", json={"text": "   "}, headers=AUTH
+        )
+        assert response.status_code == 422
+
+    def test_embed_text_returns_embedding(self, client_with_key):
+        fake = MagicMock()
+        fake.embed_text.return_value = [0.5] * 768
+
+        # clip_embedder pulls in torch, which the mock test env does not ship,
+        # so stub the whole module rather than patching an attribute on it.
+        stub = types.ModuleType("find_api.ml.clip_embedder")
+        stub.get_clip_embedder = lambda: fake
+
+        with patch.dict("sys.modules", {"find_api.ml.clip_embedder": stub}):
+            response = client_with_key.post(
+                "/api/ml/embed_text", json={"text": "a red bicycle"}, headers=AUTH
+            )
+
+        assert response.status_code == 200
+        assert len(response.json()["embedding"]) == 768
+        fake.embed_text.assert_called_once_with("a red bicycle")
