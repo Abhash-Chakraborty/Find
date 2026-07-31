@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     #   gpu  = prefer GPU; automatically fall back to CPU if unavailable
     #   cpu  = force CPU
     ACCEL_MODE: Literal["auto", "gpu", "cpu"] = "auto"
+    # PP-OCRv5 model variant: "server" (heavier, GPU-oriented) vs "mobile"
+    # (lightweight, CPU-oriented). Defaults to "mobile" based on recorded
+    # CPU benchmark results (~3x faster, ~40-47% less RAM, equal-or-better
+    # accuracy in 4/5 test categories) -- see
+    # docs/ocr-mobile-benchmark.md for the full writeup. See issue #341.
+    OCR_VARIANT: Literal["mobile", "server"] = "mobile"
 
     # Processing
     MAX_UPLOAD_SIZE_MB: int = 50
