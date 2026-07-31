@@ -29,6 +29,8 @@ def client_with_key(monkeypatch):
     mock_settings.REMOTE_ML_API_KEY = VALID_TOKEN
     mock_settings.MIN_CLUSTER_SIZE = 2
     mock_settings.MIN_SAMPLES = 1
+    # The cluster fixtures below use 2-d toy vectors, not real 768-d ones.
+    mock_settings.EMBEDDING_DIM = 2
     monkeypatch.setattr(cfg_module, "settings", mock_settings)
 
     import find_api.routers.ml as ml_mod
@@ -52,6 +54,8 @@ def client_no_key(monkeypatch):
     mock_settings.REMOTE_ML_API_KEY = ""
     mock_settings.MIN_CLUSTER_SIZE = 2
     mock_settings.MIN_SAMPLES = 1
+    # The cluster fixtures below use 2-d toy vectors, not real 768-d ones.
+    mock_settings.EMBEDDING_DIM = 2
     monkeypatch.setattr(cfg_module, "settings", mock_settings)
 
     import find_api.routers.ml as ml_mod
@@ -206,3 +210,74 @@ class TestEmbedTextEndpoint:
         assert response.status_code == 200
         assert len(response.json()["embedding"]) == 768
         fake.embed_text.assert_called_once_with("a red bicycle")
+
+
+class TestClusterEndpointValidation:
+    """Malformed input must be a 4xx with a reason, not an opaque 500 from
+    deep inside NumPy or HDBSCAN.
+    """
+
+    @pytest.mark.parametrize(
+        "embeddings",
+        [
+            [[0.1, 0.2], [0.3]],  # ragged
+            [[0.1, "x"], [0.2, 0.3]],  # non-numeric
+            [[0.1, 0.2, 0.3]],  # wrong dimension
+            [],  # empty
+        ],
+    )
+    def test_malformed_embeddings_return_422(self, client_with_key, embeddings):
+        resp = client_with_key.post(
+            "/api/ml/cluster", headers=AUTH, json={"embeddings": embeddings}
+        )
+        assert resp.status_code == 422
+
+    def test_oversized_request_is_rejected(self, client_with_key):
+        from find_api.ml import clusterer
+
+        with patch.object(clusterer, "MAX_REMOTE_CLUSTER_POINTS", 3):
+            resp = client_with_key.post(
+                "/api/ml/cluster",
+                headers=AUTH,
+                json={"embeddings": [[0.1, 0.2]] * 4},
+            )
+        assert resp.status_code == 422
+        assert "limit" in resp.json()["detail"]
+
+
+class TestAnalyzeFeatureSelection:
+    def test_unknown_feature_is_rejected(self, client_with_key):
+        resp = client_with_key.post(
+            "/api/ml/analyze",
+            headers=AUTH,
+            files={"image": ("img.jpg", _make_jpeg_bytes(), "image/jpeg")},
+            data={"features": "ocr,telepathy"},
+        )
+        assert resp.status_code == 422
+
+    def test_requested_features_reach_the_processor(self, client_with_key):
+        with patch(
+            "find_api.workers.processors.extract_image_metadata",
+            return_value={"caption": "", "stage_status": {}},
+        ) as fake:
+            resp = client_with_key.post(
+                "/api/ml/analyze",
+                headers=AUTH,
+                files={"image": ("img.jpg", _make_jpeg_bytes(), "image/jpeg")},
+                data={"features": "ocr,detect"},
+            )
+        assert resp.status_code == 200
+        assert fake.call_args.kwargs["stages"] == {"ocr", "detect"}
+
+    def test_omitted_features_runs_everything(self, client_with_key):
+        """Older clients send no feature list; behaviour must be unchanged."""
+        with patch(
+            "find_api.workers.processors.extract_image_metadata",
+            return_value={"caption": "", "stage_status": {}},
+        ) as fake:
+            client_with_key.post(
+                "/api/ml/analyze",
+                headers=AUTH,
+                files={"image": ("img.jpg", _make_jpeg_bytes(), "image/jpeg")},
+            )
+        assert fake.call_args.kwargs["stages"] is None
