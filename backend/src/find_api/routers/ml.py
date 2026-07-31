@@ -206,6 +206,11 @@ def embed_text(body: Dict[str, Any]) -> Dict[str, Any]:
             detail="Text embedding failed on the remote server.",
         ) from exc
 
+    # embed_text() returns an np.ndarray. list() on that yields np.float32
+    # elements, which the JSON encoder cannot serialize -- a 500 on every
+    # remote search. tolist() converts to native floats.
+    if hasattr(embedding, "tolist"):
+        embedding = embedding.tolist()
     return {"embedding": list(embedding)}
 
 

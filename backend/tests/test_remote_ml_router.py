@@ -8,6 +8,7 @@ import types
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -31,6 +32,11 @@ def client_with_key(monkeypatch):
     mock_settings.MIN_SAMPLES = 1
     # The cluster fixtures below use 2-d toy vectors, not real 768-d ones.
     mock_settings.EMBEDDING_DIM = 2
+    # Clustering goes through ImageClusterer, which reads these. A bare
+    # MagicMock reaches HDBSCAN as an invalid n_jobs and 500s.
+    mock_settings.CLUSTERING_N_JOBS = 1
+    mock_settings.CLUSTERING_BACKEND = "sklearn"
+    mock_settings.USE_GPU = False
     monkeypatch.setattr(cfg_module, "settings", mock_settings)
 
     import find_api.routers.ml as ml_mod
@@ -56,6 +62,11 @@ def client_no_key(monkeypatch):
     mock_settings.MIN_SAMPLES = 1
     # The cluster fixtures below use 2-d toy vectors, not real 768-d ones.
     mock_settings.EMBEDDING_DIM = 2
+    # Clustering goes through ImageClusterer, which reads these. A bare
+    # MagicMock reaches HDBSCAN as an invalid n_jobs and 500s.
+    mock_settings.CLUSTERING_N_JOBS = 1
+    mock_settings.CLUSTERING_BACKEND = "sklearn"
+    mock_settings.USE_GPU = False
     monkeypatch.setattr(cfg_module, "settings", mock_settings)
 
     import find_api.routers.ml as ml_mod
@@ -195,7 +206,10 @@ class TestEmbedTextEndpoint:
 
     def test_embed_text_returns_embedding(self, client_with_key):
         fake = MagicMock()
-        fake.embed_text.return_value = [0.5] * 768
+        # An ndarray, matching CLIPEmbedder.embed_text. Returning a plain list
+        # here hid a real bug: list(ndarray) yields np.float32 elements that
+        # the JSON encoder rejects, so every remote search 500'd.
+        fake.embed_text.return_value = np.zeros(768, dtype=np.float32)
 
         # clip_embedder pulls in torch, which the mock test env does not ship,
         # so stub the whole module rather than patching an attribute on it.
