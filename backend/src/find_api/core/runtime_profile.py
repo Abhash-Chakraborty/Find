@@ -25,7 +25,7 @@ from find_api.models.app_setting import AppSetting
 
 AccelMode = Literal["auto", "gpu", "cpu"]
 ConfiguredMLMode = Literal["disabled", "full", "mock", "remote"]
-AppliedMLMode = Literal["disabled", "full", "mock", "unavailable"]
+AppliedMLMode = Literal["disabled", "full", "mock", "remote", "unavailable"]
 
 ACCEL_MODE_KEY = "accel_mode"
 AI_ENABLED_KEY = "ai_enabled"
@@ -45,11 +45,17 @@ FULL_FEATURES = (
     "clustering",
 )
 
+# Remote mode offloads inference to a user-controlled Find ML server, so it
+# needs no local model runtime -- only httpx, which every artifact ships. It is
+# therefore supported in every build profile, including the slim ones whose
+# whole point is not carrying torch.
+_REMOTE_MODE = "remote"
+
 _PROFILE_MODES: dict[str, tuple[str, ...]] = {
-    "no-ai": ("disabled",),
-    "mock": ("disabled", "mock"),
-    "cpu": ("disabled", "mock", "full"),
-    "nvidia": ("disabled", "mock", "full"),
+    "no-ai": ("disabled", _REMOTE_MODE),
+    "mock": ("disabled", "mock", _REMOTE_MODE),
+    "cpu": ("disabled", "mock", "full", _REMOTE_MODE),
+    "nvidia": ("disabled", "mock", "full", _REMOTE_MODE),
 }
 
 _active_ml_mode: ContextVar[str | None] = ContextVar(
@@ -206,11 +212,29 @@ def resolve_runtime(
         reason = None
         restart_required = False
     elif mode == "remote":
-        applied_mode = "unavailable"
-        reason = (
-            "Remote ML is configured but no remote inference client is installed. "
-            "Find will not fall back to local inference."
-        )
+        # The remote client ships in every artifact, so remote is unavailable
+        # only when it has not been pointed at a server. Resolving it to
+        # "unavailable" unconditionally made every applied_mode == "unavailable"
+        # guard fire -- process_image raised RuntimeUnavailableError before the
+        # remote dispatch in processors.py was ever reached.
+        missing = [
+            name
+            for name, value in (
+                ("REMOTE_ML_URL", settings.REMOTE_ML_URL),
+                ("REMOTE_ML_API_KEY", settings.REMOTE_ML_API_KEY),
+            )
+            if not (value or "").strip()
+        ]
+        if missing:
+            applied_mode = "unavailable"
+            verb = "is" if len(missing) == 1 else "are"
+            reason = (
+                f"Remote ML is configured but {' and '.join(missing)} {verb} "
+                "not set. Find will not fall back to local inference."
+            )
+        else:
+            applied_mode = "remote"
+            reason = None
         restart_required = False
     elif mode not in modes:
         applied_mode = "unavailable"
