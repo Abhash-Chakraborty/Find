@@ -3,7 +3,6 @@ Clustering using HDBSCAN
 """
 
 import numpy as np
-from sklearn.cluster import HDBSCAN
 from typing import Tuple, Dict
 import logging
 
@@ -128,6 +127,11 @@ class ImageClusterer:
         return np.asarray(labels, dtype=np.int32)
 
     def _fit_predict_sklearn(self, embeddings: np.ndarray, metric: str) -> np.ndarray:
+        # Imported here rather than at module scope so compute_centroids() --
+        # pure numpy -- stays usable in remote mode, where clustering runs on
+        # the remote server and this artifact may not ship scikit-learn.
+        from sklearn.cluster import HDBSCAN
+
         clusterer_kwargs = {
             "min_cluster_size": self.min_cluster_size,
             "min_samples": self.min_samples,
