@@ -753,10 +753,10 @@ provides-extras = ["mock", "cpu", "nvidia"]
 [package.metadata.requires-dev]
 dev = [
     { name = "black", specifier = "==26.3.1" },
-    { name = "pip-audit", specifier = "==2.9.0" },
+    { name = "pip-audit", specifier = "==2.10.1" },
     { name = "psutil", specifier = ">=7.2.2" },
-    { name = "pytest", specifier = "==9.0.3" },
-    { name = "pytest-asyncio", specifier = "==0.23.3" },
+    { name = "pytest", specifier = "==9.1.1" },
+    { name = "pytest-asyncio", specifier = "==1.4.0" },
     { name = "python-levenshtein", specifier = ">=0.27.3" },
     { name = "ruff", specifier = "==0.1.14" },
     { name = "scikit-learn", specifier = "==1.9.0" },
