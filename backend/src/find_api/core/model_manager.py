@@ -358,7 +358,10 @@ class ModelManager:
 
             redis_conn = Redis.from_url(settings.REDIS_URL)
             key = f"find:model_status:{self.process_name}"
-            redis_conn.setex(key, 600, json.dumps(self.get_status()))
+            # set(ex=) rather than setex(): redis-py deprecated setex in 2.6.12
+            # and started emitting the warning on every call from 8.x, which is
+            # once per publish. Identical semantics, 600s TTL.
+            redis_conn.set(key, json.dumps(self.get_status()), ex=600)
         except Exception as exc:
             logger.debug("Failed to publish model manager status: %s", exc)
 

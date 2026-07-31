@@ -1,4 +1,20 @@
 version: 2
+
+# Each ecosystem is split into two groups: one for minor/patch updates and one
+# for majors.
+#
+# A single all-in-one group repeatedly produced PRs that could not merge,
+# because one breaking major took the whole batch down with it and blocked the
+# routine security patches riding along:
+#
+#   - #369 bundled a torch major that does not exist on the pinned
+#     pytorch-cu128 index, so `uv sync --locked` failed on every runner and the
+#     other 20 python updates were stuck behind it.
+#   - #375 / #380 bundled tailwindcss 3 -> 4 and typescript 5 -> 7, which fail
+#     `frontend-check`, blocking the axios and react patches in the same PR.
+#
+# Keeping majors separate means the safe half stays mergeable on its own, and
+# each breaking upgrade gets reviewed on its own terms.
 updates:
   - package-ecosystem: github-actions
     directory: /
@@ -11,8 +27,19 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      actions-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
-  - package-ecosystem: pip
+  # `uv`, not `pip`. The pip ecosystem edits pyproject.toml and stops there --
+  # it has no idea uv.lock exists. backend-check runs `uv sync --locked`, so
+  # every pip-authored PR failed with "The lockfile at `uv.lock` needs to be
+  # updated" the moment it opened. #387 through #391 all died that way, and the
+  # backend pins have been frozen for months as a result (pgvector was still on
+  # 0.2.4, minio on 7.2.3). The uv ecosystem updates the manifest and the
+  # lockfile together, which is the only thing that can pass this repo's CI.
+  - package-ecosystem: uv
     directory: /backend
     target-branch: canary
     schedule:
@@ -21,8 +48,51 @@ updates:
       time: "05:00"
       timezone: Asia/Kolkata
     groups:
+      # Linters and formatters get their own group, ahead of the runtime ones
+      # so they win the pattern match. They are pinned exactly and they rewrite
+      # the tree, so a bump is never a routine dependency update: ruff 0.1.14 ->
+      # 0.16 in #401 produced 801 `ruff check` errors and took 20 unrelated
+      # patches down with it. Being 0.x, that is a *minor* bump as far as
+      # Dependabot is concerned, so the major/minor split alone cannot separate
+      # them. Reviewing a formatter upgrade on its own is the point.
+      python-tooling:
+        patterns: ["ruff", "black"]
       python-runtime:
         patterns: ["*"]
+        exclude-patterns: ["ruff", "black"]
+        update-types: ["minor", "patch"]
+      python-runtime-major:
+        patterns: ["*"]
+        exclude-patterns: ["ruff", "black"]
+        update-types: ["major"]
+    # torch/torchvision resolve from the pinned pytorch-cpu and pytorch-cu128
+    # indexes (see [tool.uv.sources] in backend/pyproject.toml), and cu128 lags
+    # PyPI. Dependabot reads PyPI, so it proposes versions the nvidia extra
+    # cannot resolve at all -- #369 proposed torch 2.13.0, which cu128 does not
+    # publish, and `uv sync --locked` failed on every runner. That was a minor
+    # bump, so the major/minor split above would not have caught it.
+    #
+    # TRADEOFF, read before removing: `ignore` suppresses Dependabot *security*
+    # update PRs for these packages as well as version updates. A future torch
+    # CVE will therefore still raise an alert in the Security tab, but will NOT
+    # open a PR on its own -- someone has to act on the alert by hand. That is
+    # accepted here only because a torch bump has to be hand-verified against
+    # the real ML stack regardless (transformers, open-clip-torch, timm,
+    # ultralytics, insightface). #382 tracks the current open torch advisories
+    # and the 2.11.0 evaluation; keep that issue alive while this ignore exists.
+    #
+    # insightface is ignored for the same shape of reason, not a resolution
+    # one. It is only installed by the cpu/nvidia extras, so `uv sync --group
+    # dev` never pulls it and no CI job imports it -- a bump is green on a
+    # checkmark that never executed a line of it. On top of that, ml/
+    # face_detector.py already carries an AssertionError retry for antelopev2's
+    # nested model layout, so the thing most likely to break across a major is
+    # exactly the thing nothing here can see. #404 tracks evaluating 1.0.1 by
+    # hand against real model weights.
+    ignore:
+      - dependency-name: torch
+      - dependency-name: torchvision
+      - dependency-name: insightface
 
   - package-ecosystem: npm
     directory: /frontend
@@ -33,8 +103,21 @@ updates:
       time: "05:30"
       timezone: Asia/Kolkata
     groups:
+      # Same reasoning as python-tooling above. Biome is the formatter and the
+      # linter behind `pnpm check`, so its rules moving is a tree-wide rewrite,
+      # not a dependency update: 2.4.15 -> 2.5.5 in #399 failed frontend-check
+      # with 5 errors on files nobody touched, and took an axios patch down
+      # with it.
+      frontend-tooling:
+        patterns: ["@biomejs/biome"]
       frontend-runtime:
         patterns: ["*"]
+        exclude-patterns: ["@biomejs/biome"]
+        update-types: ["minor", "patch"]
+      frontend-runtime-major:
+        patterns: ["*"]
+        exclude-patterns: ["@biomejs/biome"]
+        update-types: ["major"]
 
   - package-ecosystem: cargo
     directory: /frontend/src-tauri
@@ -44,6 +127,10 @@ updates:
     groups:
       desktop-runtime:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      desktop-runtime-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
   - package-ecosystem: docker
     directory: /backend
