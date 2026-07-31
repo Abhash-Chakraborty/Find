@@ -9,7 +9,6 @@ from typing import Any, Dict, List
 import numpy as np
 from PIL import Image
 
-from find_api.core.config import settings
 from find_api.core.model_manager import ModelUnavailableError
 from find_api.core.runtime_profile import current_ml_mode
 from find_api.ml.mock_embedder import get_mock_embedder
@@ -143,6 +142,7 @@ def extract_image_metadata(
     if mode == "mock":
         if on_stage:
             on_stage("generating mock metadata")
+        logger.info("Using mock image metadata extractor")
         return {
             "caption": f"Mock caption for {image.width}x{image.height} image",
             "objects": [],
@@ -158,8 +158,7 @@ def extract_image_metadata(
         }
 
     # ---- Remote mode ----
-    # We check settings.ML_MODE directly because current_ml_mode() maps "remote" to "unavailable" locally.
-    if settings.ML_MODE.lower() == "remote":
+    if mode == "remote":
         if on_stage:
             on_stage("sending to remote ML server")
         return _remote_analyze_image(image)
@@ -178,9 +177,11 @@ def extract_image_metadata(
         }
     }
 
+    # 1. Object Detection
     try:
         if on_stage:
             on_stage("detecting objects")
+        logger.info("Running object detection...")
         from find_api.ml.object_detector import get_object_detector
 
         objects = get_object_detector().detect(image)
@@ -189,7 +190,9 @@ def extract_image_metadata(
             "status": "success",
             "error": None,
         }
+        logger.info(f"Detected {len(objects)} objects")
     except Exception as e:
+        logger.exception("Object detection failed")
         metadata["objects"] = []
         _record_stage_error(metadata, "objects", e)
         metadata["stage_status"]["object_detection"] = {
@@ -197,15 +200,18 @@ def extract_image_metadata(
             "error": sanitize_error(e),
         }
 
+    # 2. Image Captioning
     try:
         if on_stage:
             on_stage("generating caption")
+        logger.info("Generating caption...")
         from find_api.ml.captioner import get_image_captioner
 
         caption = get_image_captioner().generate_caption(image)
         metadata["caption"] = caption
         metadata["stage_status"]["captioning"] = {"status": "success", "error": None}
     except Exception as e:
+        logger.exception("Captioning failed")
         metadata["caption"] = ""
         _record_stage_error(metadata, "caption", e)
         metadata["stage_status"]["captioning"] = {
@@ -213,9 +219,11 @@ def extract_image_metadata(
             "error": sanitize_error(e),
         }
 
+    # 3. OCR Text Extraction
     try:
         if on_stage:
             on_stage("running OCR")
+        logger.info("Extracting text...")
         from find_api.ml.ocr import get_ocr_extractor
 
         ocr = get_ocr_extractor()
@@ -223,7 +231,9 @@ def extract_image_metadata(
         metadata["ocr_text"] = ocr_text
         metadata["text_blocks"] = text_blocks
         metadata["stage_status"]["ocr"] = {"status": "success", "error": None}
+        logger.info(f"Extracted {len(ocr_text)} characters")
     except Exception as e:
+        logger.exception("OCR failed")
         metadata["ocr_text"] = ""
         metadata["text_blocks"] = []
         _record_stage_error(metadata, "ocr", e)
@@ -240,6 +250,19 @@ def generate_hybrid_embedding(
 ) -> List[float]:
     """
     Generate hybrid embedding from image, caption, detected objects, and OCR text.
+
+        Weighted average depends on which text signals are present:
+      - image + caption + objects  →  equal thirds  (1/3 each)
+      - image + caption only       →  halves         (1/2 each)
+      - image + objects only       →  halves         (1/2 each)
+      - image only                 →  image vector directly
+
+        When OCR text is present, we apply OCR-aware weights and normalise them
+        across active signals to prioritize text relevance for document-like images.
+
+    Empty strings are never passed to embed_text() because CLIP encodes
+    them as a deterministic non-zero vector that would introduce a
+    systematic bias across all images lacking that signal.
     """
     mode = current_ml_mode()
 
@@ -249,7 +272,7 @@ def generate_hybrid_embedding(
         return get_mock_embedder().embed_metadata(image, metadata)
 
     # ---- Remote mode ----
-    if settings.ML_MODE.lower() == "remote":
+    if mode == "remote":
         return _remote_embed_image(image, metadata)
 
     # Protect local execution
@@ -258,6 +281,7 @@ def generate_hybrid_embedding(
 
     # ---- Full / local mode ----
     try:
+        logger.info("Generating CLIP embedding...")
         from find_api.ml.clip_embedder import get_clip_embedder
 
         embedder = get_clip_embedder()
@@ -361,7 +385,17 @@ def has_person_object(metadata: Dict[str, Any]) -> bool:
 
 
 def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
-    """Detect faces in image and store them in the database."""
+    """
+    Detect faces in image and store them in the database.
+    Returns the number of faces detected.
+
+    In mock mode: skips detection entirely (no model needed).
+    In remote mode: skips detection -- faces are deliberately not offloaded,
+    since there is no face endpoint and biometric data is the last thing that
+    should leave the machine by default.
+    In real mode: uses InsightFace antelopev2 to detect faces.
+    """
+    # Import here to avoid circular imports
     from find_api.models.face import Face
 
     # Mock mode / Remote mode - skip face detection entirely
@@ -370,7 +404,9 @@ def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
         logger.info("Non-full AI mode: skipping face detection for media %s", media_id)
         return 0
 
+    # Real mode - run actual face detection
     try:
+        logger.info("Running face detection for media %s...", media_id)
         from find_api.ml.face_detector import get_face_detector
 
         faces = get_face_detector().detect_faces(image)
@@ -403,5 +439,6 @@ def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
         db.commit()
         return stored_count
     except Exception:
+        logger.exception("Face detection failed for media %s", media_id)
         db.rollback()
         return 0
