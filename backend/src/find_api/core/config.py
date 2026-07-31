@@ -142,6 +142,19 @@ class Settings(BaseSettings):
             raise ValueError(f"{info.field_name} must be greater than 0")
         return value
 
+    @field_validator("ACTIVITY_RETENTION_DAYS", "TRASH_RETENTION_DAYS")
+    @classmethod
+    def validate_retention_days(cls, value: int, info):
+        """Reject negative retention windows.
+
+        0 is a documented "keep forever" switch, but a negative value has no
+        meaning -- it would silently disable cleanup instead of failing, so a
+        typo like -1 in the environment looks like it worked.
+        """
+        if value < 0:
+            raise ValueError(f"{info.field_name} must be 0 or greater")
+        return value
+
     @field_validator("MAX_IMAGE_PIXELS")
     @classmethod
     def validate_image_pixel_ceiling(cls, value: int):

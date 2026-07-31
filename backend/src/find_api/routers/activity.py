@@ -4,7 +4,6 @@ Rows are written elsewhere (see services/activity_log.py) at the point of
 each state change; this router only reads and prunes them.
 """
 
-from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -13,9 +12,10 @@ from sqlalchemy.orm import Session
 
 from find_api.core.config import settings
 from find_api.core.database import get_db
-from find_api.core.dependencies import get_required_user, scope_activity_query
+from find_api.core.dependencies import get_required_user
 from find_api.models.activity import Activity
 from find_api.models.user import User
+from find_api.services import activity_log
 
 router = APIRouter()
 
@@ -50,20 +50,14 @@ def list_activity(
     user: Optional[User] = Depends(get_required_user),
 ):
     """List activity log entries, newest first."""
-    query = scope_activity_query(db.query(Activity), user)
-    if category:
-        query = query.filter(Activity.category == category)
-    if action:
-        query = query.filter(Activity.action == action)
-    if media_id is not None:
-        query = query.filter(Activity.media_id == media_id)
-
-    total = query.count()
-    rows = (
-        query.order_by(Activity.created_at.desc(), Activity.id.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
+    rows, total = activity_log.list_activity(
+        db,
+        user,
+        skip=skip,
+        limit=limit,
+        category=category,
+        action=action,
+        media_id=media_id,
     )
     items = [_serialize_activity(row) for row in rows]
     page = (skip // limit) + 1 if limit else 1
@@ -76,10 +70,7 @@ def clear_activity(
     user: Optional[User] = Depends(get_required_user),
 ):
     """Delete every activity row the current user can see."""
-    deleted = scope_activity_query(db.query(Activity), user).delete(
-        synchronize_session=False
-    )
-    db.commit()
+    deleted = activity_log.clear_activity(db, user)
     return {"message": "Activity cleared", "deleted_count": deleted}
 
 
@@ -100,11 +91,7 @@ def purge_expired_activity(
             "deleted_count": 0,
         }
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
-    deleted = scope_activity_query(
-        db.query(Activity).filter(Activity.created_at < cutoff), user
-    ).delete(synchronize_session=False)
-    db.commit()
+    deleted = activity_log.purge_expired_activity(db, user, retention_days)
     return {
         "message": f"Purged activity older than {retention_days} days",
         "deleted_count": deleted,

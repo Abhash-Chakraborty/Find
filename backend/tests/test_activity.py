@@ -308,3 +308,28 @@ class TestActivityScoping:
             "/api/activity", headers=_auth(shared_instance["admin_token"])
         ).json()
         assert remaining["total"] == 1
+
+
+class TestRetentionValidation:
+    """0 means keep forever, but a negative value has no meaning -- it would
+    silently disable cleanup, so a typo like -1 must fail loudly.
+    """
+
+    @pytest.mark.parametrize(
+        "field", ["ACTIVITY_RETENTION_DAYS", "TRASH_RETENTION_DAYS"]
+    )
+    def test_negative_retention_is_rejected(self, field):
+        from pydantic import ValidationError
+
+        from find_api.core.config import Settings
+
+        with pytest.raises(ValidationError, match="0 or greater"):
+            Settings(**{field: -1})
+
+    @pytest.mark.parametrize(
+        "field", ["ACTIVITY_RETENTION_DAYS", "TRASH_RETENTION_DAYS"]
+    )
+    def test_zero_retention_is_allowed(self, field):
+        from find_api.core.config import Settings
+
+        assert getattr(Settings(**{field: 0}), field) == 0
