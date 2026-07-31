@@ -23,9 +23,10 @@ def test_create_storage_backend_selects_minio():
     fake_instance = MagicMock(name="MinIOStorageBackendInstance")
     fake_cls = MagicMock(return_value=fake_instance)
 
-    with patch(
-        "find_api.core.storage_minio.MinIOStorageBackend", fake_cls
-    ), patch.object(storage_factory, "settings") as mock_settings:
+    with (
+        patch("find_api.core.storage_minio.MinIOStorageBackend", fake_cls),
+        patch.object(storage_factory, "settings") as mock_settings,
+    ):
         mock_settings.STORAGE_BACKEND = "minio"
 
         backend = storage_factory.create_storage_backend()
@@ -38,9 +39,10 @@ def test_create_storage_backend_selects_local():
     fake_instance = MagicMock(name="LocalStorageBackendInstance")
     fake_cls = MagicMock(return_value=fake_instance)
 
-    with patch(
-        "find_api.core.storage_local.LocalStorageBackend", fake_cls
-    ), patch.object(storage_factory, "settings") as mock_settings:
+    with (
+        patch("find_api.core.storage_local.LocalStorageBackend", fake_cls),
+        patch.object(storage_factory, "settings") as mock_settings,
+    ):
         mock_settings.STORAGE_BACKEND = "local"
         mock_settings.LOCAL_STORAGE_PATH = "/tmp/test_storage"
 
@@ -54,9 +56,10 @@ def test_create_storage_backend_is_case_insensitive():
     fake_instance = MagicMock(name="LocalStorageBackendInstance")
     fake_cls = MagicMock(return_value=fake_instance)
 
-    with patch(
-        "find_api.core.storage_local.LocalStorageBackend", fake_cls
-    ), patch.object(storage_factory, "settings") as mock_settings:
+    with (
+        patch("find_api.core.storage_local.LocalStorageBackend", fake_cls),
+        patch.object(storage_factory, "settings") as mock_settings,
+    ):
         mock_settings.STORAGE_BACKEND = "LOCAL"
         mock_settings.LOCAL_STORAGE_PATH = "/tmp/test_storage"
 
@@ -107,9 +110,10 @@ def test_create_storage_backend_defaults_to_minio_when_unset():
     fake_cls = MagicMock(return_value=fake_instance)
     bare_settings = object()
 
-    with patch(
-        "find_api.core.storage_minio.MinIOStorageBackend", fake_cls
-    ), patch.object(storage_factory, "settings", bare_settings):
+    with (
+        patch("find_api.core.storage_minio.MinIOStorageBackend", fake_cls),
+        patch.object(storage_factory, "settings", bare_settings),
+    ):
         backend = storage_factory.create_storage_backend()
 
     fake_cls.assert_called_once_with()

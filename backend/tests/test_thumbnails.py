@@ -50,10 +50,13 @@ def test_upload_thumbnail_returns_metadata_and_uploads_webp():
 def test_upload_thumbnail_generation_failure_returns_none():
     fake_backend = AsyncMock()
 
-    with patch(
-        "find_api.core.storage_thumbnails.generate_thumbnail",
-        side_effect=OSError("decode failed"),
-    ), patch("find_api.core.storage.get_storage_instance", return_value=fake_backend):
+    with (
+        patch(
+            "find_api.core.storage_thumbnails.generate_thumbnail",
+            side_effect=OSError("decode failed"),
+        ),
+        patch("find_api.core.storage.get_storage_instance", return_value=fake_backend),
+    ):
         metadata = upload_thumbnail(b"not an image", "abc123")
 
     assert metadata is None

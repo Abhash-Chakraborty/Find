@@ -35,6 +35,88 @@ PERSON_OBJECT_LABELS = {
     "face",
 }
 
+# ---------------------------------------------------------------------------
+# Remote ML dispatch helpers
+# ---------------------------------------------------------------------------
+
+
+# REMOTE_ML_FEATURES stage name -> the stage_status key it controls.
+_REMOTE_ANALYZE_STAGES = {
+    "detect": "object_detection",
+    "caption": "captioning",
+    "ocr": "ocr",
+}
+
+
+class RemoteFeatureDisabled(Exception):
+    """Raised when a remote stage is switched off in REMOTE_ML_FEATURES."""
+
+
+def _remote_analyze_image(image: Image.Image) -> Dict[str, Any]:
+    """Send the image to the remote Find ML server for the analyze stage.
+
+    The enabled feature list is carried through to the server, which runs only
+    those stages. Checking the list here and then letting the server run
+    everything would make REMOTE_ML_FEATURES cosmetic: switching `ocr` off
+    would still have the remote host OCR the image.
+    """
+    from find_api.ml.remote_client import _feature_enabled, remote_analyze
+
+    requested = [name for name in _REMOTE_ANALYZE_STAGES if _feature_enabled(name)]
+    disabled_status = {
+        stage: {"status": "skipped", "error": None}
+        for name, stage in _REMOTE_ANALYZE_STAGES.items()
+        if name not in requested
+    }
+
+    if not requested:
+        logger.info("Remote mode: no analyze features enabled; nothing is transmitted.")
+        return {
+            "caption": "",
+            "objects": [],
+            "ocr_text": "",
+            "text_blocks": [],
+            "stage_status": {
+                **disabled_status,
+                "embedding": {"status": "pending", "error": None},
+            },
+        }
+
+    logger.info("Dispatching analyze to remote ML server (features=%s)", requested)
+    result = remote_analyze(image, features=requested)
+
+    # A disabled stage must never be reported as "success" -- it did not run.
+    stage_status = result.get("stage_status") or {
+        stage: {"status": "success", "error": None}
+        for stage in _REMOTE_ANALYZE_STAGES.values()
+    }
+    stage_status.update(disabled_status)
+    stage_status.setdefault("embedding", {"status": "pending", "error": None})
+    result["stage_status"] = stage_status
+    return result
+
+
+def _remote_embed_image(image: Image.Image, metadata: Dict[str, Any]) -> List[float]:
+    """Send the image to the remote Find ML server for the embed stage."""
+    from find_api.ml.remote_client import _feature_enabled, remote_embed
+
+    if not _feature_enabled("embed"):
+        # Deliberately not a mock vector. Persisting one would put a
+        # semantically meaningless embedding into the same column real vectors
+        # live in, so the image would be searchable and always wrong. The
+        # caller skips vector persistence instead.
+        raise RemoteFeatureDisabled(
+            "Remote embedding is disabled in REMOTE_ML_FEATURES."
+        )
+
+    logger.info("Dispatching embed to remote ML server")
+    return remote_embed(image, metadata)
+
+
+# ---------------------------------------------------------------------------
+# Existing helpers
+# ---------------------------------------------------------------------------
+
 
 def _safe_normalize_embedding(
     vector: np.ndarray,
@@ -65,18 +147,31 @@ def _record_stage_error(metadata: Dict[str, Any], stage: str, error: Exception) 
         message = str(error)
     else:
         message = f"{stage} failed during processing."
-
     metadata.setdefault("stage_errors", {})[stage] = message
+
+
+# ---------------------------------------------------------------------------
+# Public processor functions
+# ---------------------------------------------------------------------------
 
 
 def extract_image_metadata(
     image: Image.Image,
     on_stage: Callable[[str], None] | None = None,
+    stages: set[str] | None = None,
 ) -> Dict[str, Any]:
     """
     Run all ML models to extract metadata from image
+
+    ``stages`` optionally restricts which of "detect"/"caption"/"ocr" run;
+    omitted stages report "skipped". This is what lets a Find instance acting
+    as a remote ML server honour the client's REMOTE_ML_FEATURES instead of
+    running everything regardless.
     """
     mode = current_ml_mode()
+    wanted = set(_REMOTE_ANALYZE_STAGES) if stages is None else set(stages)
+
+    # ---- Mock mode ----
     if mode == "mock":
         if on_stage:
             on_stage("generating mock metadata")
@@ -94,10 +189,19 @@ def extract_image_metadata(
                 "embedding": {"status": "pending", "error": None},
             },
         }
+
+    # ---- Remote mode ----
+    if mode == "remote":
+        if on_stage:
+            on_stage("sending to remote ML server")
+        return _remote_analyze_image(image)
+
+    # Protect local execution
     if mode != "full":
         raise RuntimeError(f"AI metadata extraction is unavailable in mode '{mode}'.")
 
-    metadata = {
+    # ---- Full / local mode ----
+    metadata: Dict[str, Any] = {
         "stage_status": {
             "object_detection": {"status": "pending", "error": None},
             "captioning": {"status": "pending", "error": None},
@@ -106,73 +210,89 @@ def extract_image_metadata(
         }
     }
 
-    # 1. Object Detection
-    try:
-        if on_stage:
-            on_stage("detecting objects")
-        logger.info("Running object detection...")
-        from find_api.ml.object_detector import get_object_detector
+    # A stage the caller did not ask for must not run at all, and must be
+    # reported as skipped rather than left "pending".
+    for name, stage in _REMOTE_ANALYZE_STAGES.items():
+        if name not in wanted:
+            metadata["stage_status"][stage] = {"status": "skipped", "error": None}
 
-        detector = get_object_detector()
-        objects = detector.detect(image)
-        metadata["objects"] = objects
-        metadata["stage_status"]["object_detection"] = {
-            "status": "success",
-            "error": None,
-        }
-        logger.info(f"Detected {len(objects)} objects")
-    except Exception as e:
-        logger.exception("Object detection failed")
+    # 1. Object Detection
+    if "detect" in wanted:
+        try:
+            if on_stage:
+                on_stage("detecting objects")
+            logger.info("Running object detection...")
+            from find_api.ml.object_detector import get_object_detector
+
+            objects = get_object_detector().detect(image)
+            metadata["objects"] = objects
+            metadata["stage_status"]["object_detection"] = {
+                "status": "success",
+                "error": None,
+            }
+            logger.info(f"Detected {len(objects)} objects")
+        except Exception as e:
+            logger.exception("Object detection failed")
+            metadata["objects"] = []
+            _record_stage_error(metadata, "objects", e)
+            metadata["stage_status"]["object_detection"] = {
+                "status": "failed",
+                "error": sanitize_error(e),
+            }
+    else:
         metadata["objects"] = []
-        _record_stage_error(metadata, "objects", e)
-        metadata["stage_status"]["object_detection"] = {
-            "status": "failed",
-            "error": sanitize_error(e),
-        }
 
     # 2. Image Captioning
-    try:
-        if on_stage:
-            on_stage("generating caption")
-        logger.info("Generating caption...")
-        from find_api.ml.captioner import get_image_captioner
+    if "caption" in wanted:
+        try:
+            if on_stage:
+                on_stage("generating caption")
+            logger.info("Generating caption...")
+            from find_api.ml.captioner import get_image_captioner
 
-        captioner = get_image_captioner()
-        caption = captioner.generate_caption(image)
-        metadata["caption"] = caption
-        metadata["stage_status"]["captioning"] = {"status": "success", "error": None}
-        logger.info(f"Caption: {caption}")
-    except Exception as e:
-        logger.exception("Captioning failed")
+            caption = get_image_captioner().generate_caption(image)
+            metadata["caption"] = caption
+            metadata["stage_status"]["captioning"] = {
+                "status": "success",
+                "error": None,
+            }
+        except Exception as e:
+            logger.exception("Captioning failed")
+            metadata["caption"] = ""
+            _record_stage_error(metadata, "caption", e)
+            metadata["stage_status"]["captioning"] = {
+                "status": "failed",
+                "error": sanitize_error(e),
+            }
+    else:
         metadata["caption"] = ""
-        _record_stage_error(metadata, "caption", e)
-        metadata["stage_status"]["captioning"] = {
-            "status": "failed",
-            "error": sanitize_error(e),
-        }
 
     # 3. OCR Text Extraction
-    try:
-        if on_stage:
-            on_stage("running OCR")
-        logger.info("Extracting text...")
-        from find_api.ml.ocr import get_ocr_extractor
+    if "ocr" in wanted:
+        try:
+            if on_stage:
+                on_stage("running OCR")
+            logger.info("Extracting text...")
+            from find_api.ml.ocr import get_ocr_extractor
 
-        ocr = get_ocr_extractor()
-        ocr_text, text_blocks = ocr.extract_text_and_boxes(image)
-        metadata["ocr_text"] = ocr_text
-        metadata["text_blocks"] = text_blocks
-        metadata["stage_status"]["ocr"] = {"status": "success", "error": None}
-        logger.info(f"Extracted {len(ocr_text)} characters")
-    except Exception as e:
-        logger.exception("OCR failed")
+            ocr = get_ocr_extractor()
+            ocr_text, text_blocks = ocr.extract_text_and_boxes(image)
+            metadata["ocr_text"] = ocr_text
+            metadata["text_blocks"] = text_blocks
+            metadata["stage_status"]["ocr"] = {"status": "success", "error": None}
+            logger.info(f"Extracted {len(ocr_text)} characters")
+        except Exception as e:
+            logger.exception("OCR failed")
+            metadata["ocr_text"] = ""
+            metadata["text_blocks"] = []
+            _record_stage_error(metadata, "ocr", e)
+            metadata["stage_status"]["ocr"] = {
+                "status": "failed",
+                "error": sanitize_error(e),
+            }
+    else:
         metadata["ocr_text"] = ""
         metadata["text_blocks"] = []
-        _record_stage_error(metadata, "ocr", e)
-        metadata["stage_status"]["ocr"] = {
-            "status": "failed",
-            "error": sanitize_error(e),
-        }
 
     return metadata
 
@@ -197,12 +317,21 @@ def generate_hybrid_embedding(
     systematic bias across all images lacking that signal.
     """
     mode = current_ml_mode()
+
+    # ---- Mock mode ----
     if mode == "mock":
         logger.info("Using mock embedding generator")
         return get_mock_embedder().embed_metadata(image, metadata)
+
+    # ---- Remote mode ----
+    if mode == "remote":
+        return _remote_embed_image(image, metadata)
+
+    # Protect local execution
     if mode != "full":
         raise RuntimeError(f"AI embedding generation is unavailable in mode '{mode}'.")
 
+    # ---- Full / local mode ----
     try:
         logger.info("Generating CLIP embedding...")
         from find_api.ml.clip_embedder import get_clip_embedder
@@ -216,29 +345,23 @@ def generate_hybrid_embedding(
         caption = (metadata.get("caption") or "").strip()
 
         raw_objects = metadata.get("objects") or []
-        object_names_set: set[str] = set()
-        for obj in raw_objects:
-            if not isinstance(obj, dict):
-                continue
-
-            label = str(obj.get("class", "")).strip()
-            if label:
-                object_names_set.add(label)
-
-        object_names = sorted(object_names_set)
+        object_names_set = {
+            str(obj.get("class", "")).strip()
+            for obj in raw_objects
+            if isinstance(obj, dict) and str(obj.get("class", "")).strip()
+        }
         objects_text = (
-            "detected objects: " + ", ".join(object_names) if object_names else ""
+            "detected objects: " + ", ".join(sorted(object_names_set))
+            if object_names_set
+            else ""
         )
-
         ocr_text = (metadata.get("ocr_text") or "").strip()
 
         has_caption = bool(caption)
         has_objects = bool(objects_text)
         has_ocr = bool(ocr_text)
 
-        # --- 3. Embed only what exists, in a single model pass where possible ---
-        text_inputs: list[str] = []
-        text_signal_names: list[str] = []
+        text_inputs, text_signal_names = [], []
         if has_caption:
             text_inputs.append(caption)
             text_signal_names.append("caption")
@@ -249,7 +372,7 @@ def generate_hybrid_embedding(
             text_inputs.append(ocr_text)
             text_signal_names.append("ocr")
 
-        signal_vectors: dict[str, np.ndarray] = {"image": image_embedding}
+        signal_vectors = {"image": image_embedding}
 
         if text_inputs:
             if len(text_inputs) == 1:
@@ -300,23 +423,16 @@ def generate_hybrid_embedding(
 
 def has_person_object(metadata: Dict[str, Any]) -> bool:
     """Return true when object detection found a person-like object."""
-    objects = metadata.get("objects") or []
-
-    for obj in objects:
+    for obj in metadata.get("objects") or []:
         if not isinstance(obj, dict):
             continue
-
         label = (
             str(obj.get("class") or obj.get("name") or obj.get("label") or "")
             .strip()
             .lower()
         )
-        if not label:
-            continue
-
         if label in PERSON_OBJECT_LABELS:
             return True
-
     return False
 
 
@@ -326,13 +442,16 @@ def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
     Returns the number of faces detected.
 
     In mock mode: skips detection entirely (no model needed).
+    In remote mode: skips detection -- faces are deliberately not offloaded,
+    since there is no face endpoint and biometric data is the last thing that
+    should leave the machine by default.
     In real mode: uses InsightFace antelopev2 to detect faces.
     """
     # Import here to avoid circular imports
     from find_api.models.face import Face
 
-    # Mock mode - skip face detection entirely
-    # This keeps light/mock mode working without downloading face models
+    # Mock mode / Remote mode - skip face detection entirely
+    # This keeps light/mock/remote mode working without downloading face models
     if current_ml_mode() != "full":
         logger.info("Non-full AI mode: skipping face detection for media %s", media_id)
         return 0
@@ -342,26 +461,21 @@ def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
         logger.info("Running face detection for media %s...", media_id)
         from find_api.ml.face_detector import get_face_detector
 
-        detector = get_face_detector()
-        faces = detector.detect_faces(image)
-
+        faces = get_face_detector().detect_faces(image)
         db.query(Face).filter(Face.media_id == media_id).delete(
             synchronize_session=False
         )
 
         if not faces:
             db.commit()
-            logger.info("No faces detected in media %s", media_id)
             return 0
 
-        # Save each detected face to the database
         stored_count = 0
         for face_data in faces:
             bbox = face_data.get("bbox")
             embedding = face_data.get("embedding")
             confidence = face_data.get("confidence")
-            if bbox is None or embedding is None or confidence is None:
-                logger.warning("Skipping malformed face payload for media %s", media_id)
+            if None in (bbox, embedding, confidence):
                 continue
 
             db.add(
@@ -370,22 +484,13 @@ def detect_and_store_faces(image: Image.Image, media_id: int, db) -> int:
                     bounding_box=bbox,
                     embedding=embedding,
                     confidence=confidence,
-                    # person_id is None for now - set after clustering
                 )
             )
             stored_count += 1
 
-        if stored_count == 0:
-            db.commit()
-            logger.info("No valid faces to store for media %s", media_id)
-            return 0
-
         db.commit()
-        logger.info("Stored %s faces for media %s", stored_count, media_id)
         return stored_count
-
     except Exception:
         logger.exception("Face detection failed for media %s", media_id)
         db.rollback()
-        # Don't raise - face detection failure should not fail the whole job
         return 0

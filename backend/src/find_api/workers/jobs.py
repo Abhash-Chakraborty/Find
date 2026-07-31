@@ -75,6 +75,30 @@ def _metadata_only_payload(profile: str) -> dict:
     }
 
 
+def _remote_cluster_embeddings(embeddings):
+    """Run the clustering pass on the remote ML server.
+
+    ``cluster`` ships enabled by default in REMOTE_ML_FEATURES, so remote mode
+    must actually dispatch it -- otherwise the /api/ml/cluster endpoint and
+    remote_cluster() are dead code and clustering silently runs locally on a
+    host that may not even have scikit-learn installed.
+    """
+    import numpy as np
+
+    from find_api.ml.remote_client import _feature_enabled, remote_cluster
+
+    if not _feature_enabled("cluster"):
+        logger.info("Remote mode: cluster disabled; running clustering locally")
+        from find_api.ml.clusterer import get_image_clusterer
+
+        return get_image_clusterer().cluster(embeddings)
+
+    logger.info("Dispatching clustering to remote ML server")
+    payload = remote_cluster([row.tolist() for row in np.asarray(embeddings)])
+    labels = np.asarray(payload["labels"], dtype=np.int32)
+    return labels, payload.get("info", {})
+
+
 def cosine_similarity(left, right) -> float:
     """Return cosine similarity for two vectors, guarding empty norms."""
     import numpy as np
@@ -199,6 +223,7 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
             media.vector = None
         else:
             from find_api.workers.processors import (
+                RemoteFeatureDisabled,
                 extract_image_metadata,
                 generate_hybrid_embedding,
             )
@@ -215,6 +240,18 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
                 if "stage_status" in metadata:
                     metadata["stage_status"]["embedding"] = {
                         "status": "success",
+                        "error": None,
+                    }
+            except RemoteFeatureDisabled as e:
+                # Embedding is switched off for this remote deployment. Leave
+                # the column NULL rather than storing a placeholder: a vector
+                # here means "this image is semantically searchable", and a
+                # stand-in would make every search silently wrong.
+                logger.info("Skipping embedding for media %s: %s", media_id, e)
+                media.vector = None
+                if "stage_status" in metadata:
+                    metadata["stage_status"]["embedding"] = {
+                        "status": "skipped",
                         "error": None,
                     }
             except Exception as e:
@@ -378,7 +415,10 @@ def cluster_images():
         # Step 3: Run clustering — pure computation, no DB.
 
         clusterer = get_image_clusterer()
-        labels, info = clusterer.cluster(embeddings)
+        if runtime.applied_mode == "remote":
+            labels, info = _remote_cluster_embeddings(embeddings)
+        else:
+            labels, info = clusterer.cluster(embeddings)
 
         cluster_labels = sorted({int(label) for label in labels if int(label) != -1})
         # Step 4: Validate result BEFORE touching anything.
