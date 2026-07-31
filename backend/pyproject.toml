@@ -81,6 +81,10 @@ dev = [
   "ruff==0.1.14",
   "pip-audit==2.10.1",
   "scikit-learn==1.9.0",
+  # Used only by the standalone OCR benchmark scripts (scripts/benchmark_ocr_variants.py
+  # for RSS sampling, scripts/score_ocr_accuracy.py for edit distance).
+  "psutil>=7.2.2",
+  "python-levenshtein>=0.27.3",
 ]
 
 [tool.pytest.ini_options]
