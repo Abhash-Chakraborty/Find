@@ -8,7 +8,7 @@ work to.
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -23,6 +23,9 @@ router = APIRouter(prefix="/api/ml", tags=["remote-ml"])
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 _ML_API_VERSION = "0.1.0"
+
+# Analyze stages a client may request, mirroring REMOTE_ML_FEATURES.
+_ANALYZE_STAGES = ("detect", "caption", "ocr")
 
 
 def _require_auth(
@@ -95,14 +98,32 @@ def health() -> Dict[str, Any]:
 
 
 @router.post("/analyze", dependencies=[Depends(_require_auth)])
-def analyze(image: UploadFile = File(...)) -> Dict[str, Any]:
-    """Run object detection, captioning, and OCR on the uploaded image."""
+def analyze(
+    image: UploadFile = File(...),
+    features: str = Form(default=""),
+) -> Dict[str, Any]:
+    """Run object detection, captioning, and OCR on the uploaded image.
+
+    ``features`` is the client's enabled stage list. Only those stages run, so
+    a client that has switched OCR off does not get its image OCR'd here.
+    Omitted (older clients) means run everything, preserving the prior
+    behaviour.
+    """
     pil_image = _load_image(image)
+
+    requested = {f.strip().lower() for f in features.split(",") if f.strip()}
+    unknown = requested - set(_ANALYZE_STAGES)
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unknown analyze features: {sorted(unknown)}. "
+            f"Expected any of {sorted(_ANALYZE_STAGES)}.",
+        )
 
     try:
         from find_api.workers.processors import extract_image_metadata
 
-        metadata = extract_image_metadata(pil_image)
+        metadata = extract_image_metadata(pil_image, stages=requested or None)
     except Exception as exc:
         logger.exception("analyze endpoint: extract_image_metadata failed")
         raise HTTPException(
@@ -191,39 +212,27 @@ def embed_text(body: Dict[str, Any]) -> Dict[str, Any]:
 @router.post("/cluster", dependencies=[Depends(_require_auth)])
 def cluster(body: Dict[str, Any]) -> Dict[str, Any]:
     """Run HDBSCAN clustering on a list of embedding vectors."""
-    embeddings: List[List[float]] = body.get("embeddings", [])
-
-    if not embeddings:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="embeddings must be a non-empty list of float arrays.",
-        )
+    from find_api.ml.clusterer import (
+        InvalidEmbeddingMatrix,
+        cluster_embedding_matrix,
+    )
 
     try:
-        import numpy as np
-        from sklearn.cluster import HDBSCAN
-
-        X = np.array(embeddings, dtype=np.float32)
-        clusterer = HDBSCAN(
-            min_cluster_size=settings.MIN_CLUSTER_SIZE,
-            min_samples=settings.MIN_SAMPLES,
+        labels, info = cluster_embedding_matrix(
+            body.get("embeddings"), expected_dim=settings.EMBEDDING_DIM
         )
-        labels = clusterer.fit_predict(X).tolist()
-
-        n_clusters = len(set(lbl for lbl in labels if lbl >= 0))
-        n_noise = labels.count(-1)
-
-        return {
-            "labels": labels,
-            "info": {
-                "n_clusters": n_clusters,
-                "n_noise": n_noise,
-                "n_points": len(labels),
-            },
-        }
+    except InvalidEmbeddingMatrix as exc:
+        # Malformed input is the caller's problem, not a server error: report
+        # it as 422 with the reason rather than an opaque 500 from deep in
+        # NumPy or HDBSCAN.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     except Exception as exc:
         logger.exception("cluster endpoint: HDBSCAN failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Clustering failed on the remote server.",
         ) from exc
+
+    return {"labels": labels, "info": info}

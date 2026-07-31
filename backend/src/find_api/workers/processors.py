@@ -40,38 +40,59 @@ PERSON_OBJECT_LABELS = {
 # ---------------------------------------------------------------------------
 
 
+# REMOTE_ML_FEATURES stage name -> the stage_status key it controls.
+_REMOTE_ANALYZE_STAGES = {
+    "detect": "object_detection",
+    "caption": "captioning",
+    "ocr": "ocr",
+}
+
+
+class RemoteFeatureDisabled(Exception):
+    """Raised when a remote stage is switched off in REMOTE_ML_FEATURES."""
+
+
 def _remote_analyze_image(image: Image.Image) -> Dict[str, Any]:
-    """Send the image to the remote Find ML server for the analyze stage."""
+    """Send the image to the remote Find ML server for the analyze stage.
+
+    The enabled feature list is carried through to the server, which runs only
+    those stages. Checking the list here and then letting the server run
+    everything would make REMOTE_ML_FEATURES cosmetic: switching `ocr` off
+    would still have the remote host OCR the image.
+    """
     from find_api.ml.remote_client import _feature_enabled, remote_analyze
 
-    if not any(_feature_enabled(f) for f in ("caption", "detect", "ocr")):
-        logger.info(
-            "Remote mode: no analyze features enabled; returning empty metadata."
-        )
+    requested = [name for name in _REMOTE_ANALYZE_STAGES if _feature_enabled(name)]
+    disabled_status = {
+        stage: {"status": "skipped", "error": None}
+        for name, stage in _REMOTE_ANALYZE_STAGES.items()
+        if name not in requested
+    }
+
+    if not requested:
+        logger.info("Remote mode: no analyze features enabled; nothing is transmitted.")
         return {
             "caption": "",
             "objects": [],
             "ocr_text": "",
             "text_blocks": [],
             "stage_status": {
-                "object_detection": {"status": "skipped", "error": None},
-                "captioning": {"status": "skipped", "error": None},
-                "ocr": {"status": "skipped", "error": None},
+                **disabled_status,
                 "embedding": {"status": "pending", "error": None},
             },
         }
 
-    logger.info("Dispatching analyze to remote ML server")
-    result = remote_analyze(image)
-    result.setdefault(
-        "stage_status",
-        {
-            "object_detection": {"status": "success", "error": None},
-            "captioning": {"status": "success", "error": None},
-            "ocr": {"status": "success", "error": None},
-            "embedding": {"status": "pending", "error": None},
-        },
-    )
+    logger.info("Dispatching analyze to remote ML server (features=%s)", requested)
+    result = remote_analyze(image, features=requested)
+
+    # A disabled stage must never be reported as "success" -- it did not run.
+    stage_status = result.get("stage_status") or {
+        stage: {"status": "success", "error": None}
+        for stage in _REMOTE_ANALYZE_STAGES.values()
+    }
+    stage_status.update(disabled_status)
+    stage_status.setdefault("embedding", {"status": "pending", "error": None})
+    result["stage_status"] = stage_status
     return result
 
 
@@ -80,8 +101,13 @@ def _remote_embed_image(image: Image.Image, metadata: Dict[str, Any]) -> List[fl
     from find_api.ml.remote_client import _feature_enabled, remote_embed
 
     if not _feature_enabled("embed"):
-        logger.info("Remote mode: embed disabled; using mock embedder fallback.")
-        return get_mock_embedder().embed_metadata(image, metadata)
+        # Deliberately not a mock vector. Persisting one would put a
+        # semantically meaningless embedding into the same column real vectors
+        # live in, so the image would be searchable and always wrong. The
+        # caller skips vector persistence instead.
+        raise RemoteFeatureDisabled(
+            "Remote embedding is disabled in REMOTE_ML_FEATURES."
+        )
 
     logger.info("Dispatching embed to remote ML server")
     return remote_embed(image, metadata)
@@ -132,11 +158,18 @@ def _record_stage_error(metadata: Dict[str, Any], stage: str, error: Exception) 
 def extract_image_metadata(
     image: Image.Image,
     on_stage: Callable[[str], None] | None = None,
+    stages: set[str] | None = None,
 ) -> Dict[str, Any]:
     """
     Run all ML models to extract metadata from image
+
+    ``stages`` optionally restricts which of "detect"/"caption"/"ocr" run;
+    omitted stages report "skipped". This is what lets a Find instance acting
+    as a remote ML server honour the client's REMOTE_ML_FEATURES instead of
+    running everything regardless.
     """
     mode = current_ml_mode()
+    wanted = set(_REMOTE_ANALYZE_STAGES) if stages is None else set(stages)
 
     # ---- Mock mode ----
     if mode == "mock":
@@ -177,70 +210,89 @@ def extract_image_metadata(
         }
     }
 
-    # 1. Object Detection
-    try:
-        if on_stage:
-            on_stage("detecting objects")
-        logger.info("Running object detection...")
-        from find_api.ml.object_detector import get_object_detector
+    # A stage the caller did not ask for must not run at all, and must be
+    # reported as skipped rather than left "pending".
+    for name, stage in _REMOTE_ANALYZE_STAGES.items():
+        if name not in wanted:
+            metadata["stage_status"][stage] = {"status": "skipped", "error": None}
 
-        objects = get_object_detector().detect(image)
-        metadata["objects"] = objects
-        metadata["stage_status"]["object_detection"] = {
-            "status": "success",
-            "error": None,
-        }
-        logger.info(f"Detected {len(objects)} objects")
-    except Exception as e:
-        logger.exception("Object detection failed")
+    # 1. Object Detection
+    if "detect" in wanted:
+        try:
+            if on_stage:
+                on_stage("detecting objects")
+            logger.info("Running object detection...")
+            from find_api.ml.object_detector import get_object_detector
+
+            objects = get_object_detector().detect(image)
+            metadata["objects"] = objects
+            metadata["stage_status"]["object_detection"] = {
+                "status": "success",
+                "error": None,
+            }
+            logger.info(f"Detected {len(objects)} objects")
+        except Exception as e:
+            logger.exception("Object detection failed")
+            metadata["objects"] = []
+            _record_stage_error(metadata, "objects", e)
+            metadata["stage_status"]["object_detection"] = {
+                "status": "failed",
+                "error": sanitize_error(e),
+            }
+    else:
         metadata["objects"] = []
-        _record_stage_error(metadata, "objects", e)
-        metadata["stage_status"]["object_detection"] = {
-            "status": "failed",
-            "error": sanitize_error(e),
-        }
 
     # 2. Image Captioning
-    try:
-        if on_stage:
-            on_stage("generating caption")
-        logger.info("Generating caption...")
-        from find_api.ml.captioner import get_image_captioner
+    if "caption" in wanted:
+        try:
+            if on_stage:
+                on_stage("generating caption")
+            logger.info("Generating caption...")
+            from find_api.ml.captioner import get_image_captioner
 
-        caption = get_image_captioner().generate_caption(image)
-        metadata["caption"] = caption
-        metadata["stage_status"]["captioning"] = {"status": "success", "error": None}
-    except Exception as e:
-        logger.exception("Captioning failed")
+            caption = get_image_captioner().generate_caption(image)
+            metadata["caption"] = caption
+            metadata["stage_status"]["captioning"] = {
+                "status": "success",
+                "error": None,
+            }
+        except Exception as e:
+            logger.exception("Captioning failed")
+            metadata["caption"] = ""
+            _record_stage_error(metadata, "caption", e)
+            metadata["stage_status"]["captioning"] = {
+                "status": "failed",
+                "error": sanitize_error(e),
+            }
+    else:
         metadata["caption"] = ""
-        _record_stage_error(metadata, "caption", e)
-        metadata["stage_status"]["captioning"] = {
-            "status": "failed",
-            "error": sanitize_error(e),
-        }
 
     # 3. OCR Text Extraction
-    try:
-        if on_stage:
-            on_stage("running OCR")
-        logger.info("Extracting text...")
-        from find_api.ml.ocr import get_ocr_extractor
+    if "ocr" in wanted:
+        try:
+            if on_stage:
+                on_stage("running OCR")
+            logger.info("Extracting text...")
+            from find_api.ml.ocr import get_ocr_extractor
 
-        ocr = get_ocr_extractor()
-        ocr_text, text_blocks = ocr.extract_text_and_boxes(image)
-        metadata["ocr_text"] = ocr_text
-        metadata["text_blocks"] = text_blocks
-        metadata["stage_status"]["ocr"] = {"status": "success", "error": None}
-        logger.info(f"Extracted {len(ocr_text)} characters")
-    except Exception as e:
-        logger.exception("OCR failed")
+            ocr = get_ocr_extractor()
+            ocr_text, text_blocks = ocr.extract_text_and_boxes(image)
+            metadata["ocr_text"] = ocr_text
+            metadata["text_blocks"] = text_blocks
+            metadata["stage_status"]["ocr"] = {"status": "success", "error": None}
+            logger.info(f"Extracted {len(ocr_text)} characters")
+        except Exception as e:
+            logger.exception("OCR failed")
+            metadata["ocr_text"] = ""
+            metadata["text_blocks"] = []
+            _record_stage_error(metadata, "ocr", e)
+            metadata["stage_status"]["ocr"] = {
+                "status": "failed",
+                "error": sanitize_error(e),
+            }
+    else:
         metadata["ocr_text"] = ""
         metadata["text_blocks"] = []
-        _record_stage_error(metadata, "ocr", e)
-        metadata["stage_status"]["ocr"] = {
-            "status": "failed",
-            "error": sanitize_error(e),
-        }
 
     return metadata
 

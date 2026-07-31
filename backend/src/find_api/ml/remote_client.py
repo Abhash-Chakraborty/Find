@@ -93,9 +93,19 @@ def check_health() -> Dict[str, Any]:
         raise RemoteMLError(f"Health check connection error: {exc}") from exc
 
 
-def remote_analyze(image: Image.Image) -> Dict[str, Any]:
+def remote_analyze(
+    image: Image.Image, features: List[str] | None = None
+) -> Dict[str, Any]:
+    """Run detection/captioning/OCR remotely.
+
+    ``features`` names the stages the caller wants. It is sent to the server so
+    only those run -- without it, disabling a stage locally would still have the
+    remote host perform it on the image.
+    """
     url = f"{_base_url()}/api/ml/analyze"
     image_bytes = _image_to_bytes(image, strip_exif=settings.REMOTE_ML_STRIP_EXIF)
+
+    data = {"features": ",".join(features)} if features else None
 
     try:
         with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
@@ -103,6 +113,7 @@ def remote_analyze(image: Image.Image) -> Dict[str, Any]:
                 url,
                 headers=_auth_headers(),
                 files={"image": ("image.jpg", image_bytes, "image/jpeg")},
+                data=data,
             )
         _raise_for_auth(response)
         response.raise_for_status()

@@ -223,6 +223,7 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
             media.vector = None
         else:
             from find_api.workers.processors import (
+                RemoteFeatureDisabled,
                 extract_image_metadata,
                 generate_hybrid_embedding,
             )
@@ -239,6 +240,18 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
                 if "stage_status" in metadata:
                     metadata["stage_status"]["embedding"] = {
                         "status": "success",
+                        "error": None,
+                    }
+            except RemoteFeatureDisabled as e:
+                # Embedding is switched off for this remote deployment. Leave
+                # the column NULL rather than storing a placeholder: a vector
+                # here means "this image is semantically searchable", and a
+                # stand-in would make every search silently wrong.
+                logger.info("Skipping embedding for media %s: %s", media_id, e)
+                media.vector = None
+                if "stage_status" in metadata:
+                    metadata["stage_status"]["embedding"] = {
+                        "status": "skipped",
                         "error": None,
                     }
             except Exception as e:
