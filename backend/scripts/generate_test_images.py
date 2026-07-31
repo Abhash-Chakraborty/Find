@@ -37,12 +37,13 @@ SAMPLE_LINES = [
 
 
 def _font(size):
+    """Load a system TrueType font or fall back to default with the given size."""
     for name in ("arial.ttf", "DejaVuSans.ttf", "calibri.ttf"):
         try:
             return ImageFont.truetype(name, size)
         except Exception:
             continue
-    return ImageFont.load_default()
+    return ImageFont.load_default(size=size)
 
 
 def add_noise(img: Image.Image, amount: float) -> Image.Image:
@@ -81,7 +82,7 @@ def make_screenshot(text: str) -> Image.Image:
 
 def make_receipt(text: str) -> Image.Image:
     """Simulate a thermal-printer receipt: grainy, monospace, tall/narrow."""
-    lines = [text, "QTY: 1   MRP: 45.00", "BATCH: A1234  EXP: 12/27"]
+    lines = [text, "QTY: 1   MRP: 45.00", "BATCH: A1234   EXP: 12/27"]
     img = Image.new("RGB", (420, 280), color=(245, 245, 240))
     draw = ImageDraw.Draw(img)
     y = 40
@@ -119,10 +120,12 @@ GENERATORS = {
 
 
 def safe_filename(text: str) -> str:
+    """Format ground-truth text into a valid, safe filename string."""
     return "gt_" + text.replace(" ", "_").replace("/", "-")
 
 
 def main():
+    """Generate synthetic test image categories and write them to disk."""
     for category, generator in GENERATORS.items():
         cat_dir = OUT_DIR / category
         cat_dir.mkdir(parents=True, exist_ok=True)

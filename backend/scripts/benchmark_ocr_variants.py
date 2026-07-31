@@ -55,6 +55,7 @@ def get_process_rss_mb() -> float:
 
 
 def dir_size_mb(path: Path) -> float:
+    """Calculate the total size of all files in a directory in MB."""
     if not path.exists():
         return 0.0
     total = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
@@ -71,7 +72,7 @@ def make_test_image(text: str, size=(600, 200), rotate: int = 0) -> Image.Image:
     try:
         font = ImageFont.truetype("arial.ttf", 28)
     except Exception:
-        font = ImageFont.load_default()
+        font = ImageFont.load_default(size=28)
     draw.text((20, size[1] // 2 - 20), text, fill="black", font=font)
     if rotate:
         img = img.rotate(rotate, expand=True, fillcolor="white")
@@ -120,6 +121,7 @@ def load_test_images() -> dict:
 
 
 def benchmark_variant(variant: str, test_images: dict) -> dict:
+    """Benchmark a specific OCR model variant for load time, RAM usage, and latency."""
     print(f"\n{'=' * 60}")
     print(f"Benchmarking variant: {variant}")
     print(f"{'=' * 60}")
@@ -195,6 +197,7 @@ def benchmark_variant(variant: str, test_images: dict) -> dict:
 
 
 def main():
+    """Run the complete OCR variant benchmark suite and output results to JSON."""
     print("PP-OCRv5 mobile vs server benchmark (CPU)")
     print(f"PaddleX cache dir: {PADDLEX_CACHE_DIR}")
 

@@ -48,6 +48,7 @@ def normalize(text: str) -> str:
 
 
 def ground_truth_from_filename(path: Path) -> str | None:
+    """Extract the expected ground-truth text from the image filename."""
     if not path.stem.startswith("gt_"):
         return None
     raw = path.stem[len("gt_"):]
@@ -73,6 +74,7 @@ def char_error_rate(ground_truth: str, predicted: str) -> float:
 
 
 def score_variant(variant: str) -> dict:
+    """Evaluate the OCR accuracy for a given model variant across all image categories."""
     from find_api.ml.ocr import OCRExtractor
     from find_api.core.model_manager import get_model_manager
 
@@ -122,6 +124,7 @@ def score_variant(variant: str) -> dict:
 
 
 def main():
+    """Run the accuracy scoring for all variants and output a summary report."""
     all_results = {}
     for variant in ("mobile", "server"):
         print(f"\n{'=' * 60}\nScoring variant: {variant}\n{'=' * 60}")
