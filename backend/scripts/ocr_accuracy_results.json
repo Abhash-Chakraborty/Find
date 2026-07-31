@@ -1,0 +1,356 @@
+{
+  "mobile": {
+    "photos": {
+      "images_scored": 4,
+      "exact_match_rate": 0.75,
+      "avg_char_error_rate": 0.014,
+      "details": [
+        {
+          "file": "gt_AMOXICILLIN_250MG.png",
+          "ground_truth": "AMOXICILLIN 250MG",
+          "predicted": "AMOXICILLIN 250MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_AZITHROMYCIN_500MG.png",
+          "ground_truth": "AZITHROMYCIN 500MG",
+          "predicted": "AZITHROMYCIN500MG",
+          "exact_match": false,
+          "char_error_rate": 0.056
+        },
+        {
+          "file": "gt_IBUPROFEN_400MG_TABLETS.png",
+          "ground_truth": "IBUPROFEN 400MG TABLETS",
+          "predicted": "IBUPROFEN 400MG TABLETS",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_PARACETAMOL_500MG.png",
+          "ground_truth": "PARACETAMOL 500MG",
+          "predicted": "PARACETAMOL 500MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        }
+      ]
+    },
+    "screenshots": {
+      "images_scored": 4,
+      "exact_match_rate": 1.0,
+      "avg_char_error_rate": 0.0,
+      "details": [
+        {
+          "file": "gt_AMOXICILLIN_250MG.png",
+          "ground_truth": "AMOXICILLIN 250MG",
+          "predicted": "AMOXICILLIN 250MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_CETIRIZINE_10MG.png",
+          "ground_truth": "CETIRIZINE 10MG",
+          "predicted": "CETIRIZINE 10MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_OMEPRAZOLE_20MG_CAPSULES.png",
+          "ground_truth": "OMEPRAZOLE 20MG CAPSULES",
+          "predicted": "OMEPRAZOLE 20MG CAPSULES",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_PARACETAMOL_500MG.png",
+          "ground_truth": "PARACETAMOL 500MG",
+          "predicted": "PARACETAMOL 500MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        }
+      ]
+    },
+    "receipts": {
+      "images_scored": 4,
+      "exact_match_rate": 1.0,
+      "avg_char_error_rate": 0.0,
+      "details": [
+        {
+          "file": "gt_AMOXICILLIN_250MG.png",
+          "ground_truth": "AMOXICILLIN 250MG",
+          "predicted": "AMOXICILLIN 250MG\nQTY:1 MRP:45.00\nBATCH:A1234EXP:12/27",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_CETIRIZINE_10MG.png",
+          "ground_truth": "CETIRIZINE 10MG",
+          "predicted": "CETIRIZINE 10MG\nQTY:1 MRP: 45.00\nBATCH:A1234 EXP:12/27",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_METFORMIN_500MG_SR.png",
+          "ground_truth": "METFORMIN 500MG SR",
+          "predicted": "METFORMIN 500MG SR\nQTY:1 MRP:45.00\nBATCH:A1234EXP:12/27",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_PARACETAMOL_500MG.png",
+          "ground_truth": "PARACETAMOL 500MG",
+          "predicted": "PARACETAMOL 500MG\nQTY:1 MRP:45.00\nBATCH:A1234 EXP:12/27",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        }
+      ]
+    },
+    "rotated": {
+      "images_scored": 4,
+      "exact_match_rate": 0.0,
+      "avg_char_error_rate": 0.917,
+      "details": [
+        {
+          "file": "gt_AMOXICILLIN_250MG.png",
+          "ground_truth": "AMOXICILLIN 250MG",
+          "predicted": "\u798f",
+          "exact_match": false,
+          "char_error_rate": 1.0
+        },
+        {
+          "file": "gt_AZITHROMYCIN_500MG.png",
+          "ground_truth": "AZITHROMYCIN 500MG",
+          "predicted": "\"\nATRR50S\nA2m",
+          "exact_match": false,
+          "char_error_rate": 0.722
+        },
+        {
+          "file": "gt_PARACETAMOL_500MG.png",
+          "ground_truth": "PARACETAMOL 500MG",
+          "predicted": "\u4e32",
+          "exact_match": false,
+          "char_error_rate": 1.0
+        },
+        {
+          "file": "gt_VITAMIN_D3_60000_IU.png",
+          "ground_truth": "VITAMIN D3 60000 IU",
+          "predicted": "N",
+          "exact_match": false,
+          "char_error_rate": 0.947
+        }
+      ]
+    },
+    "low_contrast": {
+      "images_scored": 4,
+      "exact_match_rate": 1.0,
+      "avg_char_error_rate": 0.0,
+      "details": [
+        {
+          "file": "gt_AZITHROMYCIN_500MG.png",
+          "ground_truth": "AZITHROMYCIN 500MG",
+          "predicted": "AZITHROMYCIN 500MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_CETIRIZINE_10MG.png",
+          "ground_truth": "CETIRIZINE 10MG",
+          "predicted": "CETIRIZINE 10MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_METFORMIN_500MG_SR.png",
+          "ground_truth": "METFORMIN 500MG SR",
+          "predicted": "METFORMIN 500MG SR",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_OMEPRAZOLE_20MG_CAPSULES.png",
+          "ground_truth": "OMEPRAZOLE 20MG CAPSULES",
+          "predicted": "OMEPRAZOLE 20MG CAPSULES",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        }
+      ]
+    }
+  },
+  "server": {
+    "photos": {
+      "images_scored": 4,
+      "exact_match_rate": 0.0,
+      "avg_char_error_rate": 0.087,
+      "details": [
+        {
+          "file": "gt_AMOXICILLIN_250MG.png",
+          "ground_truth": "AMOXICILLIN 250MG",
+          "predicted": "AMOXICILLIN250MG",
+          "exact_match": false,
+          "char_error_rate": 0.059
+        },
+        {
+          "file": "gt_AZITHROMYCIN_500MG.png",
+          "ground_truth": "AZITHROMYCIN 500MG",
+          "predicted": "AZITHROMYCIN500MG",
+          "exact_match": false,
+          "char_error_rate": 0.056
+        },
+        {
+          "file": "gt_IBUPROFEN_400MG_TABLETS.png",
+          "ground_truth": "IBUPROFEN 400MG TABLETS",
+          "predicted": "IBUPROFEN4OOMGTABLETS",
+          "exact_match": false,
+          "char_error_rate": 0.174
+        },
+        {
+          "file": "gt_PARACETAMOL_500MG.png",
+          "ground_truth": "PARACETAMOL 500MG",
+          "predicted": "PARACETAMOL500MG",
+          "exact_match": false,
+          "char_error_rate": 0.059
+        }
+      ]
+    },
+    "screenshots": {
+      "images_scored": 4,
+      "exact_match_rate": 0.75,
+      "avg_char_error_rate": 0.031,
+      "details": [
+        {
+          "file": "gt_AMOXICILLIN_250MG.png",
+          "ground_truth": "AMOXICILLIN 250MG",
+          "predicted": "AMOXICILLIN 250MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_CETIRIZINE_10MG.png",
+          "ground_truth": "CETIRIZINE 10MG",
+          "predicted": "CETIRIZINE 10MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_OMEPRAZOLE_20MG_CAPSULES.png",
+          "ground_truth": "OMEPRAZOLE 20MG CAPSULES",
+          "predicted": "OMEPRAZOLE2OMGCAPSULES",
+          "exact_match": false,
+          "char_error_rate": 0.125
+        },
+        {
+          "file": "gt_PARACETAMOL_500MG.png",
+          "ground_truth": "PARACETAMOL 500MG",
+          "predicted": "PARACETAMOL 500MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        }
+      ]
+    },
+    "receipts": {
+      "images_scored": 4,
+      "exact_match_rate": 0.0,
+      "avg_char_error_rate": 0.074,
+      "details": [
+        {
+          "file": "gt_AMOXICILLIN_250MG.png",
+          "ground_truth": "AMOXICILLIN 250MG",
+          "predicted": "AMOXICILLIN250MG\nQTY:1 MRP:45.00\nBATCH:A1234EXP:12/27",
+          "exact_match": false,
+          "char_error_rate": 0.059
+        },
+        {
+          "file": "gt_CETIRIZINE_10MG.png",
+          "ground_truth": "CETIRIZINE 10MG",
+          "predicted": "CETIRIZINE10MG\nQTY:1 MRP:45.00\nBATCH:A1234EXP:12/27",
+          "exact_match": false,
+          "char_error_rate": 0.067
+        },
+        {
+          "file": "gt_METFORMIN_500MG_SR.png",
+          "ground_truth": "METFORMIN 500MG SR",
+          "predicted": "METFORMIN500MGSR\nQTY:1 MRP:45.00\nBATCH:A1234 EXP:12/27",
+          "exact_match": false,
+          "char_error_rate": 0.111
+        },
+        {
+          "file": "gt_PARACETAMOL_500MG.png",
+          "ground_truth": "PARACETAMOL 500MG",
+          "predicted": "PARACETAMOL500MG\nQTY:1 MRP:45.00\nBATCH:A1234 EXP:12/27",
+          "exact_match": false,
+          "char_error_rate": 0.059
+        }
+      ]
+    },
+    "rotated": {
+      "images_scored": 4,
+      "exact_match_rate": 0.25,
+      "avg_char_error_rate": 0.735,
+      "details": [
+        {
+          "file": "gt_AMOXICILLIN_250MG.png",
+          "ground_truth": "AMOXICILLIN 250MG",
+          "predicted": "WgNTwV",
+          "exact_match": false,
+          "char_error_rate": 0.941
+        },
+        {
+          "file": "gt_AZITHROMYCIN_500MG.png",
+          "ground_truth": "AZITHROMYCIN 500MG",
+          "predicted": "",
+          "exact_match": false,
+          "char_error_rate": 1.0
+        },
+        {
+          "file": "gt_PARACETAMOL_500MG.png",
+          "ground_truth": "PARACETAMOL 500MG",
+          "predicted": "PARACETAMOL 500MG",
+          "exact_match": true,
+          "char_error_rate": 0.0
+        },
+        {
+          "file": "gt_VITAMIN_D3_60000_IU.png",
+          "ground_truth": "VITAMIN D3 60000 IU",
+          "predicted": "",
+          "exact_match": false,
+          "char_error_rate": 1.0
+        }
+      ]
+    },
+    "low_contrast": {
+      "images_scored": 4,
+      "exact_match_rate": 0.0,
+      "avg_char_error_rate": 0.09,
+      "details": [
+        {
+          "file": "gt_AZITHROMYCIN_500MG.png",
+          "ground_truth": "AZITHROMYCIN 500MG",
+          "predicted": "AZITHROMYCIN500MG",
+          "exact_match": false,
+          "char_error_rate": 0.056
+        },
+        {
+          "file": "gt_CETIRIZINE_10MG.png",
+          "ground_truth": "CETIRIZINE 10MG",
+          "predicted": "CETIRIZINE10MG",
+          "exact_match": false,
+          "char_error_rate": 0.067
+        },
+        {
+          "file": "gt_METFORMIN_500MG_SR.png",
+          "ground_truth": "METFORMIN 500MG SR",
+          "predicted": "METFORMIN500MGSR",
+          "exact_match": false,
+          "char_error_rate": 0.111
+        },
+        {
+          "file": "gt_OMEPRAZOLE_20MG_CAPSULES.png",
+          "ground_truth": "OMEPRAZOLE 20MG CAPSULES",
+          "predicted": "OMEPRAZOLE2OMGCAPSULES",
+          "exact_match": false,
+          "char_error_rate": 0.125
+        }
+      ]
+    }
+  }
+}
