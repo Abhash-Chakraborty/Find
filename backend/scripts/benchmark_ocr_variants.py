@@ -26,10 +26,10 @@ import json
 import os
 import statistics
 import sys
+import threading
 import time
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
-import numpy as np
 
 # Add src to path so this runs standalone like manual_ocr_check.py does
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -52,6 +52,39 @@ PADDLEX_CACHE_DIR = Path.home() / ".paddlex" / "official_models"
 def get_process_rss_mb() -> float:
     """Current process resident set size in MB."""
     return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+
+
+class RssSampler:
+    """Continuously sample process RSS on a background thread.
+
+    Sampling only after each call returns misses transient allocations that
+    are freed before the call finishes -- most importantly the model download
+    and graph construction during the cold load, which is exactly the peak a
+    CPU-deployment reader cares about.
+    """
+
+    def __init__(self, interval_s: float = 0.05):
+        self.interval_s = interval_s
+        self.peak_mb = 0.0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        while not self._stop.is_set():
+            self.peak_mb = max(self.peak_mb, get_process_rss_mb())
+            self._stop.wait(self.interval_s)
+
+    def __enter__(self):
+        self.peak_mb = get_process_rss_mb()
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc_info):
+        self._stop.set()
+        self._thread.join(timeout=2)
+        # Final sample so the peak covers anything since the last tick.
+        self.peak_mb = max(self.peak_mb, get_process_rss_mb())
+        return False
 
 
 def dir_size_mb(path: Path) -> float:
@@ -137,53 +170,59 @@ def benchmark_variant(variant: str, test_images: dict) -> dict:
     cache_size_before = dir_size_mb(PADDLEX_CACHE_DIR)
     rss_before = get_process_rss_mb()
 
-    extractor = OCRExtractor(variant=variant)
-
-    # A tiny image is enough to force the model to load without spending
-    # time on real inference for this measurement.
-    warm_image = Image.new("RGB", (64, 64), color="white")
-
-    load_start = time.perf_counter()
-    extractor.extract_text(warm_image)
-    load_time_s = time.perf_counter() - load_start
-
-    rss_after_load = get_process_rss_mb()
-    cache_size_after = dir_size_mb(PADDLEX_CACHE_DIR)
-    downloaded_mb = max(0.0, cache_size_after - cache_size_before)
-
-    print(f"  Load time:        {load_time_s:.2f}s")
-    print(f"  RAM after load:   {rss_after_load:.1f} MB (+{rss_after_load - rss_before:.1f} MB)")
-    print(f"  New cache size:   {downloaded_mb:.1f} MB")
-
-    # Per-category latency + peak RAM during real inference
     category_results = {}
-    peak_rss = rss_after_load
 
-    for category, images in test_images.items():
-        latencies = []
-        for name, img in images:
-            # Warmup run(s) not timed, to separate first-call JIT/graph
-            # overhead from steady-state per-image latency.
-            for _ in range(WARMUP_RUNS):
-                extractor.extract_text(img)
+    # Sample RSS continuously from before the load until after the last timed
+    # run, so the reported peak includes load-time and inference transients
+    # rather than only what is still resident once a call returns.
+    with RssSampler() as sampler:
+        extractor = OCRExtractor(variant=variant)
 
-            for _ in range(TIMED_RUNS):
-                start = time.perf_counter()
-                extractor.extract_text(img)
-                latencies.append(time.perf_counter() - start)
-                peak_rss = max(peak_rss, get_process_rss_mb())
+        # A tiny image is enough to force the model to load without spending
+        # time on real inference for this measurement.
+        warm_image = Image.new("RGB", (64, 64), color="white")
 
-        category_results[category] = {
-            "images_tested": [name for name, _ in images],
-            "mean_latency_ms": round(statistics.mean(latencies) * 1000, 1),
-            "median_latency_ms": round(statistics.median(latencies) * 1000, 1),
-            "min_latency_ms": round(min(latencies) * 1000, 1),
-            "max_latency_ms": round(max(latencies) * 1000, 1),
-        }
+        load_start = time.perf_counter()
+        extractor.extract_text(warm_image)
+        load_time_s = time.perf_counter() - load_start
+
+        rss_after_load = get_process_rss_mb()
+        cache_size_after = dir_size_mb(PADDLEX_CACHE_DIR)
+        downloaded_mb = max(0.0, cache_size_after - cache_size_before)
+
+        print(f"  Load time:        {load_time_s:.2f}s")
         print(
-            f"  [{category:>13}] mean={category_results[category]['mean_latency_ms']}ms "
-            f"median={category_results[category]['median_latency_ms']}ms"
+            f"  RAM after load:   {rss_after_load:.1f} MB "
+            f"(+{rss_after_load - rss_before:.1f} MB)"
         )
+        print(f"  New cache size:   {downloaded_mb:.1f} MB")
+
+        for category, images in test_images.items():
+            latencies = []
+            for name, img in images:
+                # Warmup run(s) not timed, to separate first-call JIT/graph
+                # overhead from steady-state per-image latency.
+                for _ in range(WARMUP_RUNS):
+                    extractor.extract_text(img)
+
+                for _ in range(TIMED_RUNS):
+                    start = time.perf_counter()
+                    extractor.extract_text(img)
+                    latencies.append(time.perf_counter() - start)
+
+            category_results[category] = {
+                "images_tested": [name for name, _ in images],
+                "mean_latency_ms": round(statistics.mean(latencies) * 1000, 1),
+                "median_latency_ms": round(statistics.median(latencies) * 1000, 1),
+                "min_latency_ms": round(min(latencies) * 1000, 1),
+                "max_latency_ms": round(max(latencies) * 1000, 1),
+            }
+            print(
+                f"  [{category:>13}] mean={category_results[category]['mean_latency_ms']}ms "
+                f"median={category_results[category]['median_latency_ms']}ms"
+            )
+
+    peak_rss = sampler.peak_mb
 
     return {
         "variant": variant,
@@ -224,9 +263,13 @@ def main():
         m, s = results["mobile"], results["server"]
         if "error" not in m and "error" not in s:
             print("\nSummary (mobile vs server):")
-            print(f"  Load time:   {m['load_time_seconds']}s vs {s['load_time_seconds']}s")
+            print(
+                f"  Load time:   {m['load_time_seconds']}s vs {s['load_time_seconds']}s"
+            )
             print(f"  Peak RAM:    {m['peak_ram_mb']}MB vs {s['peak_ram_mb']}MB")
-            print(f"  Cache size:  {m['downloaded_cache_mb']}MB vs {s['downloaded_cache_mb']}MB")
+            print(
+                f"  Cache size:  {m['downloaded_cache_mb']}MB vs {s['downloaded_cache_mb']}MB"
+            )
 
 
 if __name__ == "__main__":

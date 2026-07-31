@@ -36,6 +36,7 @@ except ImportError:
     raise SystemExit(1)
 
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 CATEGORIES = ["photos", "screenshots", "receipts", "rotated", "low_contrast"]
@@ -51,7 +52,7 @@ def ground_truth_from_filename(path: Path) -> str | None:
     """Extract the expected ground-truth text from the image filename."""
     if not path.stem.startswith("gt_"):
         return None
-    raw = path.stem[len("gt_"):]
+    raw = path.stem[len("gt_") :]
     return raw.replace("_", " ")
 
 
@@ -96,23 +97,31 @@ def score_variant(variant: str) -> dict:
             image = Image.open(img_path).convert("RGB")
             predicted = extractor.extract_text(image)
 
-            predicted_lines = [normalize(line) for line in predicted.splitlines()] or [""]
+            predicted_lines = [normalize(line) for line in predicted.splitlines()] or [
+                ""
+            ]
             exact_match = normalize(gt_text) in predicted_lines
             cer = char_error_rate(gt_text, predicted)
 
-            image_scores.append({
-                "file": img_path.name,
-                "ground_truth": gt_text,
-                "predicted": predicted.strip(),
-                "exact_match": exact_match,
-                "char_error_rate": cer,
-            })
+            image_scores.append(
+                {
+                    "file": img_path.name,
+                    "ground_truth": gt_text,
+                    "predicted": predicted.strip(),
+                    "exact_match": exact_match,
+                    "char_error_rate": cer,
+                }
+            )
             status = "OK " if exact_match else "ERR"
-            print(f"    [{status}] {img_path.name}: CER={cer} predicted={predicted.strip()!r}")
+            print(
+                f"    [{status}] {img_path.name}: CER={cer} predicted={predicted.strip()!r}"
+            )
 
         if image_scores:
             exact_matches = sum(1 for s in image_scores if s["exact_match"])
-            avg_cer = round(sum(s["char_error_rate"] for s in image_scores) / len(image_scores), 3)
+            avg_cer = round(
+                sum(s["char_error_rate"] for s in image_scores) / len(image_scores), 3
+            )
             results[category] = {
                 "images_scored": len(image_scores),
                 "exact_match_rate": round(exact_matches / len(image_scores), 2),
@@ -141,8 +150,16 @@ def main():
     for category in CATEGORIES:
         m = all_results.get("mobile", {}).get(category)
         s = all_results.get("server", {}).get(category)
-        m_str = f"{m['exact_match_rate']*100:.0f}% / CER {m['avg_char_error_rate']}" if m else "n/a"
-        s_str = f"{s['exact_match_rate']*100:.0f}% / CER {s['avg_char_error_rate']}" if s else "n/a"
+        m_str = (
+            f"{m['exact_match_rate']*100:.0f}% / CER {m['avg_char_error_rate']}"
+            if m
+            else "n/a"
+        )
+        s_str = (
+            f"{s['exact_match_rate']*100:.0f}% / CER {s['avg_char_error_rate']}"
+            if s
+            else "n/a"
+        )
         print(f"{category:<15} {m_str:<20} {s_str:<20}")
 
     print(f"\nFull details written to {out_path}")

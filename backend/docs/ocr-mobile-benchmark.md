@@ -24,7 +24,9 @@ categories on this benchmark set (see caveats below).
 - The ModelManager cache key is now variant-qualified
   (`paddleocr:mobile` / `paddleocr:server`), so `get_status()` makes the
   active variant visible directly via `loaded_models`, plus a dedicated
-  `runtime.ocr` status block (variant, lang, model names).
+  `runtime.ocr` status block (variant and the pinned model names), published
+  through `ModelManager.merge_runtime_status` so it cannot race with the
+  other ML components writing into the same dict.
 - Response shapes (`extract_text`, `extract_text_with_boxes`,
   `extract_text_and_boxes`) are unchanged.
 
@@ -79,25 +81,39 @@ issue.
   these accuracy numbers as final for production rollout.
 - Single benchmark run on one machine (Windows, CPU). Not averaged across
   hardware or repeated runs beyond the 5 timed passes per image.
+- The recorded "Peak RAM" figures were sampled *after* each inference call
+  returned, so they miss transients that are freed before the call ends --
+  most notably during the cold model load. `benchmark_ocr_variants.py` now
+  samples RSS continuously on a background thread across load and inference,
+  so a re-run will report peaks that are equal or higher for both variants.
+  The mobile-vs-server ordering is not in question (mobile's resident set
+  after load is ~40% smaller), but treat the absolute peak numbers above as
+  a floor rather than an exact measurement.
 
 ## Supported languages
 
 Because `OCRExtractor` always passes explicit
 `text_detection_model_name`/`text_recognition_model_name` (required to pin
-the mobile/server variant), PaddleOCR's `lang` parameter is not used --
-passing it alongside explicit model names is silently ignored by
-PaddleOCR itself. This means both variants use the **default unified
-recognition model**, which supports 5 major text types: Simplified
-Chinese, Traditional Chinese, Pinyin, English, and Japanese.
+the mobile/server variant), PaddleOCR's `lang` parameter has no effect.
+This is explicit in PaddleOCR 3.x's own constructor, which takes the
+model-names branch and warns:
+
+> `lang` and `ocr_version` will be ignored when model names or model
+> directories are not `None`.
+
+`OCRExtractor` therefore does **not** expose a `lang` argument at all --
+accepting one would read as configurable while being a no-op on the
+supported path. Both variants use the **default unified recognition
+model**, which supports 5 major text types: Simplified Chinese,
+Traditional Chinese, Pinyin, English, and Japanese.
 
 PP-OCRv5 separately offers dedicated recognition models for ~106 more
 languages (Korean, Spanish, French, Russian, Thai, Greek, Arabic,
-Devanagari, and others), but those are only reachable by dropping the
-explicit model names and using `lang=<code>` instead -- which would mean
-giving up explicit mobile/server selection. If broader language support
-becomes a requirement, that's a separate tradeoff to evaluate (e.g.
-per-language explicit model names, since PaddleOCR does publish
-language-specific mobile/server pairs like `en_PP-OCRv5_mobile_rec`).
+Devanagari, and others). Reaching those means selecting language-specific
+model *names* -- PaddleOCR publishes mobile/server pairs per language, e.g.
+`korean_PP-OCRv5_mobile_rec` -- which keeps variant pinning intact. That is
+the route to take if broader language support becomes a requirement; it is
+a separate tradeoff to evaluate, not a reason to reintroduce `lang`.
 
 ## How to reproduce
 

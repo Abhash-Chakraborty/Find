@@ -18,9 +18,15 @@ Run with: uv run python scripts/generate_test_images.py
 import random
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-random.seed(42)  # reproducible output
+# Reproducible output. Both generators need seeding: `random` drives line
+# sampling and rotation angles, numpy drives the per-pixel sensor noise in
+# add_noise(), so seeding only `random` would still give a different corpus
+# (and different accuracy numbers) on every regeneration.
+random.seed(42)
+_rng = np.random.default_rng(42)
 
 OUT_DIR = Path(__file__).parent / "ocr_test_images"
 
@@ -48,10 +54,8 @@ def _font(size):
 
 def add_noise(img: Image.Image, amount: float) -> Image.Image:
     """Add per-pixel random noise to simulate camera sensor grain."""
-    import numpy as np
-
     arr = np.array(img).astype(np.int16)
-    noise = np.random.randint(-int(255 * amount), int(255 * amount) + 1, arr.shape)
+    noise = _rng.integers(-int(255 * amount), int(255 * amount) + 1, arr.shape)
     arr = np.clip(arr + noise, 0, 255).astype(np.uint8)
     return Image.fromarray(arr)
 
