@@ -48,11 +48,22 @@ updates:
       time: "05:00"
       timezone: Asia/Kolkata
     groups:
+      # Linters and formatters get their own group, ahead of the runtime ones
+      # so they win the pattern match. They are pinned exactly and they rewrite
+      # the tree, so a bump is never a routine dependency update: ruff 0.1.14 ->
+      # 0.16 in #401 produced 801 `ruff check` errors and took 20 unrelated
+      # patches down with it. Being 0.x, that is a *minor* bump as far as
+      # Dependabot is concerned, so the major/minor split alone cannot separate
+      # them. Reviewing a formatter upgrade on its own is the point.
+      python-tooling:
+        patterns: ["ruff", "black"]
       python-runtime:
         patterns: ["*"]
+        exclude-patterns: ["ruff", "black"]
         update-types: ["minor", "patch"]
       python-runtime-major:
         patterns: ["*"]
+        exclude-patterns: ["ruff", "black"]
         update-types: ["major"]
     # torch/torchvision resolve from the pinned pytorch-cpu and pytorch-cu128
     # indexes (see [tool.uv.sources] in backend/pyproject.toml), and cu128 lags
@@ -69,9 +80,19 @@ updates:
     # the real ML stack regardless (transformers, open-clip-torch, timm,
     # ultralytics, insightface). #382 tracks the current open torch advisories
     # and the 2.11.0 evaluation; keep that issue alive while this ignore exists.
+    #
+    # insightface is ignored for the same shape of reason, not a resolution
+    # one. It is only installed by the cpu/nvidia extras, so `uv sync --group
+    # dev` never pulls it and no CI job imports it -- a bump is green on a
+    # checkmark that never executed a line of it. On top of that, ml/
+    # face_detector.py already carries an AssertionError retry for antelopev2's
+    # nested model layout, so the thing most likely to break across a major is
+    # exactly the thing nothing here can see. #404 tracks evaluating 1.0.1 by
+    # hand against real model weights.
     ignore:
       - dependency-name: torch
       - dependency-name: torchvision
+      - dependency-name: insightface
 
   - package-ecosystem: npm
     directory: /frontend
@@ -82,11 +103,20 @@ updates:
       time: "05:30"
       timezone: Asia/Kolkata
     groups:
+      # Same reasoning as python-tooling above. Biome is the formatter and the
+      # linter behind `pnpm check`, so its rules moving is a tree-wide rewrite,
+      # not a dependency update: 2.4.15 -> 2.5.5 in #399 failed frontend-check
+      # with 5 errors on files nobody touched, and took an axios patch down
+      # with it.
+      frontend-tooling:
+        patterns: ["@biomejs/biome"]
       frontend-runtime:
         patterns: ["*"]
+        exclude-patterns: ["@biomejs/biome"]
         update-types: ["minor", "patch"]
       frontend-runtime-major:
         patterns: ["*"]
+        exclude-patterns: ["@biomejs/biome"]
         update-types: ["major"]
 
   - package-ecosystem: cargo
