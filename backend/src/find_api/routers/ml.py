@@ -164,6 +164,30 @@ def embed(
     return {"embedding": embedding}
 
 
+@router.post("/embed_text", dependencies=[Depends(_require_auth)])
+def embed_text(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Embed a search query with the same CLIP model used for image vectors."""
+    text = body.get("text")
+    if not isinstance(text, str) or not text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="text must be a non-empty string.",
+        )
+
+    try:
+        from find_api.ml.clip_embedder import get_clip_embedder
+
+        embedding = get_clip_embedder().embed_text(text)
+    except Exception as exc:
+        logger.exception("embed_text endpoint: embed_text failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Text embedding failed on the remote server.",
+        ) from exc
+
+    return {"embedding": list(embedding)}
+
+
 @router.post("/cluster", dependencies=[Depends(_require_auth)])
 def cluster(body: Dict[str, Any]) -> Dict[str, Any]:
     """Run HDBSCAN clustering on a list of embedding vectors."""

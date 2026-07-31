@@ -253,14 +253,27 @@ def search_images(
         if runtime.applied_mode == "mock":
             from find_api.ml.mock_embedder import get_mock_embedder
 
-            embedder = get_mock_embedder()
+            embed_query = get_mock_embedder().embed_text
+        elif runtime.applied_mode == "remote":
+            # A remote deployment has no local CLIP to fall through to.
+            from find_api.ml.remote_client import _feature_enabled, remote_embed_text
+
+            if _feature_enabled("embed"):
+                embed_query = remote_embed_text
+            else:
+                # Image vectors were produced by the mock embedder in this
+                # configuration (see _remote_embed_image), so the query has to
+                # come from the same space or nothing will match.
+                from find_api.ml.mock_embedder import get_mock_embedder
+
+                embed_query = get_mock_embedder().embed_text
         else:
             from find_api.ml.clip_embedder import get_clip_embedder
 
-            embedder = get_clip_embedder()
+            embed_query = get_clip_embedder().embed_text
 
         t_embed_start = time.perf_counter()
-        query_embedding = embedder.embed_text(q)
+        query_embedding = embed_query(q)
         embedding_ms = (time.perf_counter() - t_embed_start) * 1000
     finally:
         reset_runtime(runtime_tokens)

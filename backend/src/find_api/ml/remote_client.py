@@ -17,9 +17,6 @@ from find_api.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Features that transmit full image bytes to the remote server.
-_IMAGE_FEATURES = {"embed", "caption", "detect", "ocr"}
-
 # Timeout for remote ML requests (seconds).
 _REQUEST_TIMEOUT = 120.0
 
@@ -146,6 +143,36 @@ def remote_embed(image: Image.Image, metadata: Dict[str, Any]) -> List[float]:
         ) from exc
     except httpx.RequestError as exc:
         raise RemoteMLError(f"remote_embed connection error: {exc}") from exc
+
+
+def remote_embed_text(text: str) -> List[float]:
+    """Embed a search query remotely.
+
+    Semantic search embeds the query string with the same CLIP model that
+    produced the stored image vectors. Without this, remote mode would fall
+    through to get_clip_embedder() and try to load CLIP locally -- which is
+    exactly the runtime a remote deployment does not have.
+    """
+    url = f"{_base_url()}/api/ml/embed_text"
+
+    try:
+        with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
+            response = client.post(
+                url,
+                headers={**_auth_headers(), "Content-Type": "application/json"},
+                json={"text": text},
+            )
+        _raise_for_auth(response)
+        response.raise_for_status()
+        return response.json()["embedding"]
+    except (RemoteMLAuthError, RemoteMLError):
+        raise
+    except httpx.HTTPStatusError as exc:
+        raise RemoteMLError(
+            f"remote_embed_text failed: HTTP {exc.response.status_code}"
+        ) from exc
+    except httpx.RequestError as exc:
+        raise RemoteMLError(f"remote_embed_text connection error: {exc}") from exc
 
 
 def remote_cluster(embeddings: List[List[float]]) -> Dict[str, Any]:
