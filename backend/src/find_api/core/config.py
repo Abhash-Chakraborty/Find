@@ -4,6 +4,7 @@ Application configuration using Pydantic settings
 
 import os
 from typing import Literal, Optional
+from urllib.parse import urlparse
 
 from PIL import Image
 from pydantic import field_validator, model_validator
@@ -11,6 +12,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 PILLOW_MAX_IMAGE_PIXELS = Image.MAX_IMAGE_PIXELS or 89_478_485
+
+# Hosts where plaintext HTTP to the remote ML server never leaves the machine
+# (or the compose network), so requiring TLS would be pure friction.
+_LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "::1", "[::1]"}
 
 
 class Settings(BaseSettings):
@@ -151,6 +156,25 @@ class Settings(BaseSettings):
             raise ValueError("ML_MODE=remote requires REMOTE_ML_URL")
         if not self.REMOTE_ML_API_KEY or not self.REMOTE_ML_API_KEY.strip():
             raise ValueError("ML_MODE=remote requires REMOTE_ML_API_KEY")
+
+        # Remote mode ships photo bytes and the bearer token to another host.
+        # Over plaintext HTTP both are readable by anything on the path, which
+        # is the opposite of what a local-first tool promises, so require TLS
+        # unless the server is on this machine.
+        parsed = urlparse(self.REMOTE_ML_URL.strip())
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError(
+                "REMOTE_ML_URL must be an http:// or https:// URL "
+                f"(got {parsed.scheme or 'no'} scheme)"
+            )
+        hostname = (parsed.hostname or "").lower()
+        if parsed.scheme == "http" and hostname not in _LOCAL_HOSTNAMES:
+            raise ValueError(
+                "REMOTE_ML_URL must use https:// for non-local hosts: remote mode "
+                "transmits image bytes and the bearer token to it. Use https://, "
+                "or point REMOTE_ML_URL at localhost and terminate TLS in front "
+                "of the ML server."
+            )
         return self
 
     @model_validator(mode="after")

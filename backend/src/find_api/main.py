@@ -27,6 +27,7 @@ from find_api.routers import (
     feedback,
     gallery,
     map,
+    ml,
     people,
     search,
     status,
@@ -150,6 +151,7 @@ app.include_router(status.router, prefix="/api", tags=["status"])
 app.include_router(config.router, prefix="/api", tags=["config"])
 app.include_router(people.router, prefix="/api", tags=["people"])
 app.include_router(vault.router, prefix="/api", tags=["vault"])
+app.include_router(ml.router)
 app.include_router(feedback.router, tags=["feedback"])
 app.include_router(duplicates_router)
 
