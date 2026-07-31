@@ -20,6 +20,16 @@ The active variant is controlled by ``settings.OCR_VARIANT`` (or an explicit
 constructor argument) and is always made explicit -- both in this module via
 ``PP_OCR_MODELS`` and in ModelManager status output via
 ``OCRExtractor._publish_variant_status``.
+
+There is deliberately no ``lang`` option. Pinning the variant requires passing
+explicit ``text_detection_model_name``/``text_recognition_model_name``, and
+PaddleOCR 3.x ignores ``lang`` whenever those are set -- it warns "`lang` and
+`ocr_version` will be ignored when model names or model directories are not
+`None`" and resolves the models purely from the given names. The pinned models
+are the default unified PP-OCRv5 recognizers, which cover Simplified Chinese,
+Traditional Chinese, Pinyin, English and Japanese. Supporting the ~106 other
+PP-OCRv5 languages means selecting language-specific model names (e.g.
+``korean_PP-OCRv5_mobile_rec``) rather than reintroducing ``lang``.
 """
 
 from paddleocr import PaddleOCR
@@ -48,26 +58,30 @@ PP_OCR_MODELS = {
 
 VALID_VARIANTS = tuple(PP_OCR_MODELS)
 
+# Only used by the PaddleOCR 2.x fallback constructor below. 2.x has no
+# mobile/server split and selects its models from `lang` alone; on the
+# supported 3.x path the models are pinned by name instead (see module
+# docstring for why there is no `lang` option).
+LEGACY_FALLBACK_LANG = "en"
+
 
 class OCRExtractor:
     """Extract text from images using PaddleOCR"""
 
-    def __init__(self, variant: str | None = None, lang: str = "en"):
+    def __init__(self, variant: str | None = None):
         self.manager = get_model_manager()
         self.variant = self._normalize_variant(variant)
-        self.lang = lang
         # Variant-qualified cache key so ModelManager's own status output
         # (loaded_models / in_flight) makes the active variant visible
         # without any extra plumbing.
         self.model_name = f"paddleocr:{self.variant}"
         self.config_key = (
-            f"paddleocr|variant={self.variant}|lang={self.lang}|"
-            "use_angle_cls=True|use_gpu=False"
+            f"paddleocr|variant={self.variant}|"
+            "use_textline_orientation=True|use_gpu=False"
         )
         logger.info(
-            "OCRExtractor initialized for PaddleOCR (CPU), variant=%s lang=%s",
+            "OCRExtractor initialized for PaddleOCR (CPU), variant=%s",
             self.variant,
-            self.lang,
         )
 
     @staticmethod
@@ -87,6 +101,7 @@ class OCRExtractor:
         # with pipeline-specific flags. Try the current API first, then fall back
         # for older 2.x installs. PaddleOCR 2.x has no mobile/server split, so
         # the requested variant only applies on the 3.x path.
+        legacy_api = False
         try:
             model = PaddleOCR(
                 use_doc_orientation_classify=False,
@@ -94,29 +109,42 @@ class OCRExtractor:
                 use_textline_orientation=True,
                 **model_names,
             )
-        except (TypeError, ValueError) as exc:
+        except TypeError as exc:
+            # Only a constructor signature mismatch means "this is really a 2.x
+            # install". The lockfile pins paddleocr>=3.7, so a ValueError here
+            # is a genuine model/config/download failure and must surface
+            # instead of being masked by a legacy retry that silently ignores
+            # the requested variant.
             logger.info("Falling back to PaddleOCR 2.x arguments: %s", exc)
-            model = PaddleOCR(use_angle_cls=True, lang=self.lang, use_gpu=False)
+            model = PaddleOCR(
+                use_angle_cls=True, lang=LEGACY_FALLBACK_LANG, use_gpu=False
+            )
+            legacy_api = True
 
-        self._publish_variant_status()
+        self._publish_variant_status(legacy_api=legacy_api)
         return model
 
-    def _publish_variant_status(self) -> None:
+    def _publish_variant_status(self, legacy_api: bool = False) -> None:
         """Make the active OCR variant explicit in ModelManager status output.
 
-        Merges into any existing runtime status dict instead of overwriting
-        it outright, since other ML components (CLIP/BLIP/YOLO) may also
-        publish entries through the same ``set_runtime_status`` call.
+        Uses ``merge_runtime_status`` so the update happens under the manager
+        lock: other ML components (CLIP/BLIP/YOLO) publish their own top-level
+        keys into the same runtime status dict, and a read-modify-write from
+        out here would race with them and silently drop their entries.
+
+        ``legacy_api`` records that the PaddleOCR 2.x fallback constructor ran.
+        2.x has no mobile/server split, so the requested variant was not
+        actually applied and the status must not claim otherwise.
         """
         try:
-            current = self.manager.get_status().get("runtime") or {}
-            merged = dict(current)
-            merged["ocr"] = {
+            status = {
                 "variant": self.variant,
-                "lang": self.lang,
                 **PP_OCR_MODELS[self.variant],
             }
-            self.manager.set_runtime_status(merged)
+            if legacy_api:
+                status["legacy_api"] = True
+                status["variant_applied"] = False
+            self.manager.merge_runtime_status("ocr", status)
         except Exception as exc:
             # Status publishing is best-effort observability, never fatal.
             logger.debug("Failed to publish OCR variant status: %s", exc)

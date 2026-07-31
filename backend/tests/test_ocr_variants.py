@@ -51,14 +51,29 @@ class TestVariantSelection:
         extractor = OCRExtractor()
         assert extractor.variant == settings.OCR_VARIANT
 
-    def test_model_names_match_pp_ocrv5_variant(self):
-        mobile = OCRExtractor(variant="mobile")
-        assert PP_OCR_MODELS["mobile"]["text_detection_model_name"] == "PP-OCRv5_mobile_det"
-        assert PP_OCR_MODELS["mobile"]["text_recognition_model_name"] == "PP-OCRv5_mobile_rec"
+    @pytest.mark.parametrize("variant", ["mobile", "server"])
+    def test_model_names_match_pp_ocrv5_variant(self, variant, monkeypatch):
+        """_load_model must pin the variant's PP-OCRv5 det/rec model names.
 
-        server = OCRExtractor(variant="server")
-        assert PP_OCR_MODELS["server"]["text_detection_model_name"] == "PP-OCRv5_server_det"
-        assert PP_OCR_MODELS["server"]["text_recognition_model_name"] == "PP-OCRv5_server_rec"
+        Asserting against PP_OCR_MODELS alone would just restate the table
+        back to itself and still pass if _load_model ignored it, so this
+        captures the kwargs PaddleOCR is actually constructed with.
+        """
+        captured = {}
+
+        class _FakePaddleOCR:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+        monkeypatch.setattr("find_api.ml.ocr.PaddleOCR", _FakePaddleOCR)
+
+        extractor = OCRExtractor(variant=variant)
+        extractor._load_model()
+
+        assert captured["text_detection_model_name"] == f"PP-OCRv5_{variant}_det"
+        assert captured["text_recognition_model_name"] == f"PP-OCRv5_{variant}_rec"
+        # ...and that the table the rest of the code reads agrees.
+        assert captured | PP_OCR_MODELS[extractor.variant] == captured
 
 
 class TestVariantVisibility:
@@ -89,15 +104,36 @@ class TestVariantVisibility:
         assert "paddleocr:mobile" in status["loaded_models"]
         assert status["runtime"]["ocr"]["variant"] == "mobile"
 
-    @pytest.mark.slow
-    def test_switching_variant_does_not_clobber_other_runtime_status(self):
-        """set_runtime_status must merge, not overwrite -- other ML
-        components (CLIP/BLIP/YOLO) may publish through the same call.
+    def test_publishing_variant_does_not_clobber_other_runtime_status(self):
+        """Status publishing must merge, not overwrite -- other ML components
+        (CLIP/BLIP/YOLO) publish their own top-level keys into the same dict.
         """
         manager = get_model_manager()
         manager.set_runtime_status({"unrelated_component": {"loaded": True}})
 
+        OCRExtractor(variant="mobile")._publish_variant_status()
+
+        status = manager.get_status()
+        assert status["runtime"]["unrelated_component"] == {"loaded": True}
+        assert status["runtime"]["ocr"]["variant"] == "mobile"
+
+    def test_legacy_fallback_is_flagged_in_status(self):
+        """The 2.x fallback has no mobile/server split, so status must not
+        claim the requested variant was applied.
+        """
+        OCRExtractor(variant="server")._publish_variant_status(legacy_api=True)
+
+        ocr_status = get_model_manager().get_status()["runtime"]["ocr"]
+        assert ocr_status["legacy_api"] is True
+        assert ocr_status["variant_applied"] is False
+
+    @pytest.mark.slow
+    def test_loaded_variant_survives_real_inference(self):
+        """End-to-end check that a real load publishes the variant block."""
         from PIL import Image
+
+        manager = get_model_manager()
+        manager.set_runtime_status({"unrelated_component": {"loaded": True}})
 
         extractor = OCRExtractor(variant="mobile")
         extractor.extract_text(Image.new("RGB", (32, 32), color="white"))
@@ -111,6 +147,44 @@ class TestFallbackAndErrorHandling:
     """A failed OCR model load must fail loudly and predictably, not
     silently degrade or crash the whole process.
     """
+
+    def test_type_error_falls_back_to_legacy_signature(self, monkeypatch):
+        """A TypeError means the installed PaddleOCR predates the 3.x
+        keyword-only signature, which is the one case a legacy retry is
+        the right answer.
+        """
+        calls = []
+
+        def _fake_paddleocr(**kwargs):
+            calls.append(kwargs)
+            if "text_detection_model_name" in kwargs:
+                raise TypeError("unexpected keyword argument")
+            return object()
+
+        monkeypatch.setattr("find_api.ml.ocr.PaddleOCR", _fake_paddleocr)
+
+        OCRExtractor(variant="mobile")._load_model()
+
+        assert len(calls) == 2
+        assert calls[1] == {"use_angle_cls": True, "lang": "en", "use_gpu": False}
+
+    def test_value_error_from_v3_is_not_masked_by_fallback(self, monkeypatch):
+        """paddleocr>=3.7 is pinned, so a ValueError is a real model/config/
+        download failure. Retrying the legacy signature would swallow it and
+        load a model that ignores the requested variant.
+        """
+        calls = []
+
+        def _fake_paddleocr(**kwargs):
+            calls.append(kwargs)
+            raise ValueError("No models are available for lang=None")
+
+        monkeypatch.setattr("find_api.ml.ocr.PaddleOCR", _fake_paddleocr)
+
+        with pytest.raises(ValueError, match="No models are available"):
+            OCRExtractor(variant="mobile")._load_model()
+
+        assert len(calls) == 1
 
     def test_unavailable_model_raises_model_unavailable_error(self, monkeypatch):
         """Simulate a load failure (e.g. corrupt cache, network failure on
@@ -167,4 +241,6 @@ class TestFallbackAndErrorHandling:
         # name, so it must not be affected by the mobile-variant failure.
         server = OCRExtractor(variant="server")
         assert server.model_name != mobile.model_name
-        assert server.model_name not in get_model_manager().get_status()["failed_models"]
+        assert (
+            server.model_name not in get_model_manager().get_status()["failed_models"]
+        )
