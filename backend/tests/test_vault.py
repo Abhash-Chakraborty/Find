@@ -493,6 +493,98 @@ class TestVaultLock:
         assert response.status_code == 401
 
 
+class TestVaultLockSharedMode:
+    """Locking must keep working once an admin exists.
+
+    The client sends the *vault* session token in the Authorization header,
+    so any user-auth dependency on this route sees a token it cannot
+    resolve. Attribution therefore has to come from the login cookie.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _use_real_auth_dependencies(self, client):
+        from find_api.core.dependencies import get_admin_user, get_required_user
+
+        removed = {}
+        for dep in (get_required_user, get_admin_user):
+            if dep in app.dependency_overrides:
+                removed[dep] = app.dependency_overrides.pop(dep)
+        yield
+        app.dependency_overrides.update(removed)
+
+    @staticmethod
+    def _seed_admin(db) -> tuple[int, str]:
+        from find_api.core.auth import create_session, hash_password
+        from find_api.models.user import User
+
+        admin = User(
+            username="vault-admin",
+            display_name="vault-admin",
+            password_hash=hash_password("s3cure!pass"),
+            role="admin",
+        )
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+        token, _ = create_session(db, admin.id)
+        return admin.id, token
+
+    def test_lock_succeeds_with_vault_token_in_header(self, client, db):
+        """The vault token in Authorization must not be read as a user session."""
+        admin_id, admin_token = self._seed_admin(db)
+
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        prepare_vault_tables(db)
+        unlock = client.post(
+            "/api/vault/unlock",
+            json={"passphrase": "correct horse battery staple"},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert unlock.status_code == 200
+        vault_token = unlock.json()["session_token"]
+
+        response = client.post(
+            "/api/vault/lock",
+            headers={"Authorization": f"Bearer {vault_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"status": "locked"}
+
+    def test_lock_is_attributed_to_the_cookie_session(self, client, db):
+        """With the login cookie present the row names the acting user."""
+        from find_api.models.activity import Activity
+
+        admin_id, admin_token = self._seed_admin(db)
+
+        app.state.limiter.reset()
+        vault_router.limiter.reset()
+        prepare_vault_tables(db)
+        unlock = client.post(
+            "/api/vault/unlock",
+            json={"passphrase": "correct horse battery staple"},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert unlock.status_code == 200
+        vault_token = unlock.json()["session_token"]
+
+        client.cookies.set("find_session", admin_token)
+        response = client.post(
+            "/api/vault/lock",
+            headers={"Authorization": f"Bearer {vault_token}"},
+        )
+        assert response.status_code == 200
+
+        row = (
+            db.query(Activity)
+            .filter(Activity.category == "vault", Activity.action == "locked")
+            .order_by(Activity.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.user_id == admin_id
+
+
 class TestVaultStream:
     """Vault streaming endpoint behavior."""
 

@@ -26,6 +26,7 @@ from find_api.models.media import Media
 from find_api.models.cluster import Cluster
 from find_api.models.app_setting import AppSetting
 from find_api.models.user import User
+from find_api.services.activity_log import record_activity
 from find_api.routers.config import TRASH_RETENTION_DAYS_KEY
 from find_api.services.query_cache import invalidate_query_cache
 from find_api.workers.jobs import analyze_image, generate_thumbnail_for_media
@@ -696,10 +697,22 @@ def set_archive(
     if media.deleted_at is not None:
         raise HTTPException(409, "Cannot archive a trashed image; restore it first.")
 
+    was_archived = media.is_archived
     media.is_archived = bool(request.archived)
     db.commit()
     invalidate_query_cache()
     db.refresh(media)
+    if media.is_archived != was_archived:
+        # Attributed to the photo's owner, not the acting user, so "what
+        # happened to my photos" stays correct when an admin acts on
+        # someone else's asset. Deliberate - same reasoning for trash/restore.
+        record_activity(
+            db,
+            "media",
+            "archived" if media.is_archived else "unarchived",
+            user_id=media.uploader_user_id,
+            media_id=media.id,
+        )
 
     return {"id": media.id, "is_archived": media.is_archived}
 
@@ -725,6 +738,9 @@ def trash_image(
         db.commit()
         invalidate_query_cache()
         db.refresh(media)
+        record_activity(
+            db, "media", "trashed", user_id=media.uploader_user_id, media_id=media.id
+        )
 
     return {
         "id": media.id,
@@ -743,10 +759,15 @@ def restore_image(
     if not can_access_media(media, user):
         raise HTTPException(404, "Image not found")
 
+    was_trashed = media.deleted_at is not None
     media.deleted_at = None
     db.commit()
     invalidate_query_cache()
     db.refresh(media)
+    if was_trashed:
+        record_activity(
+            db, "media", "restored", user_id=media.uploader_user_id, media_id=media.id
+        )
 
     return {"id": media.id, "deleted_at": None}
 

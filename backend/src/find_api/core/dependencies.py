@@ -14,6 +14,7 @@ from sqlalchemy.orm import Query, Session
 
 from find_api.core.auth import get_current_user, is_shared_mode
 from find_api.core.database import get_db
+from find_api.models.activity import Activity
 from find_api.models.media import Media
 from find_api.models.user import User
 
@@ -117,3 +118,14 @@ def can_access_media(media: Media, user: Optional[User]) -> bool:
     if user is None or user.role == "admin":
         return True
     return media.uploader_user_id == user.id
+
+
+def scope_activity_query(query: Q, user: Optional[User]) -> Q:
+    """Restrict an Activity query to rows the user is allowed to see.
+
+    Mirrors :func:`scope_media_query`: local mode and admins see every row;
+    a regular member only sees activity recorded under their own user id.
+    """
+    if user is None or user.role == "admin":
+        return query
+    return query.filter(Activity.user_id == user.id)

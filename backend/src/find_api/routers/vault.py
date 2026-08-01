@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Body, Cookie, Depends, Header, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel
@@ -34,8 +34,8 @@ from find_api.core.crypto import (
     verify_master_key,
 )
 from find_api.core.database import get_db
-from find_api.core.auth import hash_password, verify_password
-from find_api.core.dependencies import get_required_user
+from find_api.core.auth import get_current_user, hash_password, verify_password
+from find_api.core.dependencies import SESSION_COOKIE_NAME, get_required_user
 from find_api.core.storage import (
     delete_file,
     download_file_to_path,
@@ -45,6 +45,7 @@ from find_api.core.storage import (
 )
 from find_api.models.media import Media
 from find_api.models.user import User
+from find_api.services.activity_log import record_activity
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -435,7 +436,7 @@ def unlock_vault(
     request: Request,
     payload: VaultUnlockRequest,
     db: Session = Depends(get_db),
-    _user: Optional[User] = Depends(get_required_user),
+    user: Optional[User] = Depends(get_required_user),
 ):
     """Unlock the vault and cache a short-lived session token."""
     if not payload.passphrase or not payload.passphrase.strip():
@@ -445,7 +446,8 @@ def unlock_vault(
     # passphrase. Enforce a minimum length at creation time so the global
     # vault secret cannot be a trivial passphrase. Existing vaults are not
     # re-validated, so previously-set passphrases keep working.
-    if _load_vault_config(db) is None:
+    is_new_vault = _load_vault_config(db) is None
+    if is_new_vault:
         if len(payload.passphrase) < MIN_VAULT_PASSPHRASE_LENGTH:
             raise HTTPException(
                 status_code=400,
@@ -466,6 +468,12 @@ def unlock_vault(
         db.rollback()
     session_token = secrets.token_urlsafe(32)
     set_session_key(session_token, master_key)
+    record_activity(
+        db,
+        "vault",
+        "created" if is_new_vault else "unlocked",
+        user_id=user.id if user else None,
+    )
     return {"session_token": session_token}
 
 
@@ -605,6 +613,8 @@ def list_vault_media(
 def lock_vault(
     payload: Optional[VaultLockRequest] = Body(default=None),
     authorization: Optional[str] = Header(default=None),
+    session_cookie: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+    db: Session = Depends(get_db),
 ):
     """Invalidate an active vault session token."""
     session_token = _resolve_session_token(
@@ -612,6 +622,13 @@ def lock_vault(
     )
     if not delete_session_key(session_token):
         raise HTTPException(status_code=401, detail="Invalid or expired vault session")
+    # Attribution comes from the login cookie, never from Authorization:
+    # on this route that header carries the *vault* session token, which
+    # resolves to no user. Depending on get_required_user here would 401
+    # every shared-mode lock. get_current_user is the non-raising form, so
+    # a cookie-less API client still locks, just without attribution.
+    actor = get_current_user(db, f"Bearer {session_cookie}" if session_cookie else None)
+    record_activity(db, "vault", "locked", user_id=actor.id if actor else None)
     return {"status": "locked"}
 
 
@@ -744,6 +761,13 @@ def restore_media(
             media.hidden_at = None
             media.encrypted_at = None
             db.commit()
+            record_activity(
+                db,
+                "vault",
+                "restored",
+                user_id=media.uploader_user_id,
+                media_id=media.id,
+            )
             return {
                 "status": "restored",
                 "media_id": media.id,
@@ -832,6 +856,9 @@ def restore_media(
             encrypted_blob_removed = False
             logger.exception("Restored vault item left an encrypted cleanup artifact")
 
+        record_activity(
+            db, "vault", "restored", user_id=media.uploader_user_id, media_id=media.id
+        )
         return {
             "status": "restored",
             "media_id": media.id,

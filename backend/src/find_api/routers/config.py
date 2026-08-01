@@ -25,6 +25,7 @@ from find_api.core.runtime_profile import (
 )
 from find_api.models.app_setting import AppSetting
 from find_api.models.user import User
+from find_api.services.activity_log import record_activity
 
 router = APIRouter()
 
@@ -182,16 +183,32 @@ def update_settings(
     changed. The value is read back immediately by this API process; see
     models/app_setting.py for the cross-process propagation caveat.
     """
+    previous_prefs = load_runtime_preferences(db)
+    previous_trash_retention_days = _trash_retention_days(db)
+    changes = []
+
     if request.accel_mode is not None:
         # Defensive: Literal already constrains this, but guard the raw write.
         if request.accel_mode not in _VALID_ACCEL_MODES:
             raise HTTPException(422, "accel_mode must be one of auto, gpu, cpu")
+        if request.accel_mode != previous_prefs.accel_mode:
+            changes.append(
+                (ACCEL_MODE_KEY, previous_prefs.accel_mode, request.accel_mode)
+            )
         _upsert_setting(db, ACCEL_MODE_KEY, request.accel_mode)
 
     if request.ai_enabled is not None:
+        if request.ai_enabled != previous_prefs.ai_enabled:
+            changes.append(
+                (AI_ENABLED_KEY, previous_prefs.ai_enabled, request.ai_enabled)
+            )
         _upsert_setting(db, AI_ENABLED_KEY, str(request.ai_enabled).lower())
 
     if request.map_enabled is not None:
+        if request.map_enabled != previous_prefs.map_enabled:
+            changes.append(
+                (MAP_ENABLED_KEY, previous_prefs.map_enabled, request.map_enabled)
+            )
         _upsert_setting(db, MAP_ENABLED_KEY, str(request.map_enabled).lower())
 
     if request.ml_mode is not None:
@@ -201,6 +218,8 @@ def update_settings(
                 422,
                 f"ML mode '{request.ml_mode}' is not installed in this artifact",
             )
+        if request.ml_mode != previous_prefs.ml_mode:
+            changes.append((ML_MODE_KEY, previous_prefs.ml_mode, request.ml_mode))
         _upsert_setting(db, ML_MODE_KEY, request.ml_mode)
 
     if request.trash_retention_days is not None:
@@ -208,6 +227,14 @@ def update_settings(
             raise HTTPException(
                 422,
                 "trash_retention_days must be between 0 and 3650",
+            )
+        if request.trash_retention_days != previous_trash_retention_days:
+            changes.append(
+                (
+                    TRASH_RETENTION_DAYS_KEY,
+                    previous_trash_retention_days,
+                    request.trash_retention_days,
+                )
             )
         _upsert_setting(
             db,
@@ -217,5 +244,13 @@ def update_settings(
 
     if request.model_fields_set:
         db.commit()
+        for key, previous_value, new_value in changes:
+            record_activity(
+                db,
+                "settings",
+                "updated",
+                user_id=user.id if user else None,
+                payload={"key": key, "from": previous_value, "to": new_value},
+            )
 
     return _settings_response(db)

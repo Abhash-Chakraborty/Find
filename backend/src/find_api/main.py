@@ -38,6 +38,7 @@ from find_api.routers import (
 from find_api.routers import album
 from find_api.routers import shared_link
 from find_api.routers import partner
+from find_api.routers import activity
 
 # Configure logging
 logging.basicConfig(
@@ -142,6 +143,7 @@ app.include_router(map.router, prefix="/api", tags=["map"])
 app.include_router(album.router, prefix="/api", tags=["albums"])
 app.include_router(shared_link.router, prefix="/api", tags=["shared-links"])
 app.include_router(partner.router, prefix="/api", tags=["partners"])
+app.include_router(activity.router, prefix="/api", tags=["activity"])
 app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(clusters.router, prefix="/api", tags=["clusters"])
 app.include_router(cluster.router, prefix="/api", tags=["cluster-ops"])

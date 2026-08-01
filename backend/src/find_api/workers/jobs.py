@@ -25,6 +25,7 @@ from find_api.core.runtime_profile import (
 )
 from find_api.core.config import settings
 from find_api.models.media import Media
+from find_api.services.activity_log import record_activity
 from find_api.services.query_cache import invalidate_query_cache
 from find_api.utils.exif import extract_exif_data, extract_gps_coordinates
 from find_api.utils.errors import sanitize_error
@@ -270,6 +271,14 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
 
         db.commit()
         invalidate_query_cache()
+        record_activity(
+            db,
+            "upload",
+            "completed",
+            user_id=media.uploader_user_id,
+            media_id=media.id,
+            payload={"filename": media.filename},
+        )
 
         if runtime.applied_mode == "disabled":
             logger.info("Metadata-only processing complete for media %s", media_id)
@@ -347,6 +356,14 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
             if metadata:
                 media.metadata_json = metadata
             db.commit()
+            record_activity(
+                db,
+                "upload",
+                "failed",
+                user_id=media.uploader_user_id,
+                media_id=media.id,
+                payload={"filename": media.filename, "reason": safe_error},
+            )
 
         raise
 
