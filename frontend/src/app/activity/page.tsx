@@ -21,7 +21,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   activityTone,
@@ -117,19 +117,37 @@ export default function ActivityPage() {
     queryFn: ({ pageParam }) =>
       getActivity({ skip: pageParam, limit: ACTIVITY_LIMIT, category }),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) => {
-      const fetchedSoFar = lastPage.skip + lastPage.items.length;
-      return fetchedSoFar < lastPage.total ? fetchedSoFar : undefined;
+    getNextPageParam: (lastPage, allPages) => {
+      // The feed is newest-first and append-only, so a row recorded while the
+      // user is paging shifts every later offset down by one. Measure that
+      // drift against the first page's total and push the next offset past it,
+      // otherwise "Load more" re-serves rows already on screen and skips the
+      // same number of older ones.
+      const consumed = allPages.reduce(
+        (n, page) => n + (page?.items.length ?? 0),
+        0,
+      );
+      const snapshotTotal = allPages[0]?.total ?? lastPage?.total ?? 0;
+      const drift = Math.max(0, (lastPage?.total ?? 0) - snapshotTotal);
+      return consumed < snapshotTotal ? consumed + drift : undefined;
     },
   });
 
   // Retention is enforced whenever Activity is opened, mirroring Trash's
   // auto-purge-on-view (see get_trash / purge_expired_trash on the backend).
+  // The initial GET can win the race against this delete, so refresh once it
+  // has actually removed something.
   useEffect(() => {
-    purgeActivity().catch(() => {
-      // Best-effort: an idle purge failing shouldn't block viewing activity.
-    });
-  }, []);
+    void purgeActivity()
+      .then((res) => {
+        if (res.deleted_count > 0) {
+          queryClient.invalidateQueries({ queryKey: ["activity"] });
+        }
+      })
+      .catch(() => {
+        // Best-effort: an idle purge failing shouldn't block viewing activity.
+      });
+  }, [queryClient]);
 
   const clearMutation = useMutation({
     mutationFn: clearActivity,
@@ -140,7 +158,21 @@ export default function ActivityPage() {
     onError: () => toast.error("Couldn't clear activity"),
   });
 
-  const items = data?.pages.flatMap((page) => page.items) ?? [];
+  // Offset paging over a live feed can still overlap at the seams, so drop
+  // ids already rendered rather than letting a row appear twice.
+  const items = useMemo(() => {
+    const seen = new Set<number>();
+    const flat: ActivityItem[] = [];
+    for (const page of data?.pages ?? []) {
+      for (const item of page.items) {
+        if (!seen.has(item.id)) {
+          seen.add(item.id);
+          flat.push(item);
+        }
+      }
+    }
+    return flat;
+  }, [data]);
   const total = data?.pages[0]?.total ?? 0;
   const days = groupActivityByDay(items);
 
