@@ -13,8 +13,10 @@ from find_api.core.config import settings
 class TestAppConfigVersion:
     """/api/config carries the backend package version (#355).
 
-    The Settings > About card and the sidebar footer both read it from here, so
-    neither has to hard-code a value that silently goes stale on release.
+    Settings > About reads it from here rather than hard-coding a value. Note
+    that the sidebar footer deliberately does NOT: scripts/bump_version.py
+    rewrites that literal on release and CI fails if it drifts, so it stays a
+    release-managed string.
     """
 
     def test_reports_the_package_version(self, client):
