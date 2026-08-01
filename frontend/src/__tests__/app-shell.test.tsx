@@ -1,13 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
   render,
   screen,
-  waitFor,
   within,
 } from "@testing-library/react";
-import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/app-shell";
 
@@ -21,40 +18,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: navigation.push }),
 }));
 
-const api = vi.hoisted(() => ({
-  getAppConfig: vi.fn(),
-}));
-
-// Partial mock: the shell also mounts UniversalSearch, which pulls other
-// exports off this module, so only getAppConfig is replaced.
-vi.mock("@/lib/api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/api")>()),
-  getAppConfig: api.getAppConfig,
-}));
-
-function renderShell(ui: ReactElement) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
-  );
-}
-
 beforeEach(() => {
   navigation.pathname = "/timeline";
   navigation.push.mockReset();
-  api.getAppConfig.mockReset();
-  api.getAppConfig.mockResolvedValue({
-    app_version: "9.9.9",
-    ml_mode: "mock",
-    configured_ml_mode: "mock",
-    accel_mode: "cpu",
-    ai_enabled: true,
-    map_enabled: false,
-    build_profile: "mock",
-    supported_ml_modes: ["disabled", "mock"],
-  });
   localStorage.clear();
 });
 
@@ -68,7 +34,7 @@ afterEach(() => {
 
 describe("AppShell", () => {
   it("renders the private route groups and top-bar actions", () => {
-    renderShell(
+    render(
       <AppShell>
         <div>Timeline content</div>
       </AppShell>,
@@ -127,7 +93,7 @@ describe("AppShell", () => {
     "/auth/setup",
   ])("does not expose private chrome on %s", (pathname) => {
     navigation.pathname = pathname;
-    renderShell(
+    render(
       <AppShell>
         <div>Shell-free content</div>
       </AppShell>,
@@ -141,7 +107,7 @@ describe("AppShell", () => {
   });
 
   it("opens an accessible mobile drawer and closes it with Escape", () => {
-    renderShell(
+    render(
       <AppShell>
         <div>Content</div>
       </AppShell>,
@@ -163,7 +129,7 @@ describe("AppShell", () => {
   });
 
   it("locks page scroll, traps focus, and restores the menu trigger", () => {
-    renderShell(
+    render(
       <AppShell>
         <div>Content</div>
       </AppShell>,
@@ -200,7 +166,7 @@ describe("AppShell", () => {
   });
 
   it("opens Search from the global keyboard shortcut", () => {
-    renderShell(
+    render(
       <AppShell>
         <div>Content</div>
       </AppShell>,
@@ -220,7 +186,7 @@ describe("AppShell", () => {
     document.documentElement.classList.add(theme);
     document.documentElement.dataset.theme = theme;
 
-    renderShell(
+    render(
       <AppShell>
         <div>Content</div>
       </AppShell>,
@@ -255,34 +221,15 @@ describe("AppShell", () => {
     expect(trigger).toHaveFocus();
   });
 
-  it("shows the backend-reported version in the sidebar footer", async () => {
-    renderShell(
+  it("keeps the release-managed sidebar version visible", () => {
+    render(
       <AppShell>
         <div>Content</div>
       </AppShell>,
     );
 
-    await waitFor(() =>
-      expect(screen.getByTestId("sidebar-app-version")).toHaveTextContent(
-        "v9.9.9",
-      ),
-    );
-  });
-
-  it("leaves the sidebar version blank when the config request fails", async () => {
-    api.getAppConfig.mockRejectedValue(new Error("offline"));
-    renderShell(
-      <AppShell>
-        <div>Content</div>
-      </AppShell>,
-    );
-
-    // Wait for the request to actually settle before asserting the absence,
-    // otherwise this passes on the pre-fetch render and proves nothing.
-    await waitFor(() => expect(api.getAppConfig).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(screen.getByTestId("sidebar-app-version")).toHaveTextContent(""),
-    );
-    expect(screen.getByTestId("sidebar-app-version").textContent).toBe("");
+    // scripts/bump_version.py rewrites this string on release and CI fails if
+    // it drifts, so it is asserted rather than fetched.
+    expect(screen.getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument();
   });
 });
