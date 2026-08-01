@@ -78,7 +78,9 @@ def _no_network(monkeypatch):
 
 class TestHFHubCacheResolution:
     def test_finds_cached_repo_by_full_id(self, tmp_path, monkeypatch):
-        hf_home, symlink_used = _make_hf_cache(tmp_path, "microsoft/Florence-2-base", b"0" * 2048)
+        hf_home, symlink_used = _make_hf_cache(
+            tmp_path, "microsoft/Florence-2-base", b"0" * 2048
+        )
         if not symlink_used:
             pytest.skip(_NO_SYMLINK_REASON)
         monkeypatch.setenv("HF_HOME", hf_home)
@@ -93,7 +95,7 @@ class TestHFHubCacheResolution:
         assert info.last_modified is not None
 
     def test_no_matching_repo_reports_not_cached(self, tmp_path, monkeypatch):
-        hf_home,_ = _make_hf_cache(tmp_path, "someone/unrelated-model", b"0" * 10)
+        hf_home, _ = _make_hf_cache(tmp_path, "someone/unrelated-model", b"0" * 10)
         monkeypatch.setenv("HF_HOME", hf_home)
         monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
 
@@ -235,7 +237,9 @@ class TestPaddleOCRCache:
 class TestBuildReport:
     def _wire_all_caches(self, tmp_path, monkeypatch):
         """Point every model at a small, fully cached, temporary footprint."""
-        hf_home, symlink_used = _make_hf_cache(tmp_path, "microsoft/Florence-2-base", b"f" * 100)
+        hf_home, symlink_used = _make_hf_cache(
+            tmp_path, "microsoft/Florence-2-base", b"f" * 100
+        )
         monkeypatch.setenv("HF_HOME", hf_home)
         monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
 
@@ -254,7 +258,7 @@ class TestBuildReport:
             b"i" * 20
         )
         monkeypatch.setenv("INSIGHTFACE_HOME", str(insight_home))
-        
+
         paddle_home = tmp_path / "paddlex_models"
         paddle_home.mkdir()
         (paddle_home / "det.onnx").write_bytes(b"p" * 10)

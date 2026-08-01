@@ -11,12 +11,13 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ImagePreviewModal,
   type PreviewMedia,
 } from "@/components/image-preview-modal";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
   type ClusterDetail,
@@ -34,6 +35,7 @@ import {
   MINIO_URL_STALE_TIME_MS,
   resolveMediaUrl,
 } from "@/lib/media";
+import { useAiAvailability } from "@/lib/use-ai-availability";
 
 function formatJobStatus(status?: string) {
   switch (status) {
@@ -85,12 +87,14 @@ export default function ClustersPage() {
   const [clusterJobId, setClusterJobId] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
   const [clusterLabelDraft, setClusterLabelDraft] = useState("");
+  const clusterTimelineScrollRef = useRef<HTMLDivElement | null>(null);
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ["clusters"],
     queryFn: getClusters,
     refetchInterval: clusterJobId ? 4000 : 10000,
     staleTime: MINIO_URL_STALE_TIME_MS,
   });
+  const { aiUnavailable, unavailableMessage } = useAiAvailability();
 
   const selectedClusterQuery = useQuery({
     queryKey: ["cluster-detail", selectedClusterId],
@@ -243,9 +247,10 @@ export default function ClustersPage() {
     indexedImageCount > 0 &&
     indexedImageCount >= effectiveMinClusterSize;
   const isClusterButtonDisabled =
-    isClusterActionBusy || !hasEnoughIndexedImages;
-  const clusteringUnavailableMessage =
-    indexedQuery.isSuccess && !hasEnoughIndexedImages
+    isClusterActionBusy || !hasEnoughIndexedImages || aiUnavailable;
+  const clusteringUnavailableMessage = aiUnavailable
+    ? unavailableMessage
+    : indexedQuery.isSuccess && !hasEnoughIndexedImages
       ? `Need at least ${effectiveMinClusterSize} indexed images to cluster. Found ${indexedImageCount}.`
       : null;
 
@@ -264,12 +269,13 @@ export default function ClustersPage() {
   return (
     <div className="page-shell">
       <div className="container-shell py-10 md:py-14">
-        <div className="page-enter mb-10 flex flex-col gap-6 border-b border-[var(--frost)] pb-8 md:flex-row md:items-end md:justify-between">
+        <div className="page-enter mb-8 flex flex-col gap-4 border-b border-[var(--frost)] pb-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
-            <h1 className="section-heading mb-4 text-5xl font-medium md:text-6xl">
-              Clusters
-            </h1>
-            <p className="muted-copy text-sm leading-6">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--blue)]">
+              Library / Clusters
+            </p>
+            <h1 className="section-heading text-3xl font-medium">Clusters</h1>
+            <p className="muted-copy mt-2 text-sm leading-6">
               Similar images are grouped into clean, browsable sets as your
               library is indexed.
             </p>
@@ -304,6 +310,13 @@ export default function ClustersPage() {
             </button>
           </div>
         </div>
+
+        {aiUnavailable && (
+          <div className="mb-6 rounded-2xl border border-[color:var(--frost)] bg-[color:var(--surface-soft)] px-5 py-4 text-sm text-[color:var(--silver)]">
+            This build imports and organizes photos without AI. Install or
+            enable a local AI profile in Settings to create visual clusters.
+          </div>
+        )}
 
         {activeJobStatus && (
           <div className="mb-8 flex justify-center">
@@ -398,7 +411,8 @@ export default function ClustersPage() {
                 <button
                   type="button"
                   onClick={() => clusterMutation.mutate()}
-                  disabled={isClusterActionBusy}
+                  disabled={isClusterActionBusy || aiUnavailable}
+                  title={clusteringUnavailableMessage ?? undefined}
                   className="white-pill px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isClusterActionBusy ? (
@@ -565,7 +579,10 @@ export default function ClustersPage() {
               </p>
             </div>
 
-            <div className="max-h-[calc(90dvh-88px)] overflow-y-auto p-6">
+            <div
+              ref={clusterTimelineScrollRef}
+              className="max-h-[calc(90dvh-88px)] overflow-y-auto p-6"
+            >
               {selectedClusterQuery.isLoading && (
                 <div className="flex items-center justify-center py-24">
                   <Loader2 className="h-8 w-8 animate-spin text-[color:var(--silver)]" />
@@ -643,63 +660,32 @@ export default function ClustersPage() {
                     </div>
                   )}
 
-                  <VirtualizedGrid
+                  <TimelineMediaView
                     items={filteredMembers}
-                    className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
-                    estimateRowHeight={360}
-                    getKey={(member) => member.id}
-                    renderItem={(member) => {
-                      const imageSrc = resolveMediaUrl(
+                    scrollContainerRef={clusterTimelineScrollRef}
+                    getId={(member) => member.id}
+                    getDate={() => null}
+                    getThumbnailUrl={(member) =>
+                      resolveMediaUrl(
                         member.thumbnail_url ?? member.url,
                         null,
                         member.id,
                         !member.thumbnail_url,
-                      );
-
-                      return (
-                        <button
-                          type="button"
-                          key={member.id}
-                          onClick={() =>
-                            setPreviewMedia({
-                              id: member.id,
-                              filename: member.filename,
-                              url: member.url,
-                              caption: member.caption,
-                            })
-                          }
-                          className="frost-panel card-hover overflow-hidden rounded-3xl text-left"
-                          aria-label={`Preview ${member.filename}`}
-                        >
-                          <div className="relative aspect-[4/3] bg-[color:var(--surface-soft)]">
-                            {imageSrc ? (
-                              <Image
-                                src={imageSrc}
-                                alt={member.filename}
-                                fill
-                                className="object-cover"
-                                sizes="(max-width: 768px) 100vw, 33vw"
-                                unoptimized
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[color:var(--muted)]">
-                                <ImageOff className="h-6 w-6" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="space-y-2 p-4">
-                            <p className="truncate text-sm font-medium text-[color:var(--near-white)]">
-                              {member.filename}
-                            </p>
-                            {member.caption && (
-                              <p className="line-clamp-2 text-sm leading-6 text-[color:var(--silver)]">
-                                {member.caption}
-                              </p>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    }}
+                      )
+                    }
+                    getOriginalUrl={(member) =>
+                      `/api/image/${member.id}/original`
+                    }
+                    getAlt={(member) => member.filename}
+                    getOpenLabel={(member) => `Preview ${member.filename}`}
+                    onOpenItem={(member) =>
+                      setPreviewMedia({
+                        id: member.id,
+                        filename: member.filename,
+                        url: member.url,
+                        caption: member.caption,
+                      })
+                    }
                   />
                 </div>
               )}

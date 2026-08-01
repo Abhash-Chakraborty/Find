@@ -24,6 +24,8 @@ class VaultConfig(Base):
     salt = Column(LargeBinary, nullable=False)
     verifier_nonce = Column(LargeBinary, nullable=False)
     verifier_ciphertext = Column(LargeBinary, nullable=False)
+    recovery_code_hash = Column(String(255), nullable=True)
+    storage_mode = Column(String(32), nullable=False, server_default="protected")
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -4,14 +4,98 @@ All notable changes to Find are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project is
 distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
-## [Unreleased] — App overhaul (`feat/app-overhaul`)
+## [Unreleased]
 
-A large feature overhaul bringing reference-grade browsing, albums, sharing,
-archive/trash, and a hardware-acceleration layer. All changes below are on the
-`feat/app-overhaul` branch and verified by the test suites (backend pytest +
-frontend vitest) with a clean `tsc --noEmit` and `ruff check`.
+### Changed
+
+- Contributor work now targets a protected `canary` default branch; only the
+  reviewed canary promotion can enter `main`.
+- Release preparation synchronizes every version surface and uses one manual
+  patch/minor/major selector, followed by a restartable three-hour release gate.
+- CI actions are immutable-SHA pinned, dependency updates target canary, and
+  release images include provenance and software bill-of-material attestations.
+
+## [1.1.3] — 2026-07-15
+
+### Fixed
+
+- NVIDIA workers now use a CUDA 12/cuDNN 9-compatible ONNX Runtime and preload
+  the CUDA libraries installed with PyTorch before InsightFace creates model
+  sessions, preventing repeated `libcublasLt.so.11` errors and CPU fallback.
+- Full-screen previews retain their complete action and metadata toolset, and
+  upload/indexing progress persists across routes until successful completion.
+
+## [1.1.2] — 2026-07-14
 
 ### Added
+
+- Addressable `/image/{id}` previews that retain the originating library route,
+  lock background scroll, expose metadata, and provide contextual archive,
+  trash, restore, or album-removal actions.
+- Album photo picker with recent and semantic-search modes, plus automatic
+  trash retention controls for 7, 30, 90, custom, or never-delete policies.
+
+### Changed
+
+- Timeline pages use the date scrubber as their only visible scrollbar and
+  suppress it when the library cannot scroll.
+- Album sharing is hidden until requested; route headers, upload, account,
+  search, duplicates, clusters, and people use a compact visual hierarchy.
+- AI-dependent controls now report disabled or non-installed artifacts
+  truthfully, including unavailable GPU selection in modular CPU/no-AI builds.
+
+### Fixed
+
+- Full-resolution previews, modal navigation URLs, body scroll containment,
+  archive/trash restoration, and single-image timeline presentation.
+- Blank private-map canvases in browsers that do not render worker-sourced
+  GeoJSON fills; bundled Natural Earth geometry now has a local SVG fallback.
+
+## [1.1.1] — 2026-07-14
+
+### Added
+
+- Guided vault setup and unlock, one-time recovery codes, password and recovery
+  rotation, and configurable automatic locking.
+- Collapsible desktop navigation with a compact header and universal search
+  across photos, albums, routes, and settings.
+
+### Changed
+
+- Account, vault, search, and settings controls now share the local-first v1.1
+  application shell and remain usable across responsive layouts.
+
+## [1.1.0] — 2026-07-13
+
+A product and platform overhaul bringing timeline-first browsing, account and
+vault management, a private offline map, modular AI artifacts, and a polished
+responsive application shell.
+
+### Added
+
+**Application shell and account**
+- Responsive sidebar/top bar, focus-safe mobile navigation, global search
+  shortcut, theme persistence, and consistent route-level spacing.
+- Setup, login, profile, password rotation, active-session listing, and session
+  revocation backed by secure HTTP-only session cookies.
+
+**Private map and vault**
+- Opt-in EXIF GPS retention with an account-scoped offline MapLibre view using
+  bundled Natural Earth geometry and no external tile or geocoding requests.
+- Explicit vault session locking, session-only decrypted thumbnails, timeline
+  browsing, full-screen preview, and rollback-safe restoration.
+
+**Modular runtime**
+- Separate no-AI, mock, CPU, and NVIDIA dependency artifacts. CPU/no-AI builds
+  do not install CUDA packages; the dashboard reports the installed artifact,
+  applied mode, worker health, and restart requirements.
+- Dashboard selection of disabled, mock, or full processing whenever that mode
+  is installed in the active artifact, without restarting or downloading a
+  different dependency stack.
+- Consolidated Compose topology: `compose.yml`, `compose.base.yml`, and explicit
+  `compose.no-ai.yml`, `compose.mock.yml`, and `compose.cpu.yml` profiles.
+- Tag-driven and manual GHCR publishing for immutable web images and all four
+  modular backend profiles.
 
 **Timeline**
 - Month-bucketed timeline API: `GET /api/timeline/buckets` (counts per month)

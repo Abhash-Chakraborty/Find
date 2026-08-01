@@ -93,10 +93,9 @@ def _run(
     fake_clip_module.get_clip_embedder.return_value = embedder
 
     with (
-        patch("find_api.workers.processors.settings") as mock_settings,
+        patch("find_api.workers.processors.current_ml_mode", return_value="full"),
         patch.dict(sys.modules, {"find_api.ml.clip_embedder": fake_clip_module}),
     ):
-        mock_settings.ML_MODE = "full"
         result = generate_hybrid_embedding(fake_image, metadata)
 
     return np.array(result, dtype=np.float32), embedder

@@ -158,12 +158,25 @@ export default function DuplicatesPage() {
 
   return (
     <main className="container-shell py-10">
-      <section className="mb-6">
-        <h1 className="section-heading">Near-Duplicate Images</h1>
-        <p className="mt-2 text-sm text-[color:var(--silver)]">
-          {data?.total ?? 0} near-duplicate pairs found
+      <header className="mb-6 border-b border-[var(--frost)] pb-5">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="text-sm font-semibold text-[color:var(--blue)]">
+            Utilities
+          </span>
+          <span aria-hidden="true" className="text-[color:var(--muted)]">
+            /
+          </span>
+          <h1 className="section-heading text-4xl">Duplicates</h1>
+          <span className="text-sm text-[color:var(--silver)]">
+            {data?.total ?? 0} similar pairs
+          </span>
+        </div>
+        <p className="mt-2 max-w-3xl text-sm text-[color:var(--silver)]">
+          Exact file duplicates are rejected during upload. This view finds
+          different files that look nearly identical, so it remains useful for
+          edited copies, screenshots, and recompressed photos.
         </p>
-      </section>
+      </header>
 
       {pairs.length === 0 ? (
         <section className="rounded-xl border border-[var(--frost)] bg-[color:var(--frost-soft)] px-6 py-14 text-center">

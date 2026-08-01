@@ -2,26 +2,23 @@
 
 ARG BASE_IMAGE=python:3.12-slim
 ARG PYTHON_VERSION=3.12
+ARG FIND_BUILD_PROFILE=no-ai
 ARG UV_SYNC_EXTRAS=""
 FROM ${BASE_IMAGE}
 ARG PYTHON_VERSION=3.12
+ARG FIND_BUILD_PROFILE=no-ai
 ARG UV_SYNC_EXTRAS=""
 
 # Install system dependencies.
 #
-# The set we need depends entirely on whether the ML extra is enabled:
-#   * ML build  (UV_SYNC_EXTRAS contains "ml") — needs a C toolchain to compile
-#     hdbscan and the OpenCV/X11 runtime libs for opencv + torch vision ops, plus
-#     a system python because the CUDA base image ships none.
-#   * Light build (UV_SYNC_EXTRAS empty) — runs on python:3.12-slim, which already
-#     has Python, and every base dependency installs from a prebuilt wheel. No
-#     compiler, no OpenCV libs. Installing them anyway pulled the whole gcc-14
-#     toolchain (~30 min apt) into an image that never uses it.
+# The selected build profile controls this layer. CPU and NVIDIA artifacts need
+# native build/OpenCV runtime libraries; no-AI and mock artifacts intentionally
+# stay on the minimal Python base and never install those dependencies.
 #
 # So we branch: full set for ML, just curl (needed to fetch uv) for light.
 RUN set -eux; \
     apt-get update; \
-    if echo "${UV_SYNC_EXTRAS}" | grep -q "ml"; then \
+    if [ "${FIND_BUILD_PROFILE}" = "cpu" ] || [ "${FIND_BUILD_PROFILE}" = "nvidia" ]; then \
       apt-get install -y --no-install-recommends \
         python3 python3-dev build-essential libpq-dev \
         libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 curl; \
@@ -45,6 +42,7 @@ ENV UV_PYTHON="${PYTHON_VERSION}"
 ENV UV_LINK_MODE="copy"
 ENV PATH="/opt/find/.venv/bin:/usr/local/bin:/root/.local/bin:/root/.cargo/bin:$PATH"
 ENV PYTHONPATH="/app/src"
+ENV FIND_BUILD_PROFILE="${FIND_BUILD_PROFILE}"
 
 # Set working directory
 WORKDIR /app
@@ -55,7 +53,7 @@ COPY pyproject.toml uv.lock ./
 # Install Python dependencies with uv. Keep uv's package cache in a BuildKit
 # cache mount so it speeds rebuilds without bloating the final runtime image.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --no-install-project ${UV_SYNC_EXTRAS}
+    uv sync --locked --no-dev --no-install-project ${UV_SYNC_EXTRAS}
 
 # Copy application code
 COPY . .

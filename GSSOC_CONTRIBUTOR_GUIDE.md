@@ -27,18 +27,19 @@ Important paths:
 - `frontend/src/app/` - Next.js pages and UI.
 - `frontend/src/lib/` - frontend API client and shared helpers.
 - `backend/src/find_api/` - FastAPI app, routers, models, storage, queue, worker, and ML wrappers.
-- `docker-compose.yml` - full GPU-oriented stack.
-- `docker-compose.light.yml` - lightweight contributor stack.
+- `compose.yml` - default NVIDIA GPU stack.
+- `compose.mock.yml` - lightweight contributor stack.
 - `.env.example` - documented local environment values.
 
 ## Contribution workflow
 
 1. Find an issue labeled `good first issue`, `help wanted`, `gssoc26`, `level:beginner`, `level:intermediate`, `level:advanced`, or `level:critical`.
 2. Comment on the issue and wait for maintainer assignment before starting.
-3. Fork the repository and create a branch from `main`.
+3. Fork the repository and create a branch from the default `canary` branch.
 4. Keep the change scoped to one issue.
 5. Run the relevant checks before opening a PR.
-6. Open a PR against `main` and fill out the full PR template.
+6. Open a PR against `canary` and fill out the full PR template. Contributors
+   do not open PRs directly against `main`.
 
 Do not open broad PRs that mix unrelated UI, backend, docs, and formatting changes. Small, focused PRs are faster to review.
 
@@ -49,7 +50,7 @@ Most GSSoC work should start with the light stack. It avoids the 30-40 GB first-
 From the repository root:
 
 ```bash
-docker compose -f docker-compose.light.yml up --build
+docker compose -f compose.mock.yml up --build
 ```
 
 What light mode gives you:
@@ -68,7 +69,7 @@ Use light mode for:
 
 ## Understanding mock mode output
 
-The light stack (`docker-compose.light.yml`) is the recommended starting point for all
+The mock stack (`compose.mock.yml`) is the recommended starting point for all
 GSSoC contributors because it avoids large model downloads and GPU requirements.
 However, it runs with `ML_MODE=mock`, and understanding what that means prevents a
 common class of false bug reports.
@@ -120,7 +121,7 @@ docker compose up --build
 
 > ⚠️ **Do not report caption or search quality issues observed in mock mode.**
 >
-> If you ran `docker compose -f docker-compose.light.yml up --build` and noticed that
+> If you ran `docker compose -f compose.mock.yml up --build` and noticed that
 > captions look wrong, search returns unrelated images, or objects are not detected —
 > that is expected mock behavior and is not a bug. Open a full-stack environment and
 > reproduce the issue there before filing a report or opening a PR that claims to fix
@@ -174,7 +175,7 @@ Real local ML dependencies:
 
 ```bash
 cd backend
-uv sync --group dev --extra ml
+uv sync --group dev --extra cpu
 ```
 
 Manual local setup also requires PostgreSQL with `pgvector`, Redis, and MinIO.
@@ -211,7 +212,7 @@ Compose validation:
 
 ```bash
 docker compose config
-docker compose -f docker-compose.light.yml config
+docker compose -f compose.mock.yml config
 ```
 
 ## Manual testing checklist

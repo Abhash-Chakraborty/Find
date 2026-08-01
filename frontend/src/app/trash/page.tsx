@@ -9,8 +9,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { ImagePreviewModal } from "@/components/image-preview-modal";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import { emptyTrash, getTrash, restoreImage } from "@/lib/api";
-import { resolveMediaUrl } from "@/lib/media";
 
 export default function TrashPage() {
   const queryClient = useQueryClient();
@@ -49,8 +50,19 @@ export default function TrashPage() {
   return (
     <main className="page-shell">
       <div className="container-shell py-10 md:py-14">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="section-heading text-4xl font-medium">Trash</h1>
+        <div className="mb-6 flex items-end justify-between gap-4 border-b border-[var(--frost)] pb-5">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="text-sm font-semibold text-[color:var(--blue)]">
+              Utilities
+            </span>
+            <span aria-hidden="true" className="text-[color:var(--muted)]">
+              /
+            </span>
+            <h1 className="section-heading text-4xl font-medium">Trash</h1>
+            <span className="text-sm text-[color:var(--silver)]">
+              {items.length} photos
+            </span>
+          </div>
           {items.length > 0 && (
             <button
               type="button"
@@ -76,44 +88,71 @@ export default function TrashPage() {
           </p>
         )}
 
-        {!isLoading && !isError && items.length === 0 && (
-          <p data-testid="trash-empty" className="muted-copy">
-            Trash is empty.
-          </p>
-        )}
-
-        <ul className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              data-testid={`trash-item-${item.id}`}
-              className="group relative aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)]"
-            >
-              {/* biome-ignore lint/a11y/useAltText: trash tile */}
-              <img
-                src={
-                  resolveMediaUrl(
-                    item.thumbnail_url,
-                    item.minio_key,
-                    item.id,
-                    true,
-                  ) ?? undefined
-                }
-                alt={item.filename}
-                className="h-full w-full object-cover opacity-70"
-              />
+        {!isLoading && !isError && (
+          <TimelineMediaView
+            items={items}
+            getId={(item) => item.id}
+            getDate={(item) => item.created_at}
+            getWidth={(item) => item.width}
+            getHeight={(item) => item.height}
+            getThumbnailUrl={(item) => `/api/image/${item.id}/thumbnail`}
+            getOriginalUrl={(item) => `/api/image/${item.id}/original`}
+            getAlt={(item) => item.filename}
+            getItemTestId={(item) => `trash-item-${item.id}`}
+            getOpenTestId={(item) => `open-trash-${item.id}`}
+            empty={
+              <p data-testid="trash-empty" className="muted-copy">
+                Trash is empty.
+              </p>
+            }
+            renderItemActions={(item) => (
               <button
                 type="button"
                 aria-label="Restore image"
                 data-testid={`restore-${item.id}`}
                 onClick={() => restoreMutation.mutate(item.id)}
-                className="absolute bottom-1 right-1 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-xs text-white opacity-0 transition group-hover:opacity-100"
+                disabled={
+                  restoreMutation.isPending &&
+                  restoreMutation.variables === item.id
+                }
+                className="flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-xs text-white disabled:opacity-50"
               >
                 <RotateCcw size={12} /> Restore
               </button>
-            </li>
-          ))}
-        </ul>
+            )}
+            renderViewer={({
+              items: viewerItems,
+              index,
+              onIndexChange,
+              onClose,
+            }) => {
+              const active = viewerItems[index];
+              if (!active) return null;
+              return (
+                <ImagePreviewModal
+                  media={active}
+                  onClose={onClose}
+                  onPrevious={() => onIndexChange(index - 1)}
+                  onNext={() => onIndexChange(index + 1)}
+                  hasPrevious={index > 0}
+                  hasNext={index < viewerItems.length - 1}
+                  actions={
+                    <button
+                      type="button"
+                      className="white-pill px-4 py-2 text-sm font-semibold"
+                      onClick={() => {
+                        restoreMutation.mutate(active.id);
+                        onClose();
+                      }}
+                    >
+                      <RotateCcw className="h-4 w-4" /> Restore to Photos
+                    </button>
+                  }
+                />
+              );
+            }}
+          />
+        )}
       </div>
     </main>
   );

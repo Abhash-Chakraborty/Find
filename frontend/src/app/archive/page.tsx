@@ -9,8 +9,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveRestore, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { ImagePreviewModal } from "@/components/image-preview-modal";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import { getArchive, setArchive } from "@/lib/api";
-import { resolveMediaUrl } from "@/lib/media";
 
 export default function ArchivePage() {
   const queryClient = useQueryClient();
@@ -36,7 +37,18 @@ export default function ArchivePage() {
   return (
     <main className="page-shell">
       <div className="container-shell py-10 md:py-14">
-        <h1 className="section-heading mb-6 text-4xl font-medium">Archive</h1>
+        <header className="mb-6 flex items-baseline gap-2 border-b border-[var(--frost)] pb-5">
+          <span className="text-sm font-semibold text-[color:var(--blue)]">
+            Utilities
+          </span>
+          <span aria-hidden="true" className="text-[color:var(--muted)]">
+            /
+          </span>
+          <h1 className="section-heading text-4xl font-medium">Archive</h1>
+          <span className="text-sm text-[color:var(--silver)]">
+            {items.length} photos
+          </span>
+        </header>
 
         {isLoading && (
           <div role="status" aria-label="Loading archive">
@@ -50,44 +62,71 @@ export default function ArchivePage() {
           </p>
         )}
 
-        {!isLoading && !isError && items.length === 0 && (
-          <p data-testid="archive-empty" className="muted-copy">
-            No archived photos.
-          </p>
-        )}
-
-        <ul className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              data-testid={`archive-item-${item.id}`}
-              className="group relative aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)]"
-            >
-              {/* biome-ignore lint/performance/noImgElement: thumbnail tile, not a Next-optimized route */}
-              <img
-                src={
-                  resolveMediaUrl(
-                    item.thumbnail_url,
-                    item.minio_key,
-                    item.id,
-                    true,
-                  ) ?? undefined
-                }
-                alt={item.filename}
-                className="h-full w-full object-cover"
-              />
+        {!isLoading && !isError && (
+          <TimelineMediaView
+            items={items}
+            getId={(item) => item.id}
+            getDate={(item) => item.created_at}
+            getWidth={(item) => item.width}
+            getHeight={(item) => item.height}
+            getThumbnailUrl={(item) => `/api/image/${item.id}/thumbnail`}
+            getOriginalUrl={(item) => `/api/image/${item.id}/original`}
+            getAlt={(item) => item.filename}
+            getItemTestId={(item) => `archive-item-${item.id}`}
+            getOpenTestId={(item) => `open-archive-${item.id}`}
+            empty={
+              <p data-testid="archive-empty" className="muted-copy">
+                No archived photos.
+              </p>
+            }
+            renderItemActions={(item) => (
               <button
                 type="button"
                 aria-label="Unarchive image"
                 data-testid={`unarchive-${item.id}`}
                 onClick={() => unarchiveMutation.mutate(item.id)}
-                className="absolute bottom-1 right-1 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-xs text-white opacity-0 transition group-hover:opacity-100"
+                disabled={
+                  unarchiveMutation.isPending &&
+                  unarchiveMutation.variables === item.id
+                }
+                className="flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-xs text-white disabled:opacity-50"
               >
                 <ArchiveRestore size={12} /> Unarchive
               </button>
-            </li>
-          ))}
-        </ul>
+            )}
+            renderViewer={({
+              items: viewerItems,
+              index,
+              onIndexChange,
+              onClose,
+            }) => {
+              const active = viewerItems[index];
+              if (!active) return null;
+              return (
+                <ImagePreviewModal
+                  media={active}
+                  onClose={onClose}
+                  onPrevious={() => onIndexChange(index - 1)}
+                  onNext={() => onIndexChange(index + 1)}
+                  hasPrevious={index > 0}
+                  hasNext={index < viewerItems.length - 1}
+                  actions={
+                    <button
+                      type="button"
+                      className="white-pill px-4 py-2 text-sm font-semibold"
+                      onClick={() => {
+                        unarchiveMutation.mutate(active.id);
+                        onClose();
+                      }}
+                    >
+                      <ArchiveRestore className="h-4 w-4" /> Restore to Photos
+                    </button>
+                  }
+                />
+              );
+            }}
+          />
+        )}
       </div>
     </main>
   );

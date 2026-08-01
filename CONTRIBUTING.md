@@ -10,12 +10,13 @@ For repo-aware coding-agent and contributor guidance, start with [AGENTS.md](./A
 
 1. Check open issues and comment on one before starting work.
 2. Wait for maintainer confirmation/assignment.
-3. Fork the repository and branch from `main`.
+3. Fork the repository and branch from the default `canary` branch.
 
 ## Repository protection rules
 
-- Direct pushes to `main` are blocked.
-- Open a pull request from your branch.
+- Direct pushes to `canary` and `main` are blocked for contributors.
+- Open feature and fix pull requests from your branch into `canary`.
+- `main` accepts only the maintainer-controlled promotion PR from `canary`.
 - PR merge requires:
   - Passing CI checks
   - At least one approval
@@ -35,7 +36,7 @@ For repo-aware coding-agent and contributor guidance, start with [AGENTS.md](./A
 For most UI, API, docs, and workflow contributions, start with the light stack:
 
 ```bash
-docker compose -f docker-compose.light.yml up --build
+docker compose -f compose.mock.yml up --build
 ```
 
 This uses `ML_MODE=mock`, skips GPU access, and avoids downloading Florence-2, SigLIP, PaddleOCR, YOLO, and CUDA PyTorch assets. Upload, worker processing, gallery, search, and clustering still run end-to-end with deterministic mock metadata and vectors.
@@ -46,9 +47,15 @@ Use the full stack only when your change needs real ML inference:
 docker compose up --build
 ```
 
+On a machine without NVIDIA support, use the locked CPU-only AI artifact:
+
+```bash
+docker compose -f compose.cpu.yml up --build
+```
+
 ## Mock mode vs full ML mode
 
-The light stack (`docker-compose.light.yml`) runs with `ML_MODE=mock`. The worker
+The mock stack (`compose.mock.yml`) runs with `ML_MODE=mock`. The worker
 records real image dimensions and EXIF data but replaces all model outputs with
 deterministic stubs:
 
@@ -60,7 +67,7 @@ deterministic stubs:
 
 ### When the light stack is enough
 
-Use `docker-compose.light.yml` (mock mode) when your change involves:
+Use `compose.mock.yml` when your change involves:
 
 - Any frontend code (UI, layout, styling, components)
 - API routing, request/response shapes, validation, or error handling
@@ -98,7 +105,8 @@ uv sync --group dev
 uv run uvicorn find_api.main:app --reload
 ```
 
-Use `uv sync --group dev --extra ml` only when you need real local ML inference outside Docker.
+Use `uv sync --group dev --extra cpu` for real CPU inference outside Docker or
+`uv sync --group dev --extra nvidia` for CUDA. Do not enable both extras.
 
 Worker:
 
@@ -176,10 +184,28 @@ Each PR must:
 3. Include manual test steps and expected result.
 4. Add screenshots/videos for UI changes.
 5. Keep scope focused to one issue.
-6. Target the `main` branch.
+6. Target the `canary` branch. Only a maintainer promotion PR targets `main`.
 7. Pass CI checks (`frontend-check`, `backend-check`).
 
 Use the PR template in `.github/pull_request_template.md`.
+
+## Release and version workflow
+
+Find uses semantic versions (`MAJOR.MINOR.PATCH`) and one maintainer-triggered
+release workflow:
+
+- `patch` is for backward-compatible fixes and urgent maintenance.
+- `minor` is for backward-compatible features.
+- `major` is for breaking changes that require migration notes.
+
+The **Prepare version release** action opens a generated version PR into
+`canary` and synchronizes backend, web, desktop, lockfile, UI, and changelog
+versions. After that PR and the `canary` promotion are reviewed, merging the
+promotion into `main` starts a three-hour quiet period. A newer `main` update
+restarts the timer. When the timer completes, GitHub creates the immutable tag,
+release, provenance/SBOM attestations, web image, and every modular backend
+image. Critical fixes use a patch bump and the manual emergency release input;
+sensitive reports must use a private security advisory.
 
 ## Review expectations
 
@@ -213,4 +239,5 @@ Useful labels:
 
 ## License
 
-By contributing, you agree your contributions are licensed under the [MIT License](./LICENSE).
+By contributing, you agree your contributions are licensed under the
+[GNU Affero General Public License v3.0](./LICENSE).

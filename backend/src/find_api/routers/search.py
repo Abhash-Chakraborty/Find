@@ -7,7 +7,7 @@ import time
 from typing import Any, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -25,6 +25,12 @@ from find_api.ml.search_ranking import (
 from find_api.core.storage import get_file_url
 from find_api.routers.gallery import build_thumbnail_url, parse_metadata_date
 from find_api.services.query_cache import get_cached_query, set_cached_query
+from find_api.core.runtime_profile import (
+    bind_runtime,
+    load_runtime_preferences,
+    reset_runtime,
+    resolve_runtime,
+)
 from typing import Optional
 
 router = APIRouter()
@@ -192,6 +198,16 @@ def search_images(
         Paginated list of matching images with metadata for frontend navigation.
     """
     t_total_start = time.perf_counter()
+    runtime = resolve_runtime(load_runtime_preferences(db))
+    if runtime.applied_mode == "disabled":
+        raise HTTPException(409, "AI search is disabled in instance settings.")
+    if runtime.applied_mode == "unavailable":
+        raise HTTPException(
+            503,
+            runtime.unavailable_reason
+            or "The configured AI search runtime is unavailable.",
+        )
+
     metadata_filter_sql, metadata_filter_params, filter_key = _metadata_filter_sql(
         camera_make=camera_make,
         camera_model=camera_model,
@@ -216,7 +232,10 @@ def search_images(
         index_signature = _search_index_signature(db)
         # Partition the cache by scope so one user cannot read another's
         # cached results in shared mode.
-        scoped_signature = f"{index_signature}:scope={scope_user_id}"
+        scoped_signature = (
+            f"{index_signature}:scope={scope_user_id}:"
+            f"runtime={runtime.applied_mode}:accel={runtime.configured_accel_mode}"
+        )
         cached = get_cached_query(
             q,
             limit,
@@ -229,18 +248,35 @@ def search_images(
             return cached["response"]
 
     # Generate query embedding
-    if settings.ML_MODE.lower() == "mock":
-        from find_api.ml.mock_embedder import get_mock_embedder
+    runtime_tokens = bind_runtime(runtime)
+    try:
+        if runtime.applied_mode == "mock":
+            from find_api.ml.mock_embedder import get_mock_embedder
 
-        embedder = get_mock_embedder()
-    else:
-        from find_api.ml.clip_embedder import get_clip_embedder
+            embed_query = get_mock_embedder().embed_text
+        elif runtime.applied_mode == "remote":
+            # A remote deployment has no local CLIP to fall through to.
+            from find_api.ml.remote_client import _feature_enabled, remote_embed_text
 
-        embedder = get_clip_embedder()
+            if _feature_enabled("embed"):
+                embed_query = remote_embed_text
+            else:
+                # Image vectors were produced by the mock embedder in this
+                # configuration (see _remote_embed_image), so the query has to
+                # come from the same space or nothing will match.
+                from find_api.ml.mock_embedder import get_mock_embedder
 
-    t_embed_start = time.perf_counter()
-    query_embedding = embedder.embed_text(q)
-    embedding_ms = (time.perf_counter() - t_embed_start) * 1000
+                embed_query = get_mock_embedder().embed_text
+        else:
+            from find_api.ml.clip_embedder import get_clip_embedder
+
+            embed_query = get_clip_embedder().embed_text
+
+        t_embed_start = time.perf_counter()
+        query_embedding = embed_query(q)
+        embedding_ms = (time.perf_counter() - t_embed_start) * 1000
+    finally:
+        reset_runtime(runtime_tokens)
 
     # Convert to string format for pgvector
     embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
@@ -250,7 +286,7 @@ def search_images(
     # Added threshold to filter irrelevant results
     threshold = (
         MOCK_SIMILARITY_THRESHOLD
-        if settings.ML_MODE.lower() == "mock"
+        if runtime.applied_mode == "mock"
         else FULL_SIMILARITY_THRESHOLD
     )
 
@@ -430,7 +466,7 @@ def search_images(
             "total_ms": round(total_ms, 2),
             "results_returned": len(results),
             "similarity_threshold": threshold,
-            "ml_mode": settings.ML_MODE,
+            "ml_mode": runtime.applied_mode,
         }
 
     if not debug:
@@ -438,7 +474,11 @@ def search_images(
             q,
             limit,
             skip,
-            f"{index_signature or ''}:scope={scope_user_id}",
+            (
+                f"{index_signature or ''}:scope={scope_user_id}:"
+                f"runtime={runtime.applied_mode}:"
+                f"accel={runtime.configured_accel_mode}"
+            ),
             query_embedding,
             response,
             include_ocr=include_ocr,

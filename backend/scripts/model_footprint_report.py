@@ -5,7 +5,7 @@ Model footprint report — what each ML model downloads and loads.
 Prints, per model: configured identifier, on-disk cache size, loaded/
 unloaded state (this process), execution device, and last-use time.
 Also prints light/full pack totals and notes the proposed CPU pack is
-not implemented yet (see docs/overhaul/inventory/lane-f-ml.md, issue #45).
+not implemented yet (tracked by issue #339).
 
 This is a local admin tool: unlike GET /status/models/footprint, it
 prints filesystem cache paths. Run it on the machine whose cache you

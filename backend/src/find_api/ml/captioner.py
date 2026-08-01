@@ -1,9 +1,7 @@
-"""
-Image captioning using Florence-2
-"""
+"""Local image captioning using the native BLIP model implementation."""
 
 import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import BlipForConditionalGeneration, BlipProcessor
 from PIL import Image
 import numpy as np
 from typing import Union
@@ -12,12 +10,13 @@ import logging
 from find_api.core.config import settings
 from find_api.core.hardware import current_torch_device
 from find_api.core.model_manager import get_model_manager
+from find_api.core.runtime_profile import current_accel_mode
 
 logger = logging.getLogger(__name__)
 
 
 class ImageCaptioner:
-    """Generate natural language captions for images using Florence-2"""
+    """Generate natural-language captions with a local BLIP checkpoint."""
 
     def __init__(self):
         self.manager = get_model_manager()
@@ -26,19 +25,21 @@ class ImageCaptioner:
     def _load_model(self):
         """Loader function for ModelManager"""
         model_id = settings.BLIP_MODEL
-        logger.info("Loading Florence-2 model: %s", model_id)
+        logger.info("Loading BLIP caption model: %s", model_id)
 
         device = current_torch_device()
         torch_dtype = torch.float16 if device == "cuda" else torch.float32
 
-        model = AutoModelForCausalLM.from_pretrained(
+        model = BlipForConditionalGeneration.from_pretrained(
             model_id,
-            trust_remote_code=True,
+            trust_remote_code=False,
             dtype=torch_dtype,
-            attn_implementation="eager",
         ).to(device)
-
-        processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+        processor = BlipProcessor.from_pretrained(
+            model_id,
+            trust_remote_code=False,
+            use_fast=False,
+        )
 
         return {
             "model": model,
@@ -63,19 +64,16 @@ class ImageCaptioner:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
-            config_key = f"model={settings.BLIP_MODEL}|accel={settings.ACCEL_MODE}"
+            config_key = f"model={settings.BLIP_MODEL}|accel={current_accel_mode()}"
             with self.manager.use_model(
-                "florence-2", self._load_model, config_key=config_key
+                "captioner", self._load_model, config_key=config_key
             ) as bundle:
                 model = bundle["model"]
                 processor = bundle["processor"]
                 device = bundle["device"]
                 dtype = bundle["dtype"]
 
-                # Florence-2 uses task prompts
-                task_prompt = "<DETAILED_CAPTION>"
-
-                inputs = processor(text=task_prompt, images=image, return_tensors="pt")
+                inputs = processor(images=image, return_tensors="pt")
                 inputs = {
                     k: v.to(device, dtype)
                     if v.dtype == torch.float32 or v.dtype == torch.float16
@@ -86,7 +84,6 @@ class ImageCaptioner:
                 # Generate
                 with torch.inference_mode():
                     generated_ids = model.generate(
-                        input_ids=inputs["input_ids"],
                         pixel_values=inputs["pixel_values"],
                         max_new_tokens=max_length,
                         num_beams=num_beams,
@@ -94,18 +91,9 @@ class ImageCaptioner:
                         use_cache=True,
                     )
 
-                generated_text = processor.batch_decode(
-                    generated_ids, skip_special_tokens=False
-                )[0]
-
-                # Post-process
-                parsed_answer = processor.post_process_generation(
-                    generated_text,
-                    task=task_prompt,
-                    image_size=(image.width, image.height),
-                )
-
-            caption = parsed_answer.get(task_prompt, "")
+                caption = processor.decode(
+                    generated_ids[0], skip_special_tokens=True
+                ).strip()
 
             logger.info(f"Generated caption: {caption[:50]}...")
             return caption
@@ -127,28 +115,16 @@ class ImageCaptioner:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
-            config_key = f"model={settings.BLIP_MODEL}|accel={settings.ACCEL_MODE}"
+            config_key = f"model={settings.BLIP_MODEL}|accel={current_accel_mode()}"
             with self.manager.use_model(
-                "florence-2", self._load_model, config_key=config_key
+                "captioner", self._load_model, config_key=config_key
             ) as bundle:
                 model = bundle["model"]
                 processor = bundle["processor"]
                 device = bundle["device"]
                 dtype = bundle["dtype"]
 
-                # For VQA or specific prompts
-                # For VQA or specific prompts
-                # task_prompt = "<CAPTION>"  # Fallback or use prompt as VQA?
-                # Florence-2 supports <VQA> prompt
-                # If prompt is a question, use <VQA>
-                # But for general conditional captioning, maybe just append?
-                # Let's assume prompt is a question or task for now
-
-                full_prompt = (
-                    f"<VQA>{prompt}" if "?" in prompt else f"<CAPTION>{prompt}"
-                )
-
-                inputs = processor(text=full_prompt, images=image, return_tensors="pt")
+                inputs = processor(text=prompt, images=image, return_tensors="pt")
                 inputs = {
                     k: v.to(device, dtype)
                     if v.dtype == torch.float32 or v.dtype == torch.float16
@@ -165,23 +141,9 @@ class ImageCaptioner:
                         use_cache=True,
                     )
 
-                generated_text = processor.batch_decode(
-                    generated_ids, skip_special_tokens=False
-                )[0]
-
-                # We might need manual parsing if post_process doesn't handle custom prompts well
-                # But let's try standard
-                caption = processor.post_process_generation(
-                    generated_text,
-                    task="<CAPTION>",
-                    image_size=(image.width, image.height),
-                )
-
-            # If it returns dict
-            if isinstance(caption, dict):
-                caption = list(caption.values())[0]
-
-            return str(caption)
+                return processor.decode(
+                    generated_ids[0], skip_special_tokens=True
+                ).strip()
 
         except Exception as e:
             logger.error(f"Failed to generate conditional caption: {e}")

@@ -39,6 +39,7 @@ def init_db():
     try:
         # Import all models to register them for metadata creation
         from find_api.models import (  # noqa: F401
+            activity,
             album,
             app_setting,
             cluster,
@@ -147,6 +148,18 @@ def init_db():
                 conn.execute(
                     text(
                         "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
+                        "ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS media "
                         "ADD COLUMN IF NOT EXISTS duplicate_of INTEGER"
                     )
                 )
@@ -248,13 +261,39 @@ def init_db():
                 )
                 conn.execute(
                     text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_latitude "
+                        "ON media (latitude)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_longitude "
+                        "ON media (longitude)"
+                    )
+                )
+                conn.execute(
+                    text(
                         "CREATE TABLE IF NOT EXISTS vault_config ("
                         "id INTEGER PRIMARY KEY CHECK (id = 1), "
                         "salt BYTEA NOT NULL, "
                         "verifier_nonce BYTEA NOT NULL, "
                         "verifier_ciphertext BYTEA NOT NULL, "
+                        "recovery_code_hash VARCHAR(255), "
+                        "storage_mode VARCHAR(32) NOT NULL DEFAULT 'protected', "
                         "created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()"
                         ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_config "
+                        "ADD COLUMN IF NOT EXISTS recovery_code_hash VARCHAR(255)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS vault_config "
+                        "ADD COLUMN IF NOT EXISTS storage_mode VARCHAR(32) NOT NULL DEFAULT 'protected'"
                     )
                 )
                 conn.execute(

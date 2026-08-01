@@ -3,11 +3,11 @@ Clustering using HDBSCAN
 """
 
 import numpy as np
-from sklearn.cluster import HDBSCAN
 from typing import Tuple, Dict
 import logging
 
 from find_api.core.config import settings
+from find_api.core.runtime_profile import current_accel_mode
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,11 @@ class ImageClusterer:
     def _fit_predict(self, embeddings: np.ndarray, metric: str) -> np.ndarray:
         backend = settings.CLUSTERING_BACKEND.lower()
 
-        if settings.USE_GPU and backend in {"auto", "cuml"}:
+        if (
+            settings.USE_GPU
+            and current_accel_mode() != "cpu"
+            and backend in {"auto", "cuml"}
+        ):
             try:
                 labels = self._fit_predict_cuml(embeddings, metric)
                 logger.info("Clustering used cuML GPU backend")
@@ -123,6 +127,11 @@ class ImageClusterer:
         return np.asarray(labels, dtype=np.int32)
 
     def _fit_predict_sklearn(self, embeddings: np.ndarray, metric: str) -> np.ndarray:
+        # Imported here rather than at module scope so compute_centroids() --
+        # pure numpy -- stays usable in remote mode, where clustering runs on
+        # the remote server and this artifact may not ship scikit-learn.
+        from sklearn.cluster import HDBSCAN
+
         clusterer_kwargs = {
             "min_cluster_size": self.min_cluster_size,
             "min_samples": self.min_samples,
@@ -214,3 +223,75 @@ class ImageClusterer:
 def get_image_clusterer() -> ImageClusterer:
     """Create new clusterer instance"""
     return ImageClusterer()
+
+
+# Upper bound on a single remote clustering request. Clustering is O(n log n)
+# at best and allocates an n x dim float matrix, so an unbounded list from the
+# network is a memory and CPU amplification vector even behind bearer auth.
+MAX_REMOTE_CLUSTER_POINTS = 100_000
+
+
+class InvalidEmbeddingMatrix(ValueError):
+    """Raised when a caller-supplied embedding matrix is not usable."""
+
+
+def validate_embedding_matrix(embeddings, *, expected_dim: int | None = None):
+    """Return a validated (n, dim) float32 matrix from untrusted input.
+
+    np.array() on a ragged or non-numeric list raises deep inside NumPy (or,
+    worse, silently builds an object array), which surfaces as an opaque 500.
+    Checking shape, dtype and finiteness up front turns that into a clear 4xx
+    and caps how much work an authenticated caller can ask for.
+    """
+    if not isinstance(embeddings, (list, tuple)) or not embeddings:
+        raise InvalidEmbeddingMatrix(
+            "embeddings must be a non-empty list of float arrays."
+        )
+    if len(embeddings) > MAX_REMOTE_CLUSTER_POINTS:
+        raise InvalidEmbeddingMatrix(
+            f"embeddings exceeds the {MAX_REMOTE_CLUSTER_POINTS}-point limit "
+            f"({len(embeddings)} given)."
+        )
+
+    width = None
+    for row in embeddings:
+        if not isinstance(row, (list, tuple)):
+            raise InvalidEmbeddingMatrix("each embedding must be a list of floats.")
+        if width is None:
+            width = len(row)
+        elif len(row) != width:
+            raise InvalidEmbeddingMatrix(
+                f"embeddings must be rectangular (got rows of {width} and {len(row)})."
+            )
+    if not width:
+        raise InvalidEmbeddingMatrix("embeddings rows must be non-empty.")
+    if expected_dim is not None and width != expected_dim:
+        raise InvalidEmbeddingMatrix(
+            f"embeddings must have dimension {expected_dim}, got {width}."
+        )
+
+    try:
+        matrix = np.asarray(embeddings, dtype=np.float32)
+    except (TypeError, ValueError) as exc:
+        raise InvalidEmbeddingMatrix("embeddings must contain only numbers.") from exc
+    if not np.all(np.isfinite(matrix)):
+        raise InvalidEmbeddingMatrix("embeddings must not contain NaN or infinity.")
+    return matrix
+
+
+def cluster_embedding_matrix(embeddings, *, expected_dim: int | None = None):
+    """Validate and cluster an embedding matrix, returning (labels, info).
+
+    Lives here rather than in the router so the /api/ml/cluster endpoint stays
+    request/response handling only, matching how the rest of the ML work is
+    layered.
+    """
+    matrix = validate_embedding_matrix(embeddings, expected_dim=expected_dim)
+    labels = get_image_clusterer().cluster(matrix)[0]
+    label_list = [int(label) for label in labels]
+
+    return label_list, {
+        "n_clusters": len({label for label in label_list if label >= 0}),
+        "n_noise": label_list.count(-1),
+        "n_points": len(label_list),
+    }

@@ -12,6 +12,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from fastapi.staticfiles import StaticFiles
+from find_api import __version__
 from find_api.routers.duplicates import router as duplicates_router
 from find_api.core.database import init_db
 from find_api.core.recovery import run_analysis_recovery_loop
@@ -25,6 +26,8 @@ from find_api.routers import (
     config,
     feedback,
     gallery,
+    map,
+    ml,
     people,
     search,
     status,
@@ -35,6 +38,7 @@ from find_api.routers import (
 from find_api.routers import album
 from find_api.routers import shared_link
 from find_api.routers import partner
+from find_api.routers import activity
 
 # Configure logging
 logging.basicConfig(
@@ -101,7 +105,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Find API",
     description="Local-first AI image intelligence platform",
-    version="1.0.0",
+    version=__version__,
     lifespan=lifespan,
 )
 app.state.limiter = limiter
@@ -135,9 +139,11 @@ app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(gallery.router, prefix="/api", tags=["gallery"])
 app.include_router(timeline.router, prefix="/api", tags=["timeline"])
+app.include_router(map.router, prefix="/api", tags=["map"])
 app.include_router(album.router, prefix="/api", tags=["albums"])
 app.include_router(shared_link.router, prefix="/api", tags=["shared-links"])
 app.include_router(partner.router, prefix="/api", tags=["partners"])
+app.include_router(activity.router, prefix="/api", tags=["activity"])
 app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(clusters.router, prefix="/api", tags=["clusters"])
 app.include_router(cluster.router, prefix="/api", tags=["cluster-ops"])
@@ -145,6 +151,7 @@ app.include_router(status.router, prefix="/api", tags=["status"])
 app.include_router(config.router, prefix="/api", tags=["config"])
 app.include_router(people.router, prefix="/api", tags=["people"])
 app.include_router(vault.router, prefix="/api", tags=["vault"])
+app.include_router(ml.router)
 app.include_router(feedback.router, tags=["feedback"])
 app.include_router(duplicates_router)
 
@@ -154,7 +161,7 @@ async def root():
     """Root endpoint"""
     return {
         "message": "Find API - Local-first AI image intelligence",
-        "version": "1.0.0",
+        "version": __version__,
         "status": "operational",
     }
 

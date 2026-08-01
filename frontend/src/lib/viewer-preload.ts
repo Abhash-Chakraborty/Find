@@ -17,6 +17,8 @@ export type LoadQuality = "thumbnail" | "original";
 export interface ViewerAsset {
   id: number;
   thumbnailUrl: string;
+  /** Context-safe accessible description for the displayed image. */
+  alt?: string;
   /** Original/full-res URL; may be null until resolved. */
   originalUrl?: string | null;
 }

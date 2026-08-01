@@ -4,6 +4,7 @@ Application configuration using Pydantic settings
 
 import os
 from typing import Literal, Optional
+from urllib.parse import urlparse
 
 from PIL import Image
 from pydantic import field_validator, model_validator
@@ -11,6 +12,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 PILLOW_MAX_IMAGE_PIXELS = Image.MAX_IMAGE_PIXELS or 89_478_485
+
+# Hosts where plaintext HTTP to the remote ML server never leaves the machine
+# (or the compose network), so requiring TLS would be pure friction.
+_LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "::1", "[::1]"}
 
 
 class Settings(BaseSettings):
@@ -44,8 +49,21 @@ class Settings(BaseSettings):
         "queue.db",
     )
 
+    # Runtime/build profile. Docker images set this explicitly so the API can
+    # distinguish installed capabilities from hardware that merely exists on
+    # the host. ``development`` keeps source checkouts backwards compatible.
+    FIND_BUILD_PROFILE: Literal[
+        "development", "no-ai", "mock", "cpu", "nvidia"
+    ] = "development"
+
     # ML Models
-    ML_MODE: Literal["full", "mock", "remote"] = "full"
+    ML_MODE: Literal["disabled", "full", "mock", "remote"] = "full"
+    # Instance-wide kill switch. The persisted dashboard preference overrides
+    # this value at job boundaries; it never installs a missing runtime.
+    AI_ENABLED: bool = True
+    # GPS extraction is privacy-sensitive and therefore opt-in. The persisted
+    # dashboard preference overrides this value at job boundaries.
+    MAP_ENABLED: bool = False
     REMOTE_ML_URL: Optional[str] = None
     REMOTE_ML_API_KEY: Optional[str] = None
     REMOTE_ML_STRIP_EXIF: bool = True
@@ -56,7 +74,7 @@ class Settings(BaseSettings):
     ML_OFFLINE_ONLY: bool = False
     CLIP_MODEL: str = "ViT-B-16-SigLIP"
     CLIP_PRETRAINED: str = "webli"
-    BLIP_MODEL: str = "microsoft/Florence-2-base"
+    BLIP_MODEL: str = "Salesforce/blip-image-captioning-base"
     YOLO_MODEL: str = "yolo26n.pt"
     USE_GPU: bool = False
     YOLO_HALF: bool = True
@@ -65,6 +83,12 @@ class Settings(BaseSettings):
     #   gpu  = prefer GPU; automatically fall back to CPU if unavailable
     #   cpu  = force CPU
     ACCEL_MODE: Literal["auto", "gpu", "cpu"] = "auto"
+    # PP-OCRv5 model variant: "server" (heavier, GPU-oriented) vs "mobile"
+    # (lightweight, CPU-oriented). Defaults to "mobile" based on recorded
+    # CPU benchmark results (~3x faster, ~40-47% less RAM, equal-or-better
+    # accuracy in 4/5 test categories) -- see
+    # docs/ocr-mobile-benchmark.md for the full writeup. See issue #341.
+    OCR_VARIANT: Literal["mobile", "server"] = "mobile"
 
     # Processing
     MAX_UPLOAD_SIZE_MB: int = 50
@@ -76,6 +100,9 @@ class Settings(BaseSettings):
     # Trashed assets older than this many days are eligible for permanent
     # auto-purge (via POST /trash/purge). 0 disables age-based purging.
     TRASH_RETENTION_DAYS: int = 30
+    # Activity log rows older than this many days are eligible for auto-purge
+    # (via POST /activity/purge). 0 disables age-based purging.
+    ACTIVITY_RETENTION_DAYS: int = 90
     BATCH_SIZE: int = 1
     EMBEDDING_DIM: int = 768  # SigLIP ViT-B-16 dimension
 
@@ -115,6 +142,19 @@ class Settings(BaseSettings):
             raise ValueError(f"{info.field_name} must be greater than 0")
         return value
 
+    @field_validator("ACTIVITY_RETENTION_DAYS", "TRASH_RETENTION_DAYS")
+    @classmethod
+    def validate_retention_days(cls, value: int, info):
+        """Reject negative retention windows.
+
+        0 is a documented "keep forever" switch, but a negative value has no
+        meaning -- it would silently disable cleanup instead of failing, so a
+        typo like -1 in the environment looks like it worked.
+        """
+        if value < 0:
+            raise ValueError(f"{info.field_name} must be 0 or greater")
+        return value
+
     @field_validator("MAX_IMAGE_PIXELS")
     @classmethod
     def validate_image_pixel_ceiling(cls, value: int):
@@ -128,24 +168,32 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_remote_ml_config(self):
-        """Require remote ML settings when remote mode is enabled."""
-        if self.ML_MODE.lower() != "remote":
+        """Require explicit self-hosted endpoint credentials for remote mode."""
+        if self.ML_MODE != "remote":
             return self
-
         if not self.REMOTE_ML_URL or not self.REMOTE_ML_URL.strip():
-            raise ValueError(
-                "ML_MODE=remote requires REMOTE_ML_URL. "
-                "Set REMOTE_ML_URL to a reachable self-hosted Find ML server "
-                "or change ML_MODE to full or mock."
-            )
-
+            raise ValueError("ML_MODE=remote requires REMOTE_ML_URL")
         if not self.REMOTE_ML_API_KEY or not self.REMOTE_ML_API_KEY.strip():
-            raise ValueError(
-                "ML_MODE=remote requires REMOTE_ML_API_KEY. "
-                "Set REMOTE_ML_API_KEY to a bearer token shared with your remote ML server "
-                "or change ML_MODE to full or mock."
-            )
+            raise ValueError("ML_MODE=remote requires REMOTE_ML_API_KEY")
 
+        # Remote mode ships photo bytes and the bearer token to another host.
+        # Over plaintext HTTP both are readable by anything on the path, which
+        # is the opposite of what a local-first tool promises, so require TLS
+        # unless the server is on this machine.
+        parsed = urlparse(self.REMOTE_ML_URL.strip())
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError(
+                "REMOTE_ML_URL must be an http:// or https:// URL "
+                f"(got {parsed.scheme or 'no'} scheme)"
+            )
+        hostname = (parsed.hostname or "").lower()
+        if parsed.scheme == "http" and hostname not in _LOCAL_HOSTNAMES:
+            raise ValueError(
+                "REMOTE_ML_URL must use https:// for non-local hosts: remote mode "
+                "transmits image bytes and the bearer token to it. Use https://, "
+                "or point REMOTE_ML_URL at localhost and terminate TLS in front "
+                "of the ML server."
+            )
         return self
 
     @model_validator(mode="after")

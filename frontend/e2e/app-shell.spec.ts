@@ -20,17 +20,26 @@ test.describe("app shell", () => {
     // Brand mark in the sticky nav.
     await expect(page.getByRole("link", { name: /FIND\./ })).toBeVisible();
     // Footer carries the AGPL license line (relicensed per §1).
-    await expect(page.getByText(/AGPL-3\.0 License/)).toBeVisible();
+    await expect(page.getByText(/AGPL-3\.0 License/).first()).toBeVisible();
   });
 
-  test("exposes the new feature routes in the nav", async ({ page }) => {
+  test("redirects home to Photos and exposes the feature routes", async ({
+    page,
+  }) => {
     await page.goto("/");
 
-    // The desktop nav lists the overhaul features.
+    await expect(page).toHaveURL(/\/timeline\/?$/);
+
+    // The desktop sidebar lists the core browsing and management surfaces.
     for (const label of [
-      "Timeline",
+      "Photos",
+      "Search",
+      "Map",
+      "People",
       "Albums",
+      "Favorites",
       "Archive",
+      "Vault",
       "Trash",
       "Settings",
     ]) {
@@ -40,20 +49,19 @@ test.describe("app shell", () => {
     }
   });
 
-  test("navigates to the settings route and shows the accel toggle", async ({
+  test("navigates to the settings route and shows its static shell", async ({
     page,
   }) => {
     await page.goto("/settings");
 
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-    // The hardware-acceleration section heading renders regardless of backend.
     await expect(
-      page.getByRole("heading", { name: "Hardware acceleration" }),
+      page.getByText("Appearance, local AI, privacy, and retention."),
     ).toBeVisible();
   });
 
-  test("renders the timeline heading", async ({ page }) => {
+  test("renders the Photos timeline heading", async ({ page }) => {
     await page.goto("/timeline");
-    await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Photos" })).toBeVisible();
   });
 });

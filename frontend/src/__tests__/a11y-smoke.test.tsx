@@ -20,6 +20,10 @@ import { HardwareAccelSettings } from "@/components/hardware-accel-settings";
 import { TimelineScrubber } from "@/components/timeline-scrubber";
 
 vi.mock("@/lib/api", () => ({
+  getRuntimeConfig: vi.fn().mockResolvedValue({
+    build_profile: "cpu",
+    ai_enabled: true,
+  }),
   getHardwareReport: vi.fn().mockResolvedValue({
     accel_mode: "auto",
     capabilities: {

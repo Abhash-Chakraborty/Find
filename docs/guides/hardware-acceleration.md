@@ -30,7 +30,7 @@ degrades to "not available" rather than raising:
 - **ONNX Runtime execution providers** — CUDA, ROCm, CoreML (Apple), DirectML
   (Windows). Used by the face-detection pipeline (InsightFace / ONNX).
 - **PyTorch devices** — CUDA and MPS (Apple Metal). Used by the embedding
-  (open_clip / SigLIP), captioning (Florence-2), and object-detection (YOLO)
+  (open_clip / SigLIP), captioning (BLIP), and object-detection (YOLO)
   pipelines.
 - **CPU** — always present as the floor.
 
@@ -72,18 +72,36 @@ ACCEL_MODE=auto
 
 Or change it at runtime from **Settings → Hardware acceleration**.
 
+The dashboard preference is persisted in `app_settings` and sampled at each
+API inference request/worker job boundary. `GET /api/config/runtime` reports
+both the desired state and the last state a worker actually applied.
+
 ### Legacy `USE_GPU`
 
 Earlier versions used a boolean `USE_GPU`. For backward compatibility,
 `USE_GPU=false` is still honored as a hard CPU pin when `ACCEL_MODE` is left at
 `auto`. New deployments should prefer `ACCEL_MODE`.
 
-## CPU-only deployments
+## Install-time profiles
 
-On a machine with no GPU, no configuration is required — `auto` resolves to CPU
-and the full pipeline runs. For the lightest footprint, set `ACCEL_MODE=cpu`
-explicitly. (CPU-friendly model variants such as a quantized embedding model are
-tracked as a follow-on; the current models run on CPU, just slower than on GPU.)
+Acceleration fallback cannot remove CUDA packages that were already baked into
+an image, so Find provides separate locked artifacts:
+
+```bash
+# Real AI with CPU-only PyTorch and ONNX Runtime; no CUDA wheels.
+docker compose -f compose.cpu.yml up --build
+
+# Real AI with CUDA PyTorch and onnxruntime-gpu.
+docker compose up --build
+
+# Deterministic fake inference, or metadata-only with no AI extra at all.
+docker compose -f compose.mock.yml up --build
+docker compose -f compose.no-ai.yml up --build
+```
+
+Choose the CPU artifact on a machine without an NVIDIA runtime. Setting
+`ACCEL_MODE=cpu` in an NVIDIA image changes execution but does not shrink that
+image; conversely, setting `gpu` in a CPU image cannot install CUDA packages.
 
 ## Troubleshooting
 

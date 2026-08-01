@@ -14,8 +14,19 @@
  * (Immich). Original © its authors. Part of Find, distributed under AGPL-3.0.
  */
 
+import {
+  Archive,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  Pause,
+  Play,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { nextSlideIndex, normalizeIntervalMs } from "@/lib/slideshow";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import {
   buildPreloadPlan,
   displayUrl,
@@ -74,6 +85,8 @@ export function AssetViewer({
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const panStateRef = useRef<{ x: number; y: number } | null>(null);
+
+  useBodyScrollLock();
 
   const active = assets[index];
   const hasPrev = index > 0;
@@ -266,6 +279,7 @@ export function AssetViewer({
       style={{
         position: "fixed",
         inset: 0,
+        zIndex: 100,
         background: "rgba(0,0,0,0.95)",
         overflow: "hidden",
         touchAction: "none",
@@ -277,11 +291,11 @@ export function AssetViewer({
       onPointerCancel={endPan}
       onDoubleClick={onDoubleClick}
     >
-      {/* biome-ignore lint/a11y/useAltText: decorative full-screen media */}
+      {/* biome-ignore lint/performance/noImgElement: authenticated originals and share-scoped media bypass the Next optimizer. */}
       <img
         data-testid="viewer-image"
         src={src}
-        alt=""
+        alt={active.alt ?? `Photo ${active.id}`}
         draggable={false}
         style={{
           position: "absolute",
@@ -300,9 +314,11 @@ export function AssetViewer({
         aria-label="Close viewer"
         data-testid="viewer-close"
         onClick={onClose}
+        title="Close"
+        className="icon-button bg-black/55 text-white"
         style={{ position: "absolute", top: 16, right: 16 }}
       >
-        ✕
+        <X className="h-5 w-5" />
       </button>
 
       {onToggleFavorite && (
@@ -314,9 +330,15 @@ export function AssetViewer({
           }
           aria-pressed={favoriteIds?.has(active.id) ?? false}
           onClick={() => onToggleFavorite(active.id)}
+          title={
+            favoriteIds?.has(active.id) ? "Remove favorite" : "Add favorite"
+          }
+          className="icon-button bg-black/55 text-white"
           style={{ position: "absolute", top: 16, left: 16 }}
         >
-          {favoriteIds?.has(active.id) ? "♥" : "♡"}
+          <Heart
+            className={`h-5 w-5 ${favoriteIds?.has(active.id) ? "fill-current" : ""}`}
+          />
         </button>
       )}
 
@@ -330,9 +352,11 @@ export function AssetViewer({
             onArchive(active.id);
             onClose();
           }}
-          style={{ position: "absolute", top: 16, left: 56 }}
+          title="Archive"
+          className="icon-button bg-black/55 text-white"
+          style={{ position: "absolute", top: 16, left: 60 }}
         >
-          🗄
+          <Archive className="h-5 w-5" />
         </button>
       )}
 
@@ -346,9 +370,11 @@ export function AssetViewer({
             onTrash(active.id);
             onClose();
           }}
-          style={{ position: "absolute", top: 16, left: 96 }}
+          title="Move to trash"
+          className="icon-button bg-black/55 text-white"
+          style={{ position: "absolute", top: 16, left: 104 }}
         >
-          🗑
+          <Trash2 className="h-5 w-5" />
         </button>
       )}
 
@@ -358,9 +384,11 @@ export function AssetViewer({
           aria-label="Previous image"
           data-testid="viewer-prev"
           onClick={goPrev}
+          title="Previous image"
+          className="icon-button bg-black/55 text-white"
           style={{ position: "absolute", top: "50%", left: 16 }}
         >
-          ‹
+          <ChevronLeft className="h-6 w-6" />
         </button>
       )}
       {hasNext && (
@@ -369,9 +397,11 @@ export function AssetViewer({
           aria-label="Next image"
           data-testid="viewer-next"
           onClick={goNext}
+          title="Next image"
+          className="icon-button bg-black/55 text-white"
           style={{ position: "absolute", top: "50%", right: 16 }}
         >
-          ›
+          <ChevronRight className="h-6 w-6" />
         </button>
       )}
 
@@ -381,9 +411,15 @@ export function AssetViewer({
         data-testid="viewer-slideshow-toggle"
         aria-pressed={isPlaying}
         onClick={() => setIsPlaying((p) => !p)}
+        title={isPlaying ? "Pause slideshow" : "Play slideshow"}
+        className="icon-button bg-black/55 text-white"
         style={{ position: "absolute", bottom: 16, right: 16 }}
       >
-        {isPlaying ? "⏸" : "▶"}
+        {isPlaying ? (
+          <Pause className="h-5 w-5" />
+        ) : (
+          <Play className="h-5 w-5" />
+        )}
       </button>
     </div>
   );

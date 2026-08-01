@@ -12,6 +12,7 @@
 
 import {
   type ReactNode,
+  type RefObject,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -37,11 +38,13 @@ interface JustifiedGridProps<T extends JustifiedGridItem> {
   className?: string;
   getKey: (item: T, index: number) => string | number;
   renderItem: (item: T, index: number, box: JustifiedBox) => ReactNode;
+  scrollContainerRef?: RefObject<HTMLElement | null>;
 }
 
 const DEFAULT_TARGET_ROW_HEIGHT = 235;
 const DEFAULT_GAP = 8;
 const DEFAULT_OVERSCAN_PX = 600;
+const SSR_FALLBACK_WIDTH = 1024;
 
 // Use layout effect in the browser, plain effect during SSR to avoid warnings.
 const useIsomorphicLayoutEffect =
@@ -55,6 +58,7 @@ export function JustifiedGrid<T extends JustifiedGridItem>({
   className,
   getKey,
   renderItem,
+  scrollContainerRef,
 }: JustifiedGridProps<T>) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -88,29 +92,36 @@ export function JustifiedGrid<T extends JustifiedGridItem>({
     if (typeof window === "undefined") {
       return;
     }
+    const scrollContainer = scrollContainerRef?.current;
     const update = () => {
       const element = containerRef.current;
       if (!element) {
         return;
       }
       const rect = element.getBoundingClientRect();
-      // How far the grid's top has scrolled above the viewport top.
-      setScrollTop(Math.max(0, -rect.top));
-      setViewportHeight(window.innerHeight || 0);
+      const viewportTop = scrollContainer?.getBoundingClientRect().top ?? 0;
+      setScrollTop(Math.max(0, viewportTop - rect.top));
+      setViewportHeight(
+        scrollContainer?.clientHeight ?? window.innerHeight ?? 0,
+      );
     };
     update();
-    window.addEventListener("scroll", update, { passive: true });
+    const scrollTarget = scrollContainer ?? window;
+    scrollTarget.addEventListener("scroll", update, { passive: true });
     window.addEventListener("resize", update);
     return () => {
-      window.removeEventListener("scroll", update);
+      scrollTarget.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
     };
-  }, []);
+  }, [scrollContainerRef]);
 
   const layout = useMemo(
     () =>
       computeJustifiedLayout(items, {
-        containerWidth,
+        // Render a deterministic first layout during SSR/jsdom instead of an
+        // empty grid. ResizeObserver replaces this with the real width before
+        // paint in normal browsers.
+        containerWidth: containerWidth || SSR_FALLBACK_WIDTH,
         targetRowHeight,
         gap,
       }),

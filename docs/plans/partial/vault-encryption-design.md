@@ -4,7 +4,7 @@
 - **Date:** 2026-05-21
 - **Last reviewed:** 2026-05-29
 - **Related:** Issue #183
-- **Current implementation status:** Vault unlock, hide, list, lock, and stream flows exist with AES-256-GCM encrypted blob storage, metadata-bound AEAD associated data, and tests. Hidden media is filtered from gallery, search, clusters, and people endpoints, and workers skip ML processing for hidden rows.
+- **Current implementation status:** This is now a legacy-format migration note. Find 1.1.3 keeps hidden media in its existing private object store behind password-gated, memory-only vault sessions; it no longer encrypts newly hidden image bytes. Existing AES-256-GCM vault blobs are decrypted back into private storage after the first successful unlock, with the legacy reader retained until migration succeeds. Hidden media remains filtered from gallery, search, clusters, people, and ordinary media endpoints.
 
 ## Problem
 

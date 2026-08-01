@@ -16,16 +16,30 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TimelinePage from "../app/timeline/page";
 
+const navigation = vi.hoisted(() => ({
+  useSearchParams: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: navigation.useSearchParams,
+}));
+
 const api = vi.hoisted(() => ({
   getTimelineBuckets: vi.fn(),
   getTimelineBucket: vi.fn(),
+  getImageDetail: vi.fn(),
   toggleLike: vi.fn(),
+  setArchive: vi.fn(),
+  trashImage: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
   getTimelineBuckets: api.getTimelineBuckets,
   getTimelineBucket: api.getTimelineBucket,
+  getImageDetail: api.getImageDetail,
   toggleLike: api.toggleLike,
+  setArchive: api.setArchive,
+  trashImage: api.trashImage,
 }));
 
 // jsdom lacks layout + ResizeObserver; provide a fixed-width observer so the
@@ -54,11 +68,20 @@ function renderPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <TimelinePage />
     </QueryClientProvider>,
   );
+  return {
+    ...view,
+    rerenderPage: () =>
+      view.rerender(
+        <QueryClientProvider client={client}>
+          <TimelinePage />
+        </QueryClientProvider>,
+      ),
+  };
 }
 
 beforeEach(() => {
@@ -66,11 +89,30 @@ beforeEach(() => {
   vi.stubGlobal("innerHeight", 5000);
   api.getTimelineBuckets.mockReset();
   api.getTimelineBucket.mockReset();
+  api.getImageDetail.mockReset();
   api.toggleLike.mockReset();
+  api.setArchive.mockReset();
+  api.trashImage.mockReset();
+  navigation.useSearchParams.mockImplementation(
+    () => new URLSearchParams(window.location.search),
+  );
+  api.getImageDetail.mockResolvedValue({
+    id: 101,
+    filename: "photo.jpg",
+    minio_key: "images/photo.jpg",
+    file_hash: "hash",
+    status: "indexed",
+    created_at: "2026-03-01T00:00:00+00:00",
+    url: "/api/image/101/original",
+    liked: false,
+    metadata: {},
+    exif: {},
+  });
 });
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, "", "/timeline");
   vi.unstubAllGlobals();
 });
 
@@ -153,11 +195,19 @@ describe("TimelinePage", () => {
     fireEvent.click(cell);
 
     await waitFor(() =>
-      expect(screen.getByTestId("asset-viewer")).toBeInTheDocument(),
+      expect(screen.getByTestId("image-preview-modal")).toBeInTheDocument(),
     );
+    expect(screen.getByTestId("image-preview-modal")).toHaveClass(
+      "h-dvh",
+      "w-full",
+    );
+    const detailsToggle = screen.getByTestId("preview-details-toggle");
+    expect(detailsToggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(detailsToggle);
+    expect(detailsToggle).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("refetches buckets with liked=true when favorites is toggled", async () => {
+  it("loads Favorites only from its dedicated sidebar route", async () => {
     api.getTimelineBuckets.mockResolvedValue({
       buckets: [{ timeBucket: "2026-03-01", count: 1 }],
       total: 1,
@@ -173,13 +223,33 @@ describe("TimelinePage", () => {
       thumbnailUrl: ["/api/image/101/thumbnail"],
     });
 
+    window.history.replaceState(null, "", "/timeline?liked=true");
     renderPage();
 
-    const toggle = await screen.findByTestId("timeline-favorites-toggle");
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(toggle);
+    expect(
+      await screen.findByRole("heading", { name: "Favorites" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("timeline-favorites-toggle")).toBeNull();
+    await waitFor(() =>
+      expect(api.getTimelineBuckets).toHaveBeenCalledWith(
+        expect.objectContaining({ liked: true }),
+      ),
+    );
+  });
 
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
+  it("reacts when same-route navigation toggles the Favorites query", async () => {
+    api.getTimelineBuckets.mockResolvedValue({ buckets: [], total: 0 });
+    const view = renderPage();
+    expect(
+      await screen.findByRole("heading", { name: "Photos" }),
+    ).toBeInTheDocument();
+
+    window.history.replaceState(null, "", "/timeline?liked=true");
+    view.rerenderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Favorites" }),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(api.getTimelineBuckets).toHaveBeenCalledWith(
         expect.objectContaining({ liked: true }),
@@ -216,7 +286,7 @@ describe("TimelinePage", () => {
     const cell = await screen.findByTestId("timeline-cell-101");
     fireEvent.click(cell);
 
-    const fav = await screen.findByTestId("viewer-favorite");
+    const fav = await screen.findByRole("button", { name: "Like image" });
     fireEvent.click(fav);
 
     await waitFor(() => expect(api.toggleLike).toHaveBeenCalledWith(101));

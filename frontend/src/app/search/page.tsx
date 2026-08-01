@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   ImageOff,
@@ -8,32 +8,35 @@ import {
   Search as SearchIcon,
 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { FeedbackRating } from "@/components/feedback-rating";
 import { ImagePreviewModal } from "@/components/image-preview-modal";
-import { StatusIndicator } from "@/components/status-indicator";
-import { VirtualizedGrid } from "@/components/virtualized-grid";
-import { type SearchResult, searchImages, submitSearchRating } from "@/lib/api";
+import {
+  getGallery,
+  type SearchResult,
+  searchImages,
+  submitSearchRating,
+} from "@/lib/api";
 import { MINIO_URL_REFRESH_INTERVAL_MS, resolveMediaUrl } from "@/lib/media";
 
-const examples = [
-  "sunset over mountains",
-  "people smiling",
-  "documents with text",
-  "street photography at night",
-];
-
-export default function SearchPage() {
+function SearchPageContent() {
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [activeQuery, setActiveQuery] = useState("");
-  const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
   const [allResults, setAllResults] = useState<SearchResult[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [currentSkip, setCurrentSkip] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const clearedRef = useRef(false);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const initializedFromUrlRef = useRef(false);
 
   const LIMIT = 24;
+  const recentQuery = useQuery({
+    queryKey: ["search-recent-uploads"],
+    queryFn: () => getGallery({ limit: 24, sortOrder: "newest" }),
+    staleTime: 30_000,
+  });
 
   const searchMutation = useMutation({
     mutationFn: async (params: {
@@ -53,6 +56,21 @@ export default function SearchPage() {
       setCurrentSkip(data.skip + data.results.length);
     },
   });
+
+  useEffect(() => {
+    if (initializedFromUrlRef.current) return;
+    const initialQuery = (
+      searchParams?.get("q") ??
+      (typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("q")
+        : null)
+    )?.trim();
+    if (!initialQuery) return;
+    initializedFromUrlRef.current = true;
+    setQuery(initialQuery);
+    setActiveQuery(initialQuery);
+    searchMutation.mutate({ searchQuery: initialQuery, limit: LIMIT, skip: 0 });
+  }, [searchParams, searchMutation.mutate]);
 
   // Periodic refresh - update first page results without losing loaded pages
   useEffect(() => {
@@ -74,8 +92,6 @@ export default function SearchPage() {
     event.preventDefault();
     const trimmedQuery = query.trim();
     if (trimmedQuery) {
-      clearedRef.current = false;
-      setSelectedMediaId(null);
       setAllResults([]);
       setHasMore(false);
       setCurrentSkip(0);
@@ -108,46 +124,24 @@ export default function SearchPage() {
     }
   };
 
-  const results = allResults;
-  const selectedIndex = useMemo(() => {
-    if (selectedMediaId === null) {
-      return -1;
-    }
-    return results.findIndex((result) => result.media_id === selectedMediaId);
-  }, [results, selectedMediaId]);
-  const selectedMedia = selectedIndex >= 0 ? results[selectedIndex] : null;
-
-  const goToAdjacent = useCallback(
-    (direction: -1 | 1) => {
-      if (selectedIndex < 0) {
-        return;
-      }
-      const next = results[selectedIndex + direction];
-      if (next) {
-        setSelectedMediaId(next.media_id);
-      }
-    },
-    [results, selectedIndex],
-  );
-
   return (
     <div className="page-shell">
       <div className="container-shell py-10 md:py-14">
-        <div className="page-enter mx-auto mb-10 max-w-3xl text-center">
-          <h1 className="section-heading mb-4 text-5xl font-medium md:text-6xl">
-            Search
-          </h1>
-          <p className="muted-copy text-sm leading-6">
-            Describe what you remember and Find will surface the matching
-            images.
-          </p>
-        </div>
+        <header className="page-enter mb-6 flex flex-wrap items-baseline gap-2 border-b border-[var(--frost)] pb-5">
+          <span className="text-sm font-semibold text-[color:var(--blue)]">
+            Library
+          </span>
+          <span aria-hidden="true" className="text-[color:var(--muted)]">
+            /
+          </span>
+          <h1 className="section-heading text-4xl font-medium">Search</h1>
+          <span className="text-sm text-[color:var(--silver)]">
+            Scenes, objects, captions, and visible text
+          </span>
+        </header>
 
-        <form
-          onSubmit={handleSearch}
-          className="delayed-enter mx-auto mb-10 max-w-3xl"
-        >
-          <div className="frost-panel flex items-center gap-3 rounded-3xl p-2 transition focus-within:border-[var(--frost-strong)]">
+        <form onSubmit={handleSearch} className="delayed-enter mb-8 max-w-4xl">
+          <div className="frost-panel flex items-center gap-3 rounded-2xl p-2 transition focus-within:border-[var(--frost-strong)]">
             <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[var(--frost)] bg-[color:var(--surface-soft)] text-[color:var(--blue)]">
               <SearchIcon className="h-5 w-5" />
             </div>
@@ -176,10 +170,8 @@ export default function SearchPage() {
               <button
                 type="button"
                 onClick={() => {
-                  clearedRef.current = true;
                   setQuery("");
                   searchMutation.reset();
-                  setSelectedMediaId(null);
                   setActiveQuery("");
                   setAllResults([]);
                   setHasMore(false);
@@ -190,32 +182,6 @@ export default function SearchPage() {
                 Clear
               </button>
             )}
-          </div>
-
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {examples.map((example) => (
-              <button
-                key={example}
-                type="button"
-                onClick={() => {
-                  clearedRef.current = false;
-                  setQuery(example);
-                  setSelectedMediaId(null);
-                  setAllResults([]);
-                  setHasMore(false);
-                  setCurrentSkip(0);
-                  setActiveQuery(example);
-                  searchMutation.mutate({
-                    searchQuery: example,
-                    limit: LIMIT,
-                    skip: 0,
-                  });
-                }}
-                className="frost-button px-3 py-1.5 text-xs text-[color:var(--silver)]"
-              >
-                {example}
-              </button>
-            ))}
           </div>
         </form>
 
@@ -231,14 +197,50 @@ export default function SearchPage() {
           </div>
         )}
 
-        {!searchMutation.data && !searchMutation.isPending && (
-          <div className="frost-panel mx-auto max-w-md rounded-3xl px-8 py-14 text-center">
-            <SearchIcon className="mx-auto mb-4 h-10 w-10 text-[color:var(--muted)]" />
-            <p className="text-sm text-[color:var(--silver)]">
-              Start with a place, subject, color, text, or moment.
-            </p>
-          </div>
-        )}
+        {!searchMutation.data &&
+          !searchMutation.isPending &&
+          recentQuery.data && (
+            <section aria-labelledby="recent-uploads-heading">
+              <div className="mb-5 flex items-end justify-between gap-3">
+                <div>
+                  <h2
+                    id="recent-uploads-heading"
+                    className="text-xl font-semibold"
+                  >
+                    Recently uploaded
+                  </h2>
+                  <p className="mt-1 text-sm text-[color:var(--silver)]">
+                    Your newest gallery photos, ready to search.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+                {recentQuery.data.items.map((item) => (
+                  <a
+                    key={item.id}
+                    href={`/gallery?media=${item.id}`}
+                    className="group relative aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)] outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
+                  >
+                    <Image
+                      fill
+                      sizes="(max-width: 640px) 50vw, 20vw"
+                      unoptimized
+                      src={
+                        resolveMediaUrl(
+                          item.thumbnail_url ?? item.url,
+                          item.minio_key,
+                          item.id,
+                          !item.thumbnail_url,
+                        ) ?? ""
+                      }
+                      alt={item.filename}
+                      className="object-cover transition duration-200 group-hover:scale-[1.02]"
+                    />
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
 
         {allResults.length === 0 && searchMutation.data && (
           <div className="frost-panel mx-auto max-w-md rounded-3xl px-8 py-14 text-center">
@@ -264,88 +266,76 @@ export default function SearchPage() {
               </p>
             </div>
 
-            <VirtualizedGrid
-              items={allResults}
-              className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
-              estimateRowHeight={330}
-              gap={12}
-              getKey={(result) => result.media_id}
-              renderItem={(result) => {
-                const imageSrc = resolveMediaUrl(
-                  result.metadata.thumbnail_url ?? result.metadata.url,
-                  result.metadata.minio_key,
-                  result.media_id,
-                  !result.metadata.thumbnail_url,
-                );
-
-                return (
-                  <article
-                    key={result.media_id}
-                    className="frost-panel card-hover group relative overflow-hidden rounded-2xl text-left"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMediaId(result.media_id)}
-                      className="block w-full text-left"
-                      aria-label={`Preview ${result.metadata.filename}`}
-                    >
-                      <div className="relative aspect-square overflow-hidden bg-[color:var(--surface-soft)]">
-                        {imageSrc ? (
-                          <Image
-                            src={imageSrc}
-                            alt={result.metadata.filename}
-                            fill
-                            className="object-cover transition duration-500 group-hover:scale-[1.035]"
-                            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 16vw"
-                            unoptimized
-                          />
-                        ) : (
-                          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-[color:var(--muted)]">
-                            <ImageOff className="h-7 w-7" />
-                            <span className="text-xs">No preview</span>
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent opacity-70 transition-opacity group-hover:opacity-95" />
-                        <span className="absolute right-3 top-3 rounded-full border border-[var(--frost)] bg-[color:var(--overlay)] px-2.5 py-1 text-xs font-medium text-white backdrop-blur-md">
-                          {Math.round(result.similarity * 100)}%
-                        </span>
-                        <StatusIndicator
-                          status={result.metadata.status}
-                          className="absolute bottom-3 right-3"
-                        />
-                      </div>
-
-                      <div className="space-y-3 p-3">
-                        <p className="truncate text-xs font-medium text-[color:var(--near-white)]">
-                          {result.metadata.filename}
-                        </p>
-                        {result.metadata.caption && (
-                          <p className="line-clamp-2 text-xs leading-5 text-[color:var(--silver)]">
-                            {result.metadata.caption}
-                          </p>
-                        )}
-                        <div className="flex flex-wrap items-center gap-2">
-                          {typeof result.metadata.cluster_id === "number" && (
-                            <span className="accent-badge status-default">
-                              Cluster {result.metadata.cluster_id}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-
-                    <div className="px-3 pb-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+              {allResults.map((result, index) => (
+                <div
+                  key={result.media_id}
+                  className="group relative aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)] text-left"
+                >
+                  <Image
+                    fill
+                    sizes="(max-width: 640px) 50vw, 20vw"
+                    unoptimized
+                    src={
+                      resolveMediaUrl(
+                        result.metadata.thumbnail_url ?? result.metadata.url,
+                        result.metadata.minio_key,
+                        result.media_id,
+                        !result.metadata.thumbnail_url,
+                      ) ?? ""
+                    }
+                    alt={result.metadata.filename}
+                    className="object-cover transition duration-200 group-hover:scale-[1.02]"
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Preview ${result.metadata.filename}`}
+                    onClick={() => setViewerIndex(index)}
+                    className="absolute inset-0 z-10 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--blue)]"
+                  />
+                  <div className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex items-center justify-between gap-2 text-white">
+                    <span className="rounded-full bg-black/70 px-2 py-1 text-xs font-semibold">
+                      {Math.round(result.similarity * 100)}%
+                    </span>
+                    <span className="pointer-events-auto">
                       <FeedbackRating
                         label=""
                         onRate={(rating) =>
                           submitSearchRating(result.media_id, rating)
                         }
                       />
-                    </div>
-                  </article>
-                );
-              }}
-            />
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {viewerIndex !== null && allResults[viewerIndex] && (
+              <ImagePreviewModal
+                media={{
+                  ...allResults[viewerIndex].metadata,
+                  id: allResults[viewerIndex].media_id,
+                }}
+                onClose={() => setViewerIndex(null)}
+                onPrevious={() =>
+                  setViewerIndex((current) =>
+                    current === null ? null : current - 1,
+                  )
+                }
+                onNext={() =>
+                  setViewerIndex((current) =>
+                    current === null ? null : current + 1,
+                  )
+                }
+                hasPrevious={viewerIndex > 0}
+                hasNext={viewerIndex < allResults.length - 1}
+                onDeleted={(mediaId) => {
+                  setAllResults((current) =>
+                    current.filter((item) => item.media_id !== mediaId),
+                  );
+                  setViewerIndex(null);
+                }}
+              />
+            )}
 
             {hasMore && (
               <div className="mt-8 flex justify-center">
@@ -369,25 +359,14 @@ export default function SearchPage() {
           </div>
         )}
       </div>
-
-      {selectedMedia && (
-        <ImagePreviewModal
-          media={{
-            ...selectedMedia.metadata,
-            id: selectedMedia.media_id,
-          }}
-          onClose={() => setSelectedMediaId(null)}
-          onPrevious={() => goToAdjacent(-1)}
-          onNext={() => goToAdjacent(1)}
-          hasPrevious={selectedIndex > 0}
-          hasNext={selectedIndex >= 0 && selectedIndex < results.length - 1}
-          onDeleted={(mediaId) => {
-            if (selectedMediaId === mediaId) {
-              setSelectedMediaId(null);
-            }
-          }}
-        />
-      )}
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="page-shell" />}>
+      <SearchPageContent />
+    </Suspense>
   );
 }

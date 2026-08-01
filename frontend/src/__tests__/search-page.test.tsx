@@ -4,6 +4,7 @@ import type React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiMocks = vi.hoisted(() => ({
+  getGallery: vi.fn(),
   searchImages: vi.fn(),
   submitSearchRating: vi.fn(),
 }));
@@ -14,6 +15,7 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
+  getGallery: apiMocks.getGallery,
   searchImages: apiMocks.searchImages,
   submitSearchRating: apiMocks.submitSearchRating,
 }));
@@ -84,6 +86,7 @@ function renderWithQueryClient() {
 
 describe("Search page", () => {
   beforeEach(() => {
+    apiMocks.getGallery.mockResolvedValue({ items: [], total: 0 });
     apiMocks.searchImages.mockReset();
     apiMocks.submitSearchRating.mockReset();
   });
@@ -166,5 +169,44 @@ describe("Search page", () => {
         screen.getByText(/try a broader phrase or a visible object/i),
       ).toBeInTheDocument();
     });
+  });
+
+  it("does not reapply the original deep-link query after Clear", async () => {
+    window.history.replaceState(null, "", "/search?q=sunset");
+    apiMocks.searchImages.mockResolvedValue({
+      results: [],
+      total: 0,
+      query: "",
+      page: 1,
+      limit: 24,
+      skip: 0,
+      has_more: false,
+    });
+
+    renderWithQueryClient();
+    await waitFor(() =>
+      expect(apiMocks.searchImages).toHaveBeenCalledWith({
+        query: "sunset",
+        limit: 24,
+        skip: 0,
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    const input = screen.getByPlaceholderText(
+      /a visual memory, object, scene, or mood/i,
+    );
+    fireEvent.change(input, { target: { value: "mountain" } });
+    fireEvent.click(screen.getByRole("button", { name: /^search$/i }));
+
+    await waitFor(() =>
+      expect(apiMocks.searchImages).toHaveBeenLastCalledWith({
+        query: "mountain",
+        limit: 24,
+        skip: 0,
+      }),
+    );
+    expect(apiMocks.searchImages).toHaveBeenCalledTimes(2);
+    window.history.replaceState(null, "", "/search");
   });
 });

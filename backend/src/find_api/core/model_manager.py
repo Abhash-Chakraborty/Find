@@ -80,6 +80,7 @@ class ModelManager:
         self._loading: Dict[str, threading.Event] = {}
         self.failed_loads: Dict[str, Dict[str, Any]] = {}
         self.unavailable_models: Dict[str, ModelLoadFailure] = {}
+        self.runtime_status: Dict[str, Any] | None = None
         self._lock = threading.RLock()
         self.gpu_lock = asyncio.Lock()
         self._cleanup_thread = None
@@ -120,6 +121,9 @@ class ModelManager:
                     try:
                         time.sleep(interval_seconds)
                         self.unload_idle_models(ttl_seconds)
+                        # Keep the process heartbeat fresh even when no models
+                        # are loaded and the worker is otherwise idle.
+                        self.publish_status()
                     except Exception as e:
                         logger.error(f"Error in model cleanup thread: {e}")
 
@@ -304,13 +308,36 @@ class ModelManager:
             self._loading.clear()
             self.failed_loads.clear()
             self.unavailable_models.clear()
+            self.runtime_status = None
             self.max_loaded_models = settings.ML_MAX_LOADED_MODELS
+            self.publish_status()
+
+    def set_runtime_status(self, status: Dict[str, Any]) -> None:
+        """Publish the runtime snapshot most recently applied by this process."""
+        with self._lock:
+            self.runtime_status = status.copy()
+            self.publish_status()
+
+    def merge_runtime_status(self, key: str, value: Any) -> None:
+        """Atomically set a single top-level entry in the shared runtime status.
+
+        Several ML components (CLIP/BLIP/YOLO/OCR) each publish their own
+        top-level key through this same runtime status dict. A caller that
+        instead does ``get_status()`` then ``set_runtime_status()`` from the
+        outside is a read-modify-write race: a concurrent publisher's update
+        can land in between and get silently dropped. Doing the read, merge,
+        and write under the single manager lock closes that window.
+        """
+        with self._lock:
+            merged = dict(self.runtime_status or {})
+            merged[key] = value
+            self.runtime_status = merged
             self.publish_status()
 
     def get_status(self) -> Dict[str, Any]:
         """Return current process model-manager status."""
         with self._lock:
-            return {
+            status = {
                 "process": self.process_name,
                 "loaded_models": list(self.models.keys()),
                 "in_flight": {
@@ -320,6 +347,9 @@ class ModelManager:
                 "max_loaded_models": self.max_loaded_models,
                 "updated_at": time.time(),
             }
+            if self.runtime_status is not None:
+                status["runtime"] = self.runtime_status.copy()
+            return status
 
     def publish_status(self):
         """Best-effort publish of this process model state for API observability."""
@@ -328,7 +358,10 @@ class ModelManager:
 
             redis_conn = Redis.from_url(settings.REDIS_URL)
             key = f"find:model_status:{self.process_name}"
-            redis_conn.setex(key, 600, json.dumps(self.get_status()))
+            # set(ex=) rather than setex(): redis-py deprecated setex in 2.6.12
+            # and started emitting the warning on every call from 8.x, which is
+            # once per publish. Identical semantics, 600s TTL.
+            redis_conn.set(key, json.dumps(self.get_status()), ex=600)
         except Exception as exc:
             logger.debug("Failed to publish model manager status: %s", exc)
 

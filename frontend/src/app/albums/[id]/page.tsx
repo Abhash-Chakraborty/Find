@@ -8,32 +8,43 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ImageIcon, Loader2, Star, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArrowLeft,
+  FolderPlus,
+  ImageIcon,
+  Loader2,
+  Share2,
+  Star,
+  Trash2,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AlbumAssetPicker } from "@/components/album-asset-picker";
 import { AlbumShareLinks } from "@/components/album-share-links";
-import { AssetViewer } from "@/components/asset-viewer";
+import { ImagePreviewModal } from "@/components/image-preview-modal";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import {
   deleteAlbum,
   getAlbum,
   getAlbumAssets,
   removeAlbumAssets,
   setArchive,
-  toggleLike,
   trashImage,
   updateAlbum,
 } from "@/lib/api";
-import { resolveMediaUrl } from "@/lib/media";
 
 export default function AlbumDetailPage() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const albumId = Number(params?.id);
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
+  const [shareOpen, setShareOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const { data: album, isLoading: albumLoading } = useQuery({
     queryKey: ["album", albumId],
@@ -55,7 +66,8 @@ export default function AlbumDetailPage() {
 
   const removeMutation = useMutation({
     mutationFn: (mediaId: number) => removeAlbumAssets(albumId, [mediaId]),
-    onSuccess: () => {
+    onSuccess: (_result, mediaId) => {
+      setRemovedIds((current) => new Set(current).add(mediaId));
       invalidate();
       toast.success("Removed from album");
     },
@@ -82,18 +94,11 @@ export default function AlbumDetailPage() {
     onError: () => toast.error("Couldn't delete album"),
   });
 
-  const favoriteMutation = useMutation({
-    mutationFn: (mediaId: number) => toggleLike(mediaId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["album-assets", albumId] });
-    },
-    onError: () => toast.error("Couldn't update favorite"),
-  });
-
   const archiveMutation = useMutation({
     mutationFn: (mediaId: number) => setArchive(mediaId, true),
     onSuccess: ({ id }) => {
       setRemovedIds((cur) => new Set(cur).add(id));
+      invalidate();
       queryClient.invalidateQueries({ queryKey: ["album-assets", albumId] });
       queryClient.invalidateQueries({ queryKey: ["archive"] });
       toast.success("Archived");
@@ -105,6 +110,7 @@ export default function AlbumDetailPage() {
     mutationFn: (mediaId: number) => trashImage(mediaId),
     onSuccess: ({ id }) => {
       setRemovedIds((cur) => new Set(cur).add(id));
+      invalidate();
       queryClient.invalidateQueries({ queryKey: ["album-assets", albumId] });
       queryClient.invalidateQueries({ queryKey: ["trash"] });
       toast.success("Moved to trash");
@@ -116,9 +122,6 @@ export default function AlbumDetailPage() {
   // (they also fall out of the browsable query on refetch).
   const allItems = assetsData?.items ?? [];
   const items = allItems.filter((item) => !removedIds.has(item.id));
-  const favoriteIds = new Set(
-    items.filter((item) => item.liked).map((item) => item.id),
-  );
 
   return (
     <main className="page-shell">
@@ -137,11 +140,19 @@ export default function AlbumDetailPage() {
         )}
 
         {album && (
-          <div className="mb-8 flex items-start justify-between gap-4">
+          <div className="mb-6 flex flex-col gap-4 border-b border-[var(--frost)] pb-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="section-heading text-4xl font-medium">
-                {album.name}
-              </h1>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-sm font-semibold text-[color:var(--blue)]">
+                  Albums
+                </span>
+                <span aria-hidden="true" className="text-[color:var(--muted)]">
+                  /
+                </span>
+                <h1 className="section-heading text-4xl font-medium">
+                  {album.name}
+                </h1>
+              </div>
               {album.description && (
                 <p className="muted-copy mt-1 text-sm">{album.description}</p>
               )}
@@ -149,20 +160,38 @@ export default function AlbumDetailPage() {
                 {album.asset_count} photo{album.asset_count === 1 ? "" : "s"}
               </p>
             </div>
-            <button
-              type="button"
-              data-testid="delete-album"
-              onClick={() => deleteMutation.mutate()}
-              disabled={deleteMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--frost)] px-4 py-2 text-sm text-[color:var(--silver)] transition hover:text-[color:var(--near-white)]"
-            >
-              <Trash2 size={16} /> Delete album
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="white-pill px-4 py-2 text-sm font-semibold"
+              >
+                <FolderPlus size={16} /> Add photos
+              </button>
+              <button
+                type="button"
+                onClick={() => setShareOpen((open) => !open)}
+                aria-expanded={shareOpen}
+                className="frost-button px-4 py-2 text-sm"
+              >
+                {shareOpen ? <X size={16} /> : <Share2 size={16} />}{" "}
+                {shareOpen ? "Close sharing" : "Share"}
+              </button>
+              <button
+                type="button"
+                data-testid="delete-album"
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+                className="frost-button px-4 py-2 text-sm text-[color:var(--silver)]"
+              >
+                <Trash2 size={16} /> Delete album
+              </button>
+            </div>
           </div>
         )}
 
-        {Number.isFinite(albumId) && (
-          <div className="mb-8">
+        {Number.isFinite(albumId) && shareOpen && (
+          <div className="frost-panel page-enter mb-8 rounded-2xl p-5">
             <AlbumShareLinks albumId={albumId} />
           </div>
         )}
@@ -173,41 +202,25 @@ export default function AlbumDetailPage() {
           </div>
         )}
 
-        {!assetsLoading && items.length === 0 && (
-          <p data-testid="album-empty" className="muted-copy">
-            This album has no photos yet.
-          </p>
-        )}
-
-        <ul className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
-          {items.map((item, index) => (
-            <li
-              key={item.id}
-              data-testid={`album-asset-${item.id}`}
-              className="group relative aspect-square overflow-hidden rounded-xl bg-[color:var(--surface-soft)]"
-            >
-              <button
-                type="button"
-                aria-label={`Open ${item.filename}`}
-                data-testid={`open-asset-${item.id}`}
-                onClick={() => setViewerIndex(index)}
-                className="block h-full w-full"
-              >
-                {/* biome-ignore lint/a11y/useAltText: album tile */}
-                <img
-                  src={
-                    resolveMediaUrl(
-                      item.thumbnail_url,
-                      item.minio_key,
-                      item.id,
-                      true,
-                    ) ?? undefined
-                  }
-                  alt={item.filename}
-                  className="h-full w-full object-cover"
-                />
-              </button>
-              <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 p-1 opacity-0 transition group-hover:opacity-100">
+        {!assetsLoading && (
+          <TimelineMediaView
+            items={items}
+            getId={(item) => item.id}
+            getDate={(item) => item.created_at}
+            getWidth={(item) => item.width}
+            getHeight={(item) => item.height}
+            getThumbnailUrl={(item) => `/api/image/${item.id}/thumbnail`}
+            getOriginalUrl={(item) => `/api/image/${item.id}/original`}
+            getAlt={(item) => item.filename}
+            getItemTestId={(item) => `album-asset-${item.id}`}
+            getOpenTestId={(item) => `open-asset-${item.id}`}
+            empty={
+              <p data-testid="album-empty" className="muted-copy">
+                This album has no photos yet.
+              </p>
+            }
+            renderItemActions={(item) => (
+              <>
                 <button
                   type="button"
                   aria-label="Set as cover"
@@ -226,10 +239,70 @@ export default function AlbumDetailPage() {
                 >
                   <Trash2 size={14} />
                 </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </>
+            )}
+            renderViewer={({
+              items: viewerItems,
+              index,
+              onIndexChange,
+              onClose,
+            }) => {
+              const active = viewerItems[index];
+              if (!active) return null;
+              return (
+                <ImagePreviewModal
+                  media={active}
+                  onClose={onClose}
+                  onPrevious={() => onIndexChange(index - 1)}
+                  onNext={() => onIndexChange(index + 1)}
+                  hasPrevious={index > 0}
+                  hasNext={index < viewerItems.length - 1}
+                  onDeleted={(id) => {
+                    setRemovedIds((current) => new Set(current).add(id));
+                    invalidate();
+                  }}
+                  actions={
+                    <>
+                      <button
+                        type="button"
+                        data-testid="preview-remove-from-album"
+                        className="frost-button px-4 py-2 text-sm"
+                        onClick={() => {
+                          removeMutation.mutate(active.id);
+                          onClose();
+                        }}
+                      >
+                        <X className="h-4 w-4" /> Remove from album
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="preview-archive"
+                        className="frost-button px-4 py-2 text-sm"
+                        onClick={() => {
+                          archiveMutation.mutate(active.id);
+                          onClose();
+                        }}
+                      >
+                        <Archive className="h-4 w-4" /> Archive
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="preview-trash"
+                        className="frost-button px-4 py-2 text-sm"
+                        onClick={() => {
+                          trashMutation.mutate(active.id);
+                          onClose();
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" /> Move to trash
+                      </button>
+                    </>
+                  }
+                />
+              );
+            }}
+          />
+        )}
 
         {!album && !albumLoading && (
           <p className="muted-copy">
@@ -237,24 +310,16 @@ export default function AlbumDetailPage() {
             Album not found.
           </p>
         )}
-      </div>
 
-      {viewerIndex !== null && items[viewerIndex] && (
-        <AssetViewer
-          assets={items.map((item) => ({
-            id: item.id,
-            thumbnailUrl: `/api/image/${item.id}/thumbnail`,
-            originalUrl: `/api/image/${item.id}`,
-          }))}
-          index={viewerIndex}
-          onIndexChange={setViewerIndex}
-          onClose={() => setViewerIndex(null)}
-          favoriteIds={favoriteIds}
-          onToggleFavorite={(id) => favoriteMutation.mutate(id)}
-          onArchive={(id) => archiveMutation.mutate(id)}
-          onTrash={(id) => trashMutation.mutate(id)}
-        />
-      )}
+        {pickerOpen && Number.isFinite(albumId) && (
+          <AlbumAssetPicker
+            albumId={albumId}
+            existingIds={new Set(items.map((item) => item.id))}
+            onClose={() => setPickerOpen(false)}
+            onAdded={invalidate}
+          />
+        )}
+      </div>
     </main>
   );
 }

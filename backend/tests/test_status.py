@@ -128,6 +128,8 @@ def test_loaded_models_endpoint(client):
     assert "mock_test_model" in body["loaded_models"]
     assert body["processes"]["api"]["loaded_models"] == ["mock_test_model"]
     assert "ttl_seconds" in body
+    assert body["worker_runtime"] is None
+    assert body["worker_health"]["state"] == "unavailable"
 
 
 def test_loaded_models_endpoint_includes_worker_snapshot(client):
@@ -136,7 +138,7 @@ def test_loaded_models_endpoint_includes_worker_snapshot(client):
         "process": "worker",
         "loaded_models": ["siglip"],
         "in_flight": {},
-        "failed_models": {"florence-2": {"error": "load failed", "failed_at": 0}},
+        "failed_models": {"captioner": {"error": "load failed", "failed_at": 0}},
         "max_loaded_models": 5,
         "updated_at": 0,
     }
@@ -167,9 +169,10 @@ def test_loaded_models_endpoint_includes_worker_snapshot(client):
     body = response.json()
     assert "siglip" in body["loaded_models"]
     assert (
-        body["processes"]["worker"]["failed_models"]["florence-2"]["error"]
+        body["processes"]["worker"]["failed_models"]["captioner"]["error"]
         == "load failed"
     )
+    assert body["worker_health"]["state"] == "stale"
 
 
 def test_model_footprint_endpoint_returns_report_without_paths(client, tmp_path):

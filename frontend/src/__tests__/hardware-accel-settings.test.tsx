@@ -14,12 +14,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { HardwareAccelSettings } from "@/components/hardware-accel-settings";
 import type { HardwareReport } from "@/lib/api";
 
-const { getHardwareReport } = vi.hoisted(() => ({
+const { getHardwareReport, getRuntimeConfig } = vi.hoisted(() => ({
   getHardwareReport: vi.fn(),
+  getRuntimeConfig: vi.fn().mockResolvedValue({
+    build_profile: "nvidia",
+    ai_enabled: true,
+  }),
 }));
 
 vi.mock("@/lib/api", () => ({
   getHardwareReport,
+  getRuntimeConfig,
 }));
 
 function renderWithClient(ui: React.ReactElement) {

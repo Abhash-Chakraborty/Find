@@ -9,7 +9,7 @@ device, and last-use time. Consumed by:
 - ``backend/scripts/model_footprint_report.py`` (local CLI; may show paths
   since it runs with the operator's own filesystem access).
 
-Design constraints (see issue tracker + docs/overhaul/inventory/lane-f-ml.md):
+Design constraints (tracked by issue #339, the CPU-only runtime profile):
 
 - Never downloads model weights. Every lookup here is a local filesystem
   read, or a read of a local cache *index* (``huggingface_hub.scan_cache_dir``
@@ -40,7 +40,7 @@ from find_api.core.model_manager import get_model_manager
 # --- Pack identifiers --------------------------------------------------------
 PACK_LIGHT = "light"
 PACK_FULL = "full"
-PACK_PROPOSED_CPU = "proposed_cpu"  # not implemented — tracked by issue #45
+PACK_PROPOSED_CPU = "proposed_cpu"  # not implemented — tracked by issue #339
 
 
 # --- Cache lookup -------------------------------------------------------------
@@ -166,9 +166,7 @@ def _hf_hub_cache_matches(*needles: str) -> Optional[CacheInfo]:
 
 def _open_clip_legacy_cache(*needles: str) -> Optional[CacheInfo]:
     """Fallback for open_clip checkpoints stored outside the HF Hub cache."""
-    cache_dir = os.getenv("OPEN_CLIP_CACHE_DIR") or os.path.expanduser(
-        "~/.cache/clip"
-    )
+    cache_dir = os.getenv("OPEN_CLIP_CACHE_DIR") or os.path.expanduser("~/.cache/clip")
     root = Path(cache_dir)
     if not root.exists():
         return None
@@ -414,10 +412,9 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
     ),
 )
 
-# Proposed CPU-optimized ONNX pack (docs/overhaul/inventory/lane-f-ml.md,
-# issue #45). Not implemented yet, so there is nothing on disk to measure —
-# listed so pack totals/documentation have a stable place to grow into once
-# it ships.
+# Proposed CPU-optimized ONNX pack (issue #339). Not implemented yet, so there
+# is nothing on disk to measure — listed so pack totals/documentation have a
+# stable place to grow into once it ships.
 PROPOSED_CPU_MODELS: tuple[dict, ...] = (
     {"label": "CLIP ViT-B-32 (ONNX, openai)", "replaces": "siglip"},
     {"label": "InsightFace buffalo_s (ONNX)", "replaces": "insightface"},
@@ -535,8 +532,7 @@ def build_report(include_paths: bool = False) -> dict:
             PACK_PROPOSED_CPU: {
                 "status": "not_implemented",
                 "note": (
-                    "CPU-optimized ONNX pack proposed in "
-                    "docs/overhaul/inventory/lane-f-ml.md; tracked by issue #45. "
+                    "CPU-optimized ONNX pack tracked by issue #339. "
                     "Nothing is downloaded yet, so there is no footprint to "
                     "measure."
                 ),

@@ -39,7 +39,7 @@ SET status = 'running', started_at = ?
 WHERE id = (
     SELECT id FROM job_queue
     WHERE status = 'queued'
-    ORDER BY created_at ASC
+    ORDER BY created_at ASC, rowid ASC
     LIMIT 1
 )
 RETURNING id, type, payload, created_at
@@ -67,14 +67,14 @@ SQL_LIST_ACTIVE = """
 SELECT id, type, status, payload, error_info, created_at, started_at, completed_at
 FROM job_queue
 WHERE status IN ('queued', 'running')
-ORDER BY created_at ASC
+ORDER BY created_at ASC, rowid ASC
 """
 
 SQL_LIST_FAILED = """
 SELECT id, type, status, payload, error_info, created_at, started_at, completed_at
 FROM job_queue
 WHERE status = 'failed'
-ORDER BY completed_at DESC
+ORDER BY completed_at DESC, rowid DESC
 """
 
 SQL_COUNT_STATUS = """
@@ -88,7 +88,7 @@ DELETE FROM job_queue WHERE status = 'completed' AND completed_at < ?
 SQL_RESET_STALE = """
 UPDATE job_queue
 SET status = 'queued', started_at = NULL, error_info = ?
-WHERE status = 'running' AND started_at < ?
+WHERE status = 'running' AND started_at <= ?
 """
 
 SQL_CREATE_CLUSTERING_LOCKS = """

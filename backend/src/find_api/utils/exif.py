@@ -4,10 +4,49 @@ Extract EXIF data from images
 
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+GPS_INFO_TAG = 0x8825
+
+
+def _gps_degrees(value: Any, reference: Any) -> Optional[float]:
+    """Convert an EXIF DMS tuple into signed decimal degrees."""
+    try:
+        degrees, minutes, seconds = (float(part) for part in value)
+        coordinate = degrees + minutes / 60 + seconds / 3600
+        if str(reference).upper() in {"S", "W"}:
+            coordinate *= -1
+        return coordinate
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+def extract_gps_coordinates(image: Image.Image) -> Optional[tuple[float, float]]:
+    """Return ``(latitude, longitude)`` from EXIF, without network geocoding.
+
+    Callers must opt in before storing this sensitive location metadata. The
+    helper intentionally does no reverse geocoding or tile/provider request.
+    """
+    try:
+        exif = image.getexif()
+        if not exif:
+            return None
+        gps_ifd = exif.get_ifd(GPS_INFO_TAG)
+        if not gps_ifd:
+            return None
+        latitude = _gps_degrees(gps_ifd.get(2), gps_ifd.get(1))
+        longitude = _gps_degrees(gps_ifd.get(4), gps_ifd.get(3))
+        if latitude is None or longitude is None:
+            return None
+        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+            return None
+        return (round(latitude, 7), round(longitude, 7))
+    except Exception as exc:  # malformed EXIF must not fail image indexing
+        logger.warning("Failed to parse GPS coordinates: %s", exc)
+        return None
 
 
 def extract_exif_data(

@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -27,7 +27,11 @@ from find_api.core.auth import (
 )
 from find_api.core.config import settings
 from find_api.core.database import get_db
-from find_api.core.dependencies import get_admin_user, get_required_user
+from find_api.core.dependencies import (
+    SESSION_COOKIE_NAME,
+    get_admin_user,
+    get_required_user,
+)
 from find_api.models.invite import InviteToken
 from find_api.models.join_request import JoinRequest
 from find_api.models.session import AuthSession
@@ -75,6 +79,23 @@ class JoinCreateRequest(BaseModel):
         return v
 
 
+class ProfileUpdateRequest(BaseModel):
+    username: Optional[str] = Field(None, min_length=1, max_length=150)
+    display_name: Optional[str] = Field(None, max_length=255)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_fits_bcrypt(cls, v: str) -> str:
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must be 72 bytes or fewer when encoded as UTF-8")
+        return v
+
+
 def _user_dict(user: User) -> dict:
     """Serialize a User to a safe dict (no password hash)."""
     return {
@@ -93,12 +114,41 @@ def _ensure_admin_available(admin: Optional[User], db: Session) -> User:
     raise HTTPException(403, "Admin access required")
 
 
+def _set_session_cookie(
+    response: Response, raw_token: str, expires_at: datetime
+) -> None:
+    """Set the browser session without exposing it to JavaScript."""
+    max_age = max(
+        0,
+        int((expires_at - datetime.now(timezone.utc)).total_seconds()),
+    )
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=raw_token,
+        max_age=max_age,
+        expires=expires_at,
+        path="/",
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+    )
+
+
+def _request_session_token(
+    authorization: Optional[str], session_cookie: Optional[str]
+) -> Optional[str]:
+    if authorization and authorization.startswith("Bearer "):
+        return authorization[len("Bearer ") :]
+    return session_cookie
+
+
 # --- Instance setup ---
 
 
 @router.post("/auth/setup")
 def setup_instance(
     body: SetupRequest,
+    response: Response,
     db: Session = Depends(get_db),
 ):
     """Create the admin account and activate shared mode.
@@ -124,6 +174,7 @@ def setup_instance(
     db.refresh(admin)
 
     raw_token, expires_at = create_session(db, admin.id)
+    _set_session_cookie(response, raw_token, expires_at)
 
     return {
         "user": _user_dict(admin),
@@ -140,6 +191,7 @@ def setup_instance(
 def login(
     request: Request,
     body: LoginRequest,
+    response: Response,
     db: Session = Depends(get_db),
 ):
     """Authenticate with username and password.
@@ -161,6 +213,7 @@ def login(
     db.commit()
 
     raw_token, expires_at = create_session(db, user.id)
+    _set_session_cookie(response, raw_token, expires_at)
 
     return {
         "user": _user_dict(user),
@@ -171,16 +224,26 @@ def login(
 
 @router.post("/auth/logout")
 def logout(
+    response: Response,
     user: Optional[User] = Depends(get_required_user),
     authorization: Optional[str] = Header(None),
+    session_cookie: Optional[str] = Cookie(None, alias=SESSION_COOKIE_NAME),
     db: Session = Depends(get_db),
 ):
     """End the current session."""
-    if authorization and authorization.startswith("Bearer "):
-        raw_token = authorization[len("Bearer ") :]
+    raw_token = _request_session_token(authorization, session_cookie)
+    if raw_token:
         hashed = hash_token(raw_token)
         db.query(AuthSession).filter(AuthSession.token_hash == hashed).delete()
         db.commit()
+
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+        secure=settings.ENVIRONMENT == "production",
+        httponly=True,
+        samesite="lax",
+    )
 
     return {"message": "Logged out"}
 
@@ -195,6 +258,148 @@ def get_me(
         return {"mode": "local", "user": None}
 
     return {"mode": "shared", "user": _user_dict(user)}
+
+
+@router.get("/auth/status")
+def get_auth_status(db: Session = Depends(get_db)):
+    """Public bootstrap state used to choose local, setup, or login UI."""
+    shared = is_shared_mode(db)
+    return {
+        "mode": "shared" if shared else "local",
+        "setup_available": not shared,
+    }
+
+
+@router.patch("/auth/profile")
+def update_profile(
+    body: ProfileUpdateRequest,
+    user: Optional[User] = Depends(get_required_user),
+    db: Session = Depends(get_db),
+):
+    """Update the signed-in account's username and display name."""
+    if user is None:
+        raise HTTPException(400, "Accounts are only available in shared mode")
+
+    if body.username is not None:
+        username = body.username.strip()
+        if not username:
+            raise HTTPException(422, "Username cannot be blank")
+        duplicate = (
+            db.query(User).filter(User.username == username, User.id != user.id).first()
+        )
+        if duplicate is not None:
+            raise HTTPException(409, "Username is already in use")
+        user.username = username
+
+    if body.display_name is not None:
+        user.display_name = body.display_name.strip() or None
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "Username is already in use") from exc
+    db.refresh(user)
+    return {"user": _user_dict(user)}
+
+
+@router.post("/auth/password")
+def change_password(
+    body: PasswordChangeRequest,
+    response: Response,
+    user: Optional[User] = Depends(get_required_user),
+    db: Session = Depends(get_db),
+):
+    """Change the password, revoke every old session, and issue a fresh one."""
+    if user is None:
+        raise HTTPException(400, "Accounts are only available in shared mode")
+    if not verify_password_constant_time(body.current_password, user.password_hash):
+        raise HTTPException(401, "Current password is incorrect")
+    if body.current_password == body.new_password:
+        raise HTTPException(422, "New password must be different")
+
+    user.password_hash = hash_password(body.new_password)
+    db.query(AuthSession).filter(AuthSession.user_id == user.id).delete(
+        synchronize_session=False
+    )
+    db.commit()
+
+    raw_token, expires_at = create_session(db, user.id)
+    _set_session_cookie(response, raw_token, expires_at)
+    return {
+        "message": "Password changed",
+        "token": raw_token,
+        "expires_at": expires_at.isoformat(),
+    }
+
+
+@router.get("/auth/sessions")
+def list_sessions(
+    user: Optional[User] = Depends(get_required_user),
+    authorization: Optional[str] = Header(None),
+    session_cookie: Optional[str] = Cookie(None, alias=SESSION_COOKIE_NAME),
+    db: Session = Depends(get_db),
+):
+    """List the signed-in user's server-side sessions without exposing tokens."""
+    if user is None:
+        return {"sessions": []}
+    raw_token = _request_session_token(authorization, session_cookie)
+    current_hash = hash_token(raw_token) if raw_token else None
+    now = datetime.now(timezone.utc)
+    sessions = (
+        db.query(AuthSession)
+        .filter(AuthSession.user_id == user.id, AuthSession.expires_at > now)
+        .order_by(AuthSession.created_at.desc(), AuthSession.id.desc())
+        .all()
+    )
+    return {
+        "sessions": [
+            {
+                "id": item.id,
+                "created_at": item.created_at.isoformat()
+                if item.created_at is not None
+                else None,
+                "expires_at": item.expires_at.isoformat(),
+                "current": item.token_hash == current_hash,
+            }
+            for item in sessions
+        ]
+    }
+
+
+@router.delete("/auth/sessions/{session_id}")
+def revoke_session(
+    session_id: int,
+    response: Response,
+    user: Optional[User] = Depends(get_required_user),
+    authorization: Optional[str] = Header(None),
+    session_cookie: Optional[str] = Cookie(None, alias=SESSION_COOKIE_NAME),
+    db: Session = Depends(get_db),
+):
+    """Revoke one session owned by the signed-in user."""
+    if user is None:
+        raise HTTPException(400, "Accounts are only available in shared mode")
+    item = (
+        db.query(AuthSession)
+        .filter(AuthSession.id == session_id, AuthSession.user_id == user.id)
+        .first()
+    )
+    if item is None:
+        raise HTTPException(404, "Session not found")
+
+    raw_token = _request_session_token(authorization, session_cookie)
+    is_current = bool(raw_token and item.token_hash == hash_token(raw_token))
+    db.delete(item)
+    db.commit()
+    if is_current:
+        response.delete_cookie(
+            key=SESSION_COOKIE_NAME,
+            path="/",
+            secure=settings.ENVIRONMENT == "production",
+            httponly=True,
+            samesite="lax",
+        )
+    return {"revoked": session_id, "current": is_current}
 
 
 # --- Invite tokens ---

@@ -41,7 +41,7 @@ uv run python scripts/model_footprint_report.py --no-paths  # either mode, no fi
 This is a **local CLI tool** — it prints cache paths by default because it
 runs with your own filesystem access. The equivalent API endpoint does not:
 
-```
+```http
 GET /api/status/models/footprint   (admin-only)
 ```
 
@@ -59,7 +59,7 @@ Find's models fall into three groups, used to reason about install size:
 |---|---|---|
 | **light** | SigLIP embedding model only (text/image search — the core feature) | Implemented; measured by this report |
 | **full** | SigLIP + Florence-2 captioning + YOLO object detection + InsightFace + PaddleOCR | Implemented; measured by this report |
-| **proposed_cpu** | CPU-optimized ONNX replacements: CLIP ViT-B-32 (ONNX), InsightFace `buffalo_s` (ONNX), PP-OCRv5 mobile (ONNX) | **Not implemented.** Proposed in [lane-f-ml.md](../overhaul/inventory/lane-f-ml.md); tracked by #45. The report lists these models by name with `status: "not_implemented"` and no size, since there's nothing on disk yet to measure. |
+| **proposed_cpu** | CPU-optimized ONNX replacements: CLIP ViT-B-32 (ONNX), InsightFace `buffalo_s` (ONNX), PP-OCRv5 mobile (ONNX) | **Not implemented.** Tracked by [#339](https://github.com/Abhash-Chakraborty/Find/issues/339). The report lists these models by name with `status: "not_implemented"` and no size, since there's nothing on disk yet to measure. |
 
 The report's `packs` section gives you `cached_count` / `total_count` and
 summed `bytes_on_disk` for `light` and `full` directly from your machine's

@@ -1,6 +1,7 @@
 """Tests for GET /api/search response shape and pagination behavior."""
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,8 +13,16 @@ from find_api.services.query_cache import clear_query_cache, invalidate_query_ca
 
 
 @pytest.fixture(autouse=True)
-def clear_cache_between_tests():
+def clear_cache_between_tests(monkeypatch):
     clear_query_cache()
+    monkeypatch.setattr(
+        "find_api.routers.search.resolve_runtime",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            applied_mode="mock", configured_accel_mode="cpu"
+        ),
+    )
+    monkeypatch.setattr("find_api.routers.search.bind_runtime", lambda _runtime: None)
+    monkeypatch.setattr("find_api.routers.search.reset_runtime", lambda _tokens: None)
 
 
 def _fake_search_row(media_id: int = 1, similarity: float = 0.82) -> MagicMock:
@@ -94,6 +103,12 @@ def _mock_search_with_db(
                 "find_api.ml.mock_embedder.get_mock_embedder",
                 return_value=mock_embedder,
             ),
+            patch(
+                "find_api.routers.search.resolve_runtime",
+                return_value=MagicMock(applied_mode="mock"),
+            ),
+            patch("find_api.routers.search.bind_runtime", return_value=None),
+            patch("find_api.routers.search.reset_runtime"),
         ):
             response = client.get(
                 "/api/search", params={"q": "sunset", **(params or {})}
@@ -453,6 +468,12 @@ class TestSearchDiagnostics:
                     "find_api.ml.mock_embedder.get_mock_embedder",
                     return_value=mock_embedder,
                 ),
+                patch(
+                    "find_api.routers.search.resolve_runtime",
+                    return_value=MagicMock(applied_mode="mock"),
+                ),
+                patch("find_api.routers.search.bind_runtime", return_value=None),
+                patch("find_api.routers.search.reset_runtime"),
             ):
                 return client.get(
                     "/api/search", params={"q": "sunset", "debug": str(debug).lower()}

@@ -6,7 +6,6 @@ from PIL import Image
 import io
 import logging
 from datetime import datetime, timezone
-import numpy as np
 from rq import get_current_job
 
 from find_api.core.database import SessionLocal
@@ -17,10 +16,18 @@ from find_api.core.queue import (
 )
 from find_api.core.storage import get_file, upload_thumbnail
 from find_api.core.model_manager import get_model_manager
+from find_api.core.runtime_profile import (
+    RuntimeUnavailableError,
+    bind_runtime,
+    load_runtime_preferences,
+    reset_runtime,
+    resolve_runtime,
+)
 from find_api.core.config import settings
 from find_api.models.media import Media
+from find_api.services.activity_log import record_activity
 from find_api.services.query_cache import invalidate_query_cache
-from find_api.utils.exif import extract_exif_data
+from find_api.utils.exif import extract_exif_data, extract_gps_coordinates
 from find_api.utils.errors import sanitize_error
 
 from sqlalchemy import func
@@ -38,11 +45,65 @@ except Exception as e:
     logger.error(f"Failed to start model cleanup thread in worker: {e}")
 
 FACE_CLUSTER_NAME_MATCH_THRESHOLD = 0.72
-ANALYSIS_MODEL_NAMES = ("yolo", "florence-2", "paddleocr", "siglip", "insightface")
+ANALYSIS_MODEL_NAMES = ("yolo", "captioner", "paddleocr", "siglip", "insightface")
 
 
-def cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
+def _begin_worker_runtime(db):
+    """Bind and publish one persisted runtime snapshot for a worker job."""
+    resolution = resolve_runtime(load_runtime_preferences(db))
+    tokens = bind_runtime(resolution)
+    get_model_manager().set_runtime_status(
+        resolution.to_worker_status(source="database")
+    )
+    return resolution, tokens
+
+
+def _metadata_only_payload(profile: str) -> dict:
+    skipped = {"status": "skipped", "error": None}
+    return {
+        "caption": "",
+        "objects": [],
+        "ocr_text": "",
+        "text_blocks": [],
+        "ai_disabled": True,
+        "runtime_profile": profile,
+        "stage_status": {
+            "object_detection": skipped.copy(),
+            "captioning": skipped.copy(),
+            "ocr": skipped.copy(),
+            "embedding": skipped.copy(),
+        },
+    }
+
+
+def _remote_cluster_embeddings(embeddings):
+    """Run the clustering pass on the remote ML server.
+
+    ``cluster`` ships enabled by default in REMOTE_ML_FEATURES, so remote mode
+    must actually dispatch it -- otherwise the /api/ml/cluster endpoint and
+    remote_cluster() are dead code and clustering silently runs locally on a
+    host that may not even have scikit-learn installed.
+    """
+    import numpy as np
+
+    from find_api.ml.remote_client import _feature_enabled, remote_cluster
+
+    if not _feature_enabled("cluster"):
+        logger.info("Remote mode: cluster disabled; running clustering locally")
+        from find_api.ml.clusterer import get_image_clusterer
+
+        return get_image_clusterer().cluster(embeddings)
+
+    logger.info("Dispatching clustering to remote ML server")
+    payload = remote_cluster([row.tolist() for row in np.asarray(embeddings)])
+    labels = np.asarray(payload["labels"], dtype=np.int32)
+    return labels, payload.get("info", {})
+
+
+def cosine_similarity(left, right) -> float:
     """Return cosine similarity for two vectors, guarding empty norms."""
+    import numpy as np
+
     left_norm = np.linalg.norm(left)
     right_norm = np.linalg.norm(right)
     if left_norm == 0 or right_norm == 0:
@@ -103,16 +164,12 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
     Main worker job to analyze an uploaded image
     """
 
-    from find_api.workers.processors import (
-        extract_image_metadata,
-        generate_hybrid_embedding,
-    )
-
     job = get_current_job()
 
     db = SessionLocal()
     media = None
     metadata = None
+    runtime_tokens = None
 
     try:
         if clear_model_failures:
@@ -124,6 +181,10 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
         if not media:
             logger.error(f"Media {media_id} not found")
             return
+
+        runtime, runtime_tokens = _begin_worker_runtime(db)
+        if runtime.applied_mode == "unavailable":
+            raise RuntimeUnavailableError(runtime)
 
         media.status = "processing"
         db.commit()
@@ -146,33 +207,61 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
         set_stage(job, "extracting EXIF")
 
         try:
-            exif_data = extract_exif_data(image)
+            exif_data = extract_exif_data(image, include_gps=runtime.map_enabled)
             media.exif_json = exif_data
+            coordinates = (
+                extract_gps_coordinates(image) if runtime.map_enabled else None
+            )
+            media.latitude = coordinates[0] if coordinates else None
+            media.longitude = coordinates[1] if coordinates else None
         except Exception as e:
             logger.warning(f"Failed to extract EXIF: {e}")
             media.exif_json = {}
 
-        metadata = extract_image_metadata(
-            image,
-            on_stage=lambda stage: set_stage(job, stage),
-        )
+        if runtime.applied_mode == "disabled":
+            set_stage(job, "indexing metadata only")
+            metadata = _metadata_only_payload(runtime.build_profile)
+            media.vector = None
+        else:
+            from find_api.workers.processors import (
+                RemoteFeatureDisabled,
+                extract_image_metadata,
+                generate_hybrid_embedding,
+            )
 
-        set_stage(job, "generating embedding")
+            metadata = extract_image_metadata(
+                image,
+                on_stage=lambda stage: set_stage(job, stage),
+            )
 
-        try:
-            media.vector = generate_hybrid_embedding(image, metadata)
-            if "stage_status" in metadata:
-                metadata["stage_status"]["embedding"] = {
-                    "status": "success",
-                    "error": None,
-                }
-        except Exception as e:
-            if "stage_status" in metadata:
-                metadata["stage_status"]["embedding"] = {
-                    "status": "failed",
-                    "error": sanitize_error(e),
-                }
-            raise
+            set_stage(job, "generating embedding")
+
+            try:
+                media.vector = generate_hybrid_embedding(image, metadata)
+                if "stage_status" in metadata:
+                    metadata["stage_status"]["embedding"] = {
+                        "status": "success",
+                        "error": None,
+                    }
+            except RemoteFeatureDisabled as e:
+                # Embedding is switched off for this remote deployment. Leave
+                # the column NULL rather than storing a placeholder: a vector
+                # here means "this image is semantically searchable", and a
+                # stand-in would make every search silently wrong.
+                logger.info("Skipping embedding for media %s: %s", media_id, e)
+                media.vector = None
+                if "stage_status" in metadata:
+                    metadata["stage_status"]["embedding"] = {
+                        "status": "skipped",
+                        "error": None,
+                    }
+            except Exception as e:
+                if "stage_status" in metadata:
+                    metadata["stage_status"]["embedding"] = {
+                        "status": "failed",
+                        "error": sanitize_error(e),
+                    }
+                raise
 
         set_stage(job, "indexing complete")
 
@@ -182,6 +271,23 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
 
         db.commit()
         invalidate_query_cache()
+        record_activity(
+            db,
+            "upload",
+            "completed",
+            user_id=media.uploader_user_id,
+            media_id=media.id,
+            payload={"filename": media.filename},
+        )
+
+        if runtime.applied_mode == "disabled":
+            logger.info("Metadata-only processing complete for media %s", media_id)
+            return {
+                "media_id": media_id,
+                "status": "success",
+                "mode": "disabled",
+                "metadata": metadata,
+            }
 
         # near-duplicate detection
         try:
@@ -250,10 +356,20 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
             if metadata:
                 media.metadata_json = metadata
             db.commit()
+            record_activity(
+                db,
+                "upload",
+                "failed",
+                user_id=media.uploader_user_id,
+                media_id=media.id,
+                payload={"filename": media.filename, "reason": safe_error},
+            )
 
         raise
 
     finally:
+        if runtime_tokens is not None:
+            reset_runtime(runtime_tokens)
         db.close()
 
 
@@ -262,13 +378,26 @@ def cluster_images():
     Background job to cluster all indexed images
     """
 
-    from find_api.ml.clusterer import get_image_clusterer
-    from find_api.models.cluster import Cluster
-    from find_api.core.config import settings
-
     db = SessionLocal()
+    runtime_tokens = None
 
     try:
+        runtime, runtime_tokens = _begin_worker_runtime(db)
+        if runtime.applied_mode == "unavailable":
+            raise RuntimeUnavailableError(runtime)
+        if runtime.applied_mode == "disabled":
+            logger.info("Skipping image clustering because AI is disabled")
+            return {
+                "status": "skipped",
+                "n_clusters": 0,
+                "message": "AI is disabled; clustering was not run",
+            }
+
+        import numpy as np
+
+        from find_api.ml.clusterer import get_image_clusterer
+        from find_api.models.cluster import Cluster
+
         logger.info("Starting clustering job...")
 
         # Step 1: Read data — no DB mutations yet.
@@ -303,7 +432,10 @@ def cluster_images():
         # Step 3: Run clustering — pure computation, no DB.
 
         clusterer = get_image_clusterer()
-        labels, info = clusterer.cluster(embeddings)
+        if runtime.applied_mode == "remote":
+            labels, info = _remote_cluster_embeddings(embeddings)
+        else:
+            labels, info = clusterer.cluster(embeddings)
 
         cluster_labels = sorted({int(label) for label in labels if int(label) != -1})
         # Step 4: Validate result BEFORE touching anything.
@@ -377,6 +509,8 @@ def cluster_images():
         raise
 
     finally:
+        if runtime_tokens is not None:
+            reset_runtime(runtime_tokens)
         clear_clustering_job_state()
         db.close()
 
@@ -453,13 +587,27 @@ def cluster_faces():
     4. Create a Person row for each group
     5. Link each face to its Person group
     """
-    from find_api.ml.clusterer import get_image_clusterer
-    from find_api.models.face import Face
-    from find_api.models.person import Person
-
     db = SessionLocal()
+    runtime_tokens = None
 
     try:
+        runtime, runtime_tokens = _begin_worker_runtime(db)
+        if runtime.applied_mode == "unavailable":
+            raise RuntimeUnavailableError(runtime)
+        if runtime.applied_mode != "full":
+            logger.info("Skipping face clustering in %s mode", runtime.applied_mode)
+            return {
+                "status": "skipped",
+                "n_persons": 0,
+                "message": "Face clustering requires the full AI runtime",
+            }
+
+        import numpy as np
+
+        from find_api.ml.clusterer import get_image_clusterer
+        from find_api.models.face import Face
+        from find_api.models.person import Person
+
         logger.info("Starting face clustering job...")
 
         # Step 1: Load all faces that have embeddings.
@@ -609,4 +757,6 @@ def cluster_faces():
         raise
 
     finally:
+        if runtime_tokens is not None:
+            reset_runtime(runtime_tokens)
         db.close()

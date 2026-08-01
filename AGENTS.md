@@ -24,6 +24,9 @@ This is the main shared instruction file for AI coding agents working on Find. T
 4. Keep the branch focused on one issue. Do not bundle opportunistic refactors, unrelated docs, formatting churn, or cleanup.
 5. Read `docs/policies/agent-security.md` before touching upload, storage, ML, face/person data, feedback, secrets, Docker, CI, or dependency files.
 
+Contributor branches start from and target `canary`. Only the reviewed
+maintainer promotion PR may target `main`; a merge to `main` is a release event.
+
 ## Project Structure & Module Organization
 
 Find is a local-first AI image intelligence app. Key paths:
@@ -31,7 +34,7 @@ Find is a local-first AI image intelligence app. Key paths:
 - `backend/src/find_api/` - FastAPI API, SQLAlchemy models, Redis/RQ jobs, MinIO helpers, and ML wrappers.
 - `frontend/src/app/` - Next.js App Router UI.
 - `frontend/src/lib/` - React Query API client, media URL helpers, and shared utilities.
-- `docker-compose.yml` - PostgreSQL/pgvector, Redis, MinIO, API, worker, and web orchestration.
+- `compose.yml` and `compose.*.yml` - modular PostgreSQL, storage, API, worker, web, and AI profiles.
 - `.env.example` - documented local configuration. Keep real `.env` files private.
 - `.github/workflows/ci.yml` - frontend and backend CI checks.
 
@@ -78,7 +81,7 @@ Run the API and worker separately when not using Docker.
 Prefer the light stack for routine UI, API, docs, and workflow work:
 
 ```bash
-docker compose -f docker-compose.light.yml up --build
+docker compose -f compose.mock.yml up --build
 ```
 
 Use the full stack only when the change needs real ML behavior.

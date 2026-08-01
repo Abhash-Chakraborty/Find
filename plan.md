@@ -1,8 +1,114 @@
 # Find — Whole-Application Overhaul Plan
 
-> **Status:** DRAFT v2 — planning only. No feature code is written from this file yet.
-> **Branch:** `feat/app-overhaul` (cut from `origin/main`).
+> **Status:** v1.1 release candidate — implementation complete locally; final PR/release gates in progress.
+> **Branch:** `canary` (the protected default integration branch).
 > **Reference codebase:** `./reference-app/` (local, gitignored, AGPL-3.0). Read-only reference used to learn UI/behavior; **its contents are never committed to Find**.
+
+## 2026-07-15 repository and release governance addendum
+
+- [x] Feature/fix PRs target the protected `canary` default branch; `main`
+  accepts only a reviewed promotion from canary.
+- [x] Patch, minor, and major release preparation share one manually dispatched
+  workflow that synchronizes every application and lockfile version.
+- [x] A main promotion starts a restartable three-hour release quiet period;
+  the emergency path is reserved for reviewed critical patch releases.
+- [x] CI, dependency updates, CODEOWNERS, issue/PR templates, image provenance,
+  and release automation are maintained as protected repository policy.
+
+## 2026-07-15 v1.1.3 patch addendum
+
+- [x] The NVIDIA artifact uses a CUDA 12/cuDNN 9 ONNX Runtime compatible with
+  its locked PyTorch CUDA 12.8 runtime rather than falling back to CPU while
+  looking for `libcublasLt.so.11`.
+- [x] InsightFace preloads the CUDA libraries bundled with the NVIDIA Python
+  packages before opening ONNX sessions; CPU-only builds remain CUDA-free.
+- [x] Version metadata is aligned at `1.1.3` across web, API, and desktop.
+- [x] Verification passes: 60 focused backend ML/runtime/worker tests, 257
+  frontend tests, frontend production and Tauri builds, modular CPU/NVIDIA
+  dependency exports, and live CUDA sessions for all five AntelopeV2 models.
+
+## 2026-07-14 v1.1.2 completion addendum
+
+- [x] Timeline browsing has one scroll model: native scrollbars are hidden,
+  the chronological scrubber appears only for overflowing multi-period
+  libraries, and a one-photo library has no inert scroll control.
+- [x] Image previews lock background scrolling, use addressable `/image/{id}`
+  URLs, include metadata and navigation, and expose route-appropriate archive,
+  trash, restore, and album-removal actions.
+- [x] Album sharing is disclosure-based and album detail can add photos from
+  recent media or semantic search without leaving the album.
+- [x] Trash retention supports 7, 30, 90, custom-day, and never-delete modes;
+  expired items are purged automatically when Trash is opened.
+- [x] Search, upload, account, duplicates, clusters, people, and Settings use a
+  compact hierarchy; duplicate behavior and AI-disabled behavior are explicit.
+- [x] GPU controls are unavailable when the installed modular artifact has no
+  GPU runtime. No-AI builds keep import and organization functional without
+  presenting clustering controls as usable.
+- [x] The private MapLibre map visibly renders bundled Natural Earth geometry
+  even when browser worker rendering omits GeoJSON fills; its main-thread SVG
+  fallback remains local and follows map pan, zoom, resize, and theme changes.
+- [x] Version metadata is aligned at `1.1.2` across web, API, and desktop.
+- [x] Verification passes: frontend 253 tests, production build with 20 routes,
+  backend Ruff checks, and backend 517 passed / 5 skipped.
+
+## 2026-07-14 v1.1.1 polish addendum
+
+- [x] Vault has separate setup, unlock, and recovery states; one-time recovery
+  codes are stored only as hashes, password changes rotate recovery codes, and
+  auto-lock supports immediate background lock, a delay, or system-style idle
+  timeout. New vault media stays in private storage without image encryption;
+  legacy encrypted items migrate after a successful old-password unlock.
+- [x] Appearance is controlled only from Settings with Light, Dark, and System
+  choices. The header theme shortcut was removed and the application header was
+  made more compact.
+- [x] The sidebar collapses to icon-only navigation with tooltips, distinct
+  duplicate/cluster icons, a one-line license footer, and the current version.
+- [x] Header and sidebar borders no longer form a crossing line, and background
+  shell regions become inert while the mobile drawer is open.
+- [x] Header search now covers photos, albums, destinations, and settings.
+  Empty image Search shows newest uploads in a normal grid; result suggestions
+  were removed and image results retain the shared preview.
+- [x] All actionable automated PR review findings were addressed, including
+  download authentication, timeline virtualization, profile conflicts, local
+  port binding, worker Redis configuration, and per-item vault restore state.
+- [x] Version metadata is aligned at `1.1.1` across web, API, and desktop.
+- [x] Live Docker and Computer-driven smoke checks verified image thumbnail and
+  full preview rendering, compact navigation, universal search, recent uploads,
+  theme switching, Settings AI/hardware controls, and vault recovery UI.
+
+
+## 2026-07-13 release-candidate addendum
+
+The local `reference-app/` checkout has been restored by the maintainer and is
+now intentionally retained as an ignored, read-only design/behavior reference.
+It is excluded from Docker contexts and CI rejects any tracked file below
+`reference-app/` or `@reference-app/`.
+
+- [x] The root route redirects to the timeline; the responsive application
+  shell, account/auth routes, settings, map, and vault are first-class routes.
+- [x] Gallery, search, albums, archive, trash, people/cluster media panels,
+  public shares, and vault use chronological timeline presentation rather than
+  independent masonry/grid scrolling.
+- [x] The private map is opt-in, stores scoped EXIF coordinates locally, uses a
+  bundled Natural Earth land layer, and makes no tile/geocoder requests.
+- [x] Vault sessions support explicit server lock, session-only decrypted
+  thumbnails, the shared viewer, and rollback-safe restore to normal storage.
+- [x] Settings control AI enablement, installed mock/full/disabled modes, and
+  CPU/GPU preference while reporting the artifact, applied mode, worker health,
+  and restart requirement.
+- [x] Build artifacts are split into `no-ai`, `mock`, `cpu`, and `nvidia`
+  Compose profiles so CPU/no-AI users do not install CUDA packages and NVIDIA
+  users do not install the CPU PyTorch wheel.
+- [x] Remote/BYOK inference stays fail-closed until a reviewed out-of-process
+  adapter exists; private media never silently falls back to a cloud service.
+
+Verification: frontend 253 tests and the 20-route production build pass; Tauri
+`cargo check --locked` passes at v1.1.1; uv lock and all five Compose
+configurations pass; the integrated backend suite passes with 516 tests and 5
+expected platform-specific skips. A seeded live-stack browser smoke verifies
+the gallery thumbnail, full preview, settings, search, vault recovery, and a
+healthy Full AI worker. Model-level NVIDIA inference remains a
+hardware-specific release gate.
 > **Nature of project:** Find is an **open-source** photo application. This plan reuses an open-source reference project's UI and code patterns under a compliant license (see §1).
 > **Tracking:** every step is a checkbox with a status label. Update as work lands. Keep this file the single source of truth.
 
@@ -148,7 +254,8 @@ A **fast, lightweight, open-source** Find that:
 - Ships a **settings panel** (modeled on the reference's settings UX) covering all configuration, including a **hardware-acceleration toggle**: use GPU when the system supports it, **fall back to CPU automatically** otherwise.
 - Is fully **Find-branded** (no reference marks), under a **compliant license** (§1), with a React web UI, FastAPI(+selective Rust) backend, and **foundations** laid for desktop (Tauri) and native mobile (Flutter/RN spike).
 - Keeps Find's niche/large ML models, while adopting the reference's faster models where they measurably win and licensing permits.
-- At the end, the local `reference-app/` is **removed and replaced with placeholder images**, confirming nothing is wholesale-copied (§Phase 9).
+- The local `reference-app/` remains an ignored, read-only reference checkout;
+  CI and Docker context guards prove the application never depends on it.
 
 ---
 
@@ -172,15 +279,9 @@ A **fast, lightweight, open-source** Find that:
 ### PHASE 1 — Discovery & Parity Inventory  *(parallel readers)*
 **Goal:** an exact, file-referenced map of what to build. *(~1 week, highly parallel)*
 
-- **Stage 1.1 — Feature inventory** *(lanes run concurrently)* — **DONE**; specs in `docs/overhaul/inventory/lane-*.md`
-  - Lane A (Timeline/grid) · [x] completed — `inventory/lane-a-timeline-grid.md`. Gap: no justified layout, no scrubber, no time-bucket model.
-  - Lane B (Albums/sharing) · [x] completed — `inventory/lane-b-albums-sharing.md`. Greenfield; share-link passwords must be hashed (ref stores plaintext).
-  - Lane C (Archive/favorites/trash) · [x] completed — `inventory/lane-c-archive-favorites-trash.md`. Needs `is_archived`+`deleted_at`; favorites = existing `liked`.
-  - Lane D (Slideshow/viewer) · [x] completed — `inventory/lane-d-viewer-slideshow.md`. Find viewer is a metadata dialog; needs zoom/pan/progressive-load/slideshow.
-  - Lane E (Backend/API) · [x] completed — `inventory/lane-e-backend-api.md`. Timeline bucket contract captured; albums/sharing/trash domains absent.
-  - Lane F (ML) · [x] completed — `inventory/lane-f-ml.md`. Adopt ONNX EP-fallback + CPU-light variants; keep Find's niche models.
-  - Lane G (Settings/config) · [x] completed — `inventory/lane-g-settings.md`. 6 setting groups; accel toggle lives in ML group; Find has only `USE_GPU` env bool.
-  - Lane H (Mobile/desktop) · [x] completed — `inventory/lane-h-mobile-desktop.md`. Tauri reuse is cheap; recommend RN+Expo for mobile spike.
+- **Stage 1.1 — Feature inventory** — **DONE**. The eight temporary lane
+  reports were consolidated into `docs/overhaul/inventory/parity-matrix.md`
+  and removed during the v1.1 repository cleanup.
 - **Stage 1.2 — Gap analysis & sequencing** — [x] completed
   - [x] completed — Parity matrix consolidated in `docs/overhaul/inventory/parity-matrix.md` (Appendix §C points to it).
   - [x] completed — Build sequence ordered (parity-matrix §C.5): backend foundation (timeline contract + asset-state) first, then design system, timeline UI, viewer, albums/sharing, settings/accel, ML, Rust, clients.
@@ -294,7 +395,9 @@ A **fast, lightweight, open-source** Find that:
 
 - **Stage 9.1 — Reference removal** · Owner: ___
   - [x] completed — Confirm no reference source is committed (`git ls-files | grep -i` checks); confirm derived files carry attribution (Path A). *verified: `git ls-files | grep -iE 'reference-app|immich'` → none; `reference-app/` is gitignored; the 6 genuinely-ported pure modules (justified-layout, timeline-scrubber, viewer-zoom/preload, slideshow, asset-viewer) carry the AGPL attribution header. New backend routers are original Find code (no verbatim port).*
-  - [x] completed — **Deleted local `reference-app/`** (gitignored, ~437MB, ~3865 files) per user authorization. **Independence proven by CI**: run 28397342197 is fully green on a checkout that never contained `reference-app/` (it's gitignored, so CI builds + tests Find without it) — a stronger proof of "nothing wholesale-copied" than a local placeholder swap. The literal "replace with placeholder images" step is N/A: Find never imported reference image assets (9.1 first box verified no reference source was committed), so there are no copied assets to placeholder-replace. The only tracked mentions of the folder are `.gitignore` (the ignore rule) and `NOTICE` (AGPL attribution credit) — neither a runtime dependency.
+  - [x] completed — `reference-app/` is ignored, excluded from Docker contexts,
+    and rejected by CI if tracked. Find builds and tests without the local
+    checkout, which may remain available for read-only parity audits.
 - **Stage 9.2 — Feature integration** · Owner: ___ — [x] completed — Wire all phases together on one running build; resolve cross-lane seams; everything reachable from the new UI. *verified: CI run 28397342197 green end-to-end — `next build` produces all routes, backend boots with all routers registered (`partner` added → import smoke OK), browser E2E confirms the shell + new feature routes (Timeline/Albums/Archive/Trash/Settings) render and are reachable from the nav. All overhaul features are wired into one integrated build on `feat/app-overhaul`.*
 - **Stage 9.3 — Compliance close-out** · Owner: ___ — [x] completed — Verify §1 license/attribution obligations satisfied; verify name-scrub CI is green.
   - [x] completed — §1 attribution obligations verified (see 9.1: no reference source committed, derived files attributed, Find is AGPL-3.0 per §G). Reference copy now also **removed locally** (9.1) with independence proven by a green CI run on a reference-free checkout. Fixed a shipped-UI compliance bug: the footer said "MIT License" — corrected to "AGPL-3.0 License" to match the relicense. *(Name-scrub CI intentionally not built — see opening note: it would enforce stripping upstream attribution, contrary to AGPL; attribution is credited in NOTICE instead. The factual check "no reference source committed" passes.)*
@@ -366,13 +469,20 @@ Every feature lane owns its tests; the program owns the final gate (§Phase 10).
 - [~] **Settings panel** — panel shipped with the hardware-accel group wired to a live backend **and persisted server-side** (`/api/settings`, §5.1). Remaining groups (library/storage/ML/appearance/advanced) are YAGNI-deferred until their backends exist — not a parity gap, a scope choice.
 - [~] **Hardware acceleration** — `Auto/GPU/CPU` resolution + **auto CPU fallback** implemented, unit-tested, wired into all ML inference, and **verified green on a real ubuntu+macOS+windows CI matrix** (run 28392485314). Remaining (owner-delegated): a real-GPU runner (non-fallback path) + Android/NNAPI on-device.
 - [ ] **Speed** — layout + timeline query hot paths **measured and within budget** (Appendix §E: layout ~12 ms, buckets ~19.5 ms, bucket ~19.7 ms — API-level). Real-hardware / low-end-profile budgets (first paint, scroll-to-date, thumbnail throughput, CPU-mode ML latency) **owner-delegated** — need a live stack + seeded library.
-- [~] **All tests green** — unit + integration + component **all green and CI-gated** (backend **458** / frontend **215**; `tsc` + `ruff` + `biome` clean; `next build` succeeds; CI run 28397342197 all-green incl. cross-OS matrix). **API-level E2E journey green** + **browser E2E (Playwright) built, passing, and CI-gated on a real runner** (§10.2). Full data-path browser journeys against seeded data remain (owner-delegated, need a live stack).
+- [x] **All tests green** — the integrated v1.1.1 candidate passes backend
+  **516 passed / 5 skipped** and frontend **253 passed**, plus Ruff, Biome,
+  TypeScript, the 20-route Next.js production build, five Compose parses, and
+  Tauri `cargo check --locked`. A Computer-driven seeded-stack smoke also
+  passes for thumbnail/full preview, search, shell, theme, vault recovery UI,
+  hardware detection, and Full AI worker health.
 - [~] **Accessibility + security** — automated a11y smoke tests green; sharing/crypto + album/asset-state + **partner-sharing** all `/security-review`'d (each found+fixed real issues, re-reviewed RESOLVED). Timeline scrubber made keyboard-operable (CI-gated by Biome a11y). **Manual screen-reader pass owner-delegated** (human — §10.5).
 - [x] **License compliant (Path A)** — Find is AGPL-3.0; `LICENSE`/`NOTICE`/metadata correct; shipped-UI footer corrected MIT→AGPL-3.0 (§9.3/§G).
 - [x] **Name scrubbed** — current tree clean. *(Name-scrub CI intentionally NOT built — it would enforce stripping upstream attribution, conflicting with AGPL; attribution credited in NOTICE instead.)*
-- [x] **Reference removed** — local `reference-app/` deleted (§9.1); independence proven by a green CI run on a reference-free checkout.
+- [x] **Reference isolated** — the local checkout is ignored and optional;
+  independence is proven by CI on reference-free checkouts.
 - [x] **Docs shipped** — hardware-accel guide ✅, features guide ✅, migration notes ✅, changelog ✅ — all linked from `docs/index.md` (§9.4).
-- [~] **Shipped** — **authorized by the owner.** Branch pushed; PR #321 open and **fully CI-green**. Merge to `main` + tag in progress (§10.6) — this pass.
+- [~] **Shipped** — **authorized by the owner.** Branch work continues in PR
+  #356; merge to `main` still requires the configured approving review.
 
 > Legend: `[x]` done · `[~]` substantial/verified-in-part · `[ ]` not started or genuinely blocked. When the last box is genuinely `[x]`: set **Goal status → `[x] GOAL COMPLETE`**, add a final Change Log entry, and stop.
 
@@ -409,8 +519,7 @@ lays out from `ratio` alone, blur-up is the only thing gated on it).
 | _seed at Phase 0.3_ | | | | |
 
 ### §C — Parity Matrix (have / partial / missing)
-Consolidated in `docs/overhaul/inventory/parity-matrix.md` (with per-lane detail in
-`docs/overhaul/inventory/lane-*.md`). Key takeaways:
+Consolidated in `docs/overhaul/inventory/parity-matrix.md`. Key takeaways:
 - The **timeline-bucket contract** (`/timeline/buckets` + `/timeline/bucket`, columnar, with
   per-asset `ratio`+`thumbhash`) is the long pole — Phase 3 UI consumes it, so it ships first.
 - `media` needs `is_archived` + `deleted_at`; favorites already exist as `liked`. A single

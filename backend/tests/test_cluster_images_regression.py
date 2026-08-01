@@ -91,6 +91,10 @@ def _run(mock_db: MagicMock, mock_clusterer: MagicMock):
 
     with (
         patch("find_api.workers.jobs.SessionLocal", return_value=mock_db),
+        patch(
+            "find_api.workers.jobs._begin_worker_runtime",
+            return_value=(SimpleNamespace(applied_mode="full"), None),
+        ),
         patch("find_api.workers.jobs.clear_clustering_job_state"),
         patch("find_api.workers.jobs.get_model_manager"),
         patch(

@@ -12,7 +12,6 @@ import {
   Archive,
   Check,
   Download,
-  Eye,
   FolderPlus,
   Heart,
   ImageOff,
@@ -21,7 +20,6 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -33,7 +31,7 @@ import {
   type PreviewMedia,
 } from "@/components/image-preview-modal";
 import { StatusIndicator } from "@/components/status-indicator";
-import { VirtualizedGrid } from "@/components/virtualized-grid";
+import { TimelineMediaView } from "@/components/timeline-media-view";
 import {
   api,
   type DateRangePreset,
@@ -240,11 +238,6 @@ const getStatusParamFromFilter = (filter: GalleryFilter): string | null => {
   return filter === "indexed" ? "completed" : filter;
 };
 
-type GalleryThumbnailProps = {
-  src: string;
-  alt: string;
-};
-
 type GallerySkeletonGridProps = {
   count: number;
   label?: string;
@@ -252,60 +245,6 @@ type GallerySkeletonGridProps = {
 
 function buildSkeletonKeys(prefix: string, count: number) {
   return Array.from({ length: count }, (_, index) => `${prefix}-${index + 1}`);
-}
-
-/**
- * Keeps the thumbnail area stable when no preview URL exists or an image fails to load.
- */
-function GalleryImageFallback() {
-  return (
-    <div
-      className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[color:var(--surface-soft)] text-[color:var(--near-white)]"
-      role="img"
-      aria-label="No preview available"
-    >
-      <ImageOff className="h-7 w-7" />
-      <span className="text-xs">No preview</span>
-    </div>
-  );
-}
-
-/**
- * Shows a lightweight, theme-aware skeleton while each thumbnail image loads.
- */
-function GalleryThumbnail({ src, alt }: GalleryThumbnailProps) {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
-
-  if (hasError) {
-    return <GalleryImageFallback />;
-  }
-
-  return (
-    <>
-      {!isLoaded && (
-        <div
-          className="absolute inset-0 animate-pulse bg-[color:var(--surface-soft)]"
-          aria-hidden="true"
-        />
-      )}
-      <Image
-        src={src}
-        alt={alt}
-        fill
-        className={`object-cover transition duration-500 group-hover:scale-[1.035] ${
-          isLoaded ? "opacity-100" : "opacity-0"
-        }`}
-        sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 16vw"
-        unoptimized
-        onLoad={() => setIsLoaded(true)}
-        onError={() => {
-          setIsLoaded(true);
-          setHasError(true);
-        }}
-      />
-    </>
-  );
 }
 
 /**
@@ -900,6 +839,24 @@ function GalleryPageContent() {
     },
   });
 
+  const downloadMutation = useMutation({
+    mutationFn: async (item: { id: number; filename: string }) => {
+      const response = await api.get<Blob>(`/api/image/${item.id}/original`, {
+        responseType: "blob",
+      });
+      const objectUrl = URL.createObjectURL(response.data);
+      try {
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = item.filename;
+        anchor.click();
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    },
+    onError: () => toast.error("Download failed. Please try again."),
+  });
+
   const moveToVaultMutation = useMutation({
     mutationFn: async (mediaId: number) => {
       if (!vaultSessionToken) {
@@ -1319,37 +1276,38 @@ function GalleryPageContent() {
               </div>
             )}
 
-            <VirtualizedGrid
+            <TimelineMediaView
               items={allItems}
-              className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
-              estimateRowHeight={250}
-              gap={12}
-              getKey={(item) => item.id}
-              renderItem={(item) => {
-                const imageSrc = resolveMediaUrl(
+              order={sortOrder}
+              getId={(item) => item.id}
+              getDate={(item) => item.created_at}
+              getWidth={(item) => item.width}
+              getHeight={(item) => item.height}
+              getThumbnailUrl={(item) =>
+                resolveMediaUrl(
                   item.thumbnail_url ?? item.url,
                   item.minio_key,
                   item.id,
                   !item.thumbnail_url,
-                );
-                const originalUrl = resolveMediaUrl(item.url, item.minio_key);
-                const downloadUrl = originalUrl ?? item.url ?? "";
+                )
+              }
+              getOriginalUrl={(item) => `/api/image/${item.id}/original`}
+              getAlt={(item) => item.filename}
+              getOpenLabel={(item) => `View ${item.filename}`}
+              onOpenItem={(item) => {
+                setQuerySelectedItem(null);
+                setSelectedMediaId(item.id);
+              }}
+              renderItemActions={(item) => {
                 const isSelected = selectedIds.has(item.id);
-
                 return (
-                  <article
-                    key={item.id}
-                    className={`frost-panel card-hover group relative overflow-hidden rounded-2xl ${
-                      isSelected ? "ring-2 ring-[color:var(--blue)]" : ""
-                    }`}
-                  >
+                  <div className="flex flex-wrap items-center justify-end gap-1 text-white">
+                    <StatusIndicator status={item.status} />
                     <button
                       type="button"
                       onClick={() => handleToggleSelection(item.id)}
-                      className={`absolute left-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-full border backdrop-blur-md transition ${
-                        isSelected
-                          ? "border-[color:var(--blue)] bg-[color:var(--blue)] text-white"
-                          : "border-white/30 bg-black/45 text-white hover:bg-black/65"
+                      className={`icon-button h-8 w-8 ${
+                        isSelected ? "bg-[color:var(--blue)] text-white" : ""
                       }`}
                       aria-label={
                         isSelected
@@ -1358,146 +1316,76 @@ function GalleryPageContent() {
                       }
                       aria-pressed={isSelected}
                     >
-                      {isSelected ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <span className="h-3.5 w-3.5 rounded-full border border-current" />
-                      )}
+                      <Check className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
-                      className="relative block aspect-square w-full overflow-hidden bg-[color:var(--surface-soft)] text-left focus:outline-none"
-                      onClick={() => {
-                        setQuerySelectedItem(null);
-                        setSelectedMediaId(item.id);
-                      }}
-                      aria-label={`View ${item.filename}`}
+                      onClick={() => handleToggleLike(item.id)}
+                      disabled={likeMutation.isPending}
+                      className="icon-button h-8 w-8"
+                      aria-label={item.liked ? "Unlike image" : "Like image"}
                     >
-                      {imageSrc ? (
-                        <GalleryThumbnail
-                          key={imageSrc}
-                          src={imageSrc}
-                          alt={item.filename}
-                        />
-                      ) : (
-                        <GalleryImageFallback />
-                      )}
-
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/12 to-transparent opacity-60 transition-opacity group-hover:opacity-90" />
-                      <StatusIndicator
-                        status={item.status}
-                        className="absolute bottom-3 right-3"
+                      <Heart
+                        className={`h-3.5 w-3.5 ${
+                          item.liked ? "fill-current" : ""
+                        }`}
                       />
-                      <div className="absolute inset-0 grid place-items-center opacity-0 transition duration-200 group-hover:opacity-100">
-                        <span className="icon-button h-10 w-10 bg-[color:var(--overlay)] text-white backdrop-blur-md">
-                          <Eye className="h-4 w-4" />
-                        </span>
-                      </div>
                     </button>
-
-                    <div className="space-y-3 p-3">
-                      <p className="truncate text-xs font-medium text-[color:var(--near-white)]">
-                        {item.filename}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleLike(item.id)}
-                          disabled={likeMutation.isPending}
-                          className={`icon-button h-8 w-8 ${
-                            item.liked
-                              ? "border-[var(--red)] bg-[var(--red-soft)] text-[color:var(--red)]"
-                              : "text-[color:var(--silver)]"
-                          } ${
-                            likeMutation.isPending
-                              ? "cursor-not-allowed opacity-70"
-                              : ""
-                          }`}
-                          aria-label={
-                            item.liked ? "Unlike image" : "Like image"
-                          }
-                        >
-                          <Heart
-                            className={`h-3.5 w-3.5 ${
-                              item.liked ? "fill-current" : ""
-                            }`}
-                          />
-                        </button>
-                        {downloadUrl && (
-                          <a
-                            href={downloadUrl}
-                            download={item.filename}
-                            className="icon-button h-8 w-8 text-[color:var(--silver)]"
-                            aria-label="Download image"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </a>
-                        )}
-                        {(item.status === "failed" ||
-                          (item.status === "indexed" && !item.caption)) && (
-                          <button
-                            type="button"
-                            onClick={() => reprocessMutation.mutate(item.id)}
-                            disabled={
-                              reprocessMutation.isPending &&
-                              reprocessMutation.variables === item.id
-                            }
-                            className={`icon-button h-8 w-8 text-[color:var(--silver)] ${
-                              reprocessMutation.isPending &&
-                              reprocessMutation.variables === item.id
-                                ? "cursor-not-allowed opacity-70"
-                                : ""
-                            }`}
-                            aria-label="Retry analysis"
-                          >
-                            <RotateCcw
-                              className={`h-3.5 w-3.5 ${
-                                reprocessMutation.isPending &&
-                                reprocessMutation.variables === item.id
-                                  ? "animate-spin"
-                                  : ""
-                              }`}
-                            />
-                          </button>
-                        )}
-                        {isVaultUnlocked && vaultSessionToken && (
-                          <button
-                            type="button"
-                            onClick={() => moveToVaultMutation.mutate(item.id)}
-                            disabled={
-                              moveToVaultMutation.isPending &&
-                              moveToVaultMutation.variables === item.id
-                            }
-                            className={`icon-button h-8 w-8 text-[color:var(--silver)] ${
-                              moveToVaultMutation.isPending &&
-                              moveToVaultMutation.variables === item.id
-                                ? "cursor-not-allowed opacity-70"
-                                : ""
-                            }`}
-                            aria-label="Move to Vault"
-                            title="Move to Vault"
-                          >
-                            <Lock className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleDeleteRequest(item.id, item.filename)
-                          }
-                          disabled={deleteMutation.isPending}
-                          className={`icon-button h-8 w-8 text-[color:var(--silver)] ${
-                            deleteMutation.isPending
-                              ? "cursor-not-allowed opacity-70"
-                              : ""
-                          }`}
-                          aria-label="Delete image"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </article>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadMutation.mutate({
+                          id: item.id,
+                          filename: item.filename,
+                        })
+                      }
+                      disabled={downloadMutation.isPending}
+                      className="icon-button h-8 w-8"
+                      aria-label="Download image"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                    {(item.status === "failed" ||
+                      (item.status === "indexed" && !item.caption)) && (
+                      <button
+                        type="button"
+                        onClick={() => reprocessMutation.mutate(item.id)}
+                        disabled={
+                          reprocessMutation.isPending &&
+                          reprocessMutation.variables === item.id
+                        }
+                        className="icon-button h-8 w-8"
+                        aria-label="Retry analysis"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {isVaultUnlocked && vaultSessionToken && (
+                      <button
+                        type="button"
+                        onClick={() => moveToVaultMutation.mutate(item.id)}
+                        disabled={
+                          moveToVaultMutation.isPending &&
+                          moveToVaultMutation.variables === item.id
+                        }
+                        className="icon-button h-8 w-8"
+                        aria-label="Move to Vault"
+                      >
+                        <Lock className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDeleteRequest(item.id, item.filename)
+                      }
+                      disabled={deleteMutation.isPending}
+                      className="icon-button h-8 w-8"
+                      aria-label="Delete image"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 );
               }}
             />

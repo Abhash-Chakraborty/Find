@@ -213,7 +213,7 @@
 
 ## 5. Configuration & Secrets
 
-### Current: Docker .env + docker-compose.yml
+### Current: Docker `.env` + modular `compose*.yml`
 
 | Aspect | Details |
 |--------|---------|

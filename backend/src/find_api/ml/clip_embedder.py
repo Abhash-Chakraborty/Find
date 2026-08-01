@@ -12,6 +12,7 @@ import logging
 from find_api.core.config import settings
 from find_api.core.hardware import current_torch_device
 from find_api.core.model_manager import get_model_manager
+from find_api.core.runtime_profile import current_accel_mode
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class CLIPEmbedder:
     def _config_key(self) -> str:
         return (
             f"model={settings.CLIP_MODEL}|pretrained={settings.CLIP_PRETRAINED}|"
-            f"accel={settings.ACCEL_MODE}"
+            f"accel={current_accel_mode()}"
         )
 
     def embed_image(self, image: Union[Image.Image, np.ndarray]) -> np.ndarray:

@@ -1,0 +1,142 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.4-pg16-bookworm
+    environment:
+      POSTGRES_DB: find
+      POSTGRES_USER: find
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U find"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4.9-alpine3.21
+    command: redis-server --loglevel warning --requirepass ${REDIS_PASSWORD}
+    hostname: redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:${MINIO_HOST_PORT:-9200}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9201}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  api:
+    image: find-backend:no-ai
+    pull_policy: never
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: python:3.12-slim
+        PYTHON_VERSION: "3.12"
+        FIND_BUILD_PROFILE: no-ai
+        UV_SYNC_EXTRAS: ""
+    command: uvicorn find_api.main:app --host 0.0.0.0 --port 8000 --log-level warning
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment: &backend-environment
+      DATABASE_URL: ${DATABASE_URL}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9200/images}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-images}
+      MINIO_PUBLIC_READ: ${MINIO_PUBLIC_READ:-false}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      REDIS_URL: ${REDIS_URL}
+      FIND_BUILD_PROFILE: no-ai
+      ML_MODE: disabled
+      AI_ENABLED: "false"
+      MAP_ENABLED: ${MAP_ENABLED:-false}
+      ACCEL_MODE: cpu
+      USE_GPU: "false"
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      MODEL_MANAGER_PROCESS_NAME: api
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    image: find-backend:no-ai
+    pull_policy: never
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: python:3.12-slim
+        PYTHON_VERSION: "3.12"
+        FIND_BUILD_PROFILE: no-ai
+        UV_SYNC_EXTRAS: ""
+    command: rq worker --worker-class find_api.workers.rq_worker.FindWorker --url ${REDIS_URL} high default low
+    environment:
+      <<: *backend-environment
+      MODEL_MANAGER_PROCESS_NAME: worker
+    volumes:
+      - ./backend:/app
+    depends_on:
+      api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_MINIO_BUCKET: ${NEXT_PUBLIC_MINIO_BUCKET:-images}
+      NEXT_PUBLIC_MINIO_URL: ${NEXT_PUBLIC_MINIO_URL:-http://localhost:9200}
+      NEXT_PUBLIC_MAX_BULK_FILES: ${NEXT_PUBLIC_MAX_BULK_FILES:-200}
+      NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB: ${NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB:-50}
+      NODE_ENV: production
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  redis_data:
+  minio_data:
