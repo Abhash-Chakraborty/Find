@@ -6,7 +6,38 @@ hardware report reflects the persisted accel-mode preference once set.
 
 from unittest.mock import patch
 
+from find_api import __version__
 from find_api.core.config import settings
+
+
+class TestAppConfigVersion:
+    """/api/config carries the backend package version (#355).
+
+    The Settings > About card and the sidebar footer both read it from here, so
+    neither has to hard-code a value that silently goes stale on release.
+    """
+
+    def test_reports_the_package_version(self, client):
+        assert client.get("/api/config").json()["app_version"] == __version__
+
+    def test_version_is_not_placeholder(self, client):
+        version = client.get("/api/config").json()["app_version"]
+        assert isinstance(version, str)
+        assert version.strip()
+        assert version not in {"unknown", "0.0.0"}
+
+    def test_config_stays_free_of_secrets_and_paths(self, client):
+        """The card copies this payload's fields into a support summary."""
+        body = client.get("/api/config").json()
+        forbidden = {
+            "database_url",
+            "secret_key",
+            "minio_access_key",
+            "minio_secret_key",
+            "media_root",
+            "storage_path",
+        }
+        assert forbidden.isdisjoint(body.keys())
 
 
 class TestSettingsLocalMode:

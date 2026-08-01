@@ -95,9 +95,14 @@ function PersonCard({
               className="relative h-full w-full overflow-hidden rounded-xl"
             >
               {mediaId && src ? (
+                // Decorative on purpose: these are up to four crops of the same
+                // person, and the card already announces that identity through
+                // the overlay button ("Open <name> group") and the name below.
+                // Naming each tile would make a screen reader read four
+                // near-identical labels that add nothing.
                 <Image
                   src={src}
-                  alt="Person photo"
+                  alt=""
                   fill
                   className="border border-[var(--frost)] object-cover"
                   sizes="(max-width: 768px) 25vw, 10vw"

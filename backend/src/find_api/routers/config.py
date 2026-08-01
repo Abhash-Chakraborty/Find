@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from find_api import __version__
 from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_admin_user, get_required_user
@@ -69,6 +70,7 @@ def get_app_config(db: Session = Depends(get_db)):
 
     runtime = _runtime_resolution(db)
     return {
+        "app_version": __version__,
         "ml_mode": runtime.applied_mode,
         "configured_ml_mode": runtime.configured_mode,
         "accel_mode": runtime.configured_accel_mode,

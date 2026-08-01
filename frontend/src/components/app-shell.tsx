@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import {
   Menu,
   PanelLeftClose,
@@ -25,6 +26,7 @@ import {
   UploadStatusRing,
   useUploadStatus,
 } from "@/components/upload-status-indicator";
+import { getAppConfig } from "@/lib/api";
 import {
   applyThemePreference,
   readThemePreference,
@@ -62,6 +64,17 @@ export function AppShell({ children }: AppShellProps) {
   const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const shellless = isShelllessRoute(pathname);
   const uploadStatus = useUploadStatus();
+
+  // The footer version comes from the backend package version so it cannot
+  // drift from the real build the way a hard-coded string does. Shared cache
+  // key with Settings > About, so this is one request per session.
+  const appConfig = useQuery({
+    queryKey: ["app-config"],
+    queryFn: getAppConfig,
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+    enabled: !shellless,
+  });
 
   useEffect(() => {
     const apply = () => applyThemePreference(readThemePreference());
@@ -287,7 +300,9 @@ export function AppShell({ children }: AppShellProps) {
               Copyright 2026 Find · AGPL-3.0 License
             </span>
           )}
-          <span className="shrink-0">v1.1.3</span>
+          <span className="shrink-0" data-testid="sidebar-app-version">
+            {appConfig.data ? `v${appConfig.data.app_version}` : ""}
+          </span>
         </div>
         <button
           type="button"

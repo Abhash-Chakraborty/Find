@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BadgeInfo,
   Cpu,
   MapPinned,
   Palette,
@@ -11,6 +12,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { AboutSettings } from "@/components/about-settings";
 import { AiRuntimeSettings } from "@/components/ai-runtime-settings";
 import { AppearanceSettings } from "@/components/appearance-settings";
 import { HardwareAccelSettings } from "@/components/hardware-accel-settings";
@@ -24,6 +26,7 @@ const SECTIONS = [
   { href: "#ai-runtime-heading", label: "Local AI", icon: Sparkles },
   { href: "#privacy", label: "Privacy", icon: MapPinned },
   { href: "#trash-retention", label: "Trash", icon: Trash2 },
+  { href: "#about", label: "About", icon: BadgeInfo },
 ] as const;
 
 export default function SettingsPage() {
@@ -185,6 +188,7 @@ export default function SettingsPage() {
                     save.mutate({ trash_retention_days })
                   }
                 />
+                <AboutSettings />
               </div>
             )}
 
