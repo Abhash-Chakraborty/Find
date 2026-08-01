@@ -287,6 +287,9 @@ export function AppShell({ children }: AppShellProps) {
               Copyright 2026 Find · AGPL-3.0 License
             </span>
           )}
+          {/* Release-managed: scripts/bump_version.py keeps this in sync with
+              the backend package version and CI fails if it drifts. Do not
+              replace it with a fetched value. */}
           <span className="shrink-0">v1.1.3</span>
         </div>
         <button

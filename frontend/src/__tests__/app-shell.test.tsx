@@ -175,4 +175,61 @@ describe("AppShell", () => {
     fireEvent.keyDown(window, { key: "/" });
     expect(navigation.push).toHaveBeenCalledWith("/search");
   });
+
+  // #346 asked for the drawer keyboard path to be exercised in both themes.
+  // The theme is a class on <html> that swaps CSS custom properties, so the
+  // same assertions must hold under either one.
+  it.each([
+    "light",
+    "dark",
+  ])("keeps the drawer keyboard contract in %s mode", (theme) => {
+    document.documentElement.classList.add(theme);
+    document.documentElement.dataset.theme = theme;
+
+    render(
+      <AppShell>
+        <div>Content</div>
+      </AppShell>,
+    );
+
+    const trigger = screen.getByRole("button", {
+      name: "Open navigation menu",
+    });
+    fireEvent.click(trigger);
+
+    const drawer = screen.getByRole("dialog", { name: "Navigation menu" });
+    expect(drawer).toHaveAttribute("aria-modal", "true");
+    expect(drawer).toHaveAttribute("aria-hidden", "false");
+    expect(document.body.style.overflow).toBe("hidden");
+
+    const focusable = Array.from(
+      drawer.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    expect(focusable.at(0)).toHaveFocus();
+
+    // Background chrome is inert while the drawer owns the viewport.
+    expect(screen.getByRole("banner", { hidden: true })).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(drawer).toHaveAttribute("aria-hidden", "true");
+    expect(document.body.style.overflow).toBe("");
+    expect(trigger).toHaveFocus();
+  });
+
+  it("keeps the release-managed sidebar version visible", () => {
+    render(
+      <AppShell>
+        <div>Content</div>
+      </AppShell>,
+    );
+
+    // scripts/bump_version.py rewrites this string on release and CI fails if
+    // it drifts, so it is asserted rather than fetched.
+    expect(screen.getByText(/^v\d+\.\d+\.\d+$/)).toBeInTheDocument();
+  });
 });

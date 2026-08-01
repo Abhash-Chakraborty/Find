@@ -211,6 +211,8 @@ export interface JobStatus {
 }
 
 export interface AppConfig {
+  /** Backend package version (find_api.__version__), the single source of truth. */
+  app_version: string;
   ml_mode: "disabled" | "full" | "mock" | "unavailable";
   configured_ml_mode: "disabled" | "full" | "mock" | "remote";
   accel_mode: AccelMode;

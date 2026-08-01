@@ -16,24 +16,33 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage from "@/app/settings/page";
 import type { AppSettings, HardwareReport } from "@/lib/api";
 
-const { getSettings, updateSettings, getHardwareReport, getRuntimeConfig } =
-  vi.hoisted(() => ({
-    getSettings: vi.fn(),
-    updateSettings: vi.fn(),
-    getHardwareReport: vi.fn(),
-    getRuntimeConfig: vi.fn(),
-  }));
+const {
+  getSettings,
+  updateSettings,
+  getHardwareReport,
+  getRuntimeConfig,
+  getAppConfig,
+} = vi.hoisted(() => ({
+  getSettings: vi.fn(),
+  updateSettings: vi.fn(),
+  getHardwareReport: vi.fn(),
+  getRuntimeConfig: vi.fn(),
+  getAppConfig: vi.fn(),
+}));
 
 vi.mock("@/lib/api", () => ({
   getSettings,
   updateSettings,
   getHardwareReport,
   getRuntimeConfig,
+  // Read by the About card this page now renders.
+  getAppConfig,
 }));
 
 const REPORT: HardwareReport = {
@@ -68,6 +77,21 @@ function renderPage() {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+// The About card mounts on every render of this page, so give it a default
+// rather than relying on each test to remember.
+beforeEach(() => {
+  getAppConfig.mockResolvedValue({
+    app_version: "1.1.3",
+    ml_mode: "full",
+    configured_ml_mode: "full",
+    accel_mode: "cpu",
+    ai_enabled: true,
+    map_enabled: false,
+    build_profile: "cpu",
+    supported_ml_modes: ["disabled", "mock", "full"],
+  });
 });
 
 describe("SettingsPage", () => {
@@ -171,7 +195,12 @@ describe("SettingsPage", () => {
     updateSettings.mockResolvedValue(settings({ ai_enabled: false }));
     renderPage();
 
-    expect(await screen.findByText("cpu")).toBeInTheDocument();
+    // Scoped to the AI section: the About card also reports the build profile,
+    // so a bare findByText("cpu") is ambiguous.
+    const aiSection = await screen.findByRole("region", {
+      name: "Local AI runtime",
+    });
+    expect(await within(aiSection).findByText("cpu")).toBeInTheDocument();
     const aiSwitch = screen.getByRole("switch", {
       name: /enable local ai processing/i,
     });
