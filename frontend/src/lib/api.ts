@@ -1180,3 +1180,57 @@ export const emptyTrash = async (): Promise<BulkDeleteResponse> => {
   const response = await api.post<BulkDeleteResponse>("/api/trash/empty");
   return response.data;
 };
+
+export interface ActivityItem {
+  id: number;
+  category: string;
+  action: string;
+  user_id: number | null;
+  media_id: number | null;
+  payload: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
+export interface ActivityListResponse {
+  items: ActivityItem[];
+  total: number;
+  skip: number;
+  page: number;
+  limit: number;
+}
+
+export interface ActivityPurgeResponse {
+  message: string;
+  deleted_count: number;
+}
+
+export const getActivity = async (
+  params: {
+    skip?: number;
+    limit?: number;
+    category?: string;
+    action?: string;
+    media_id?: number;
+  } = {},
+): Promise<ActivityListResponse> => {
+  const response = await api.get<ActivityListResponse>("/api/activity", {
+    params: {
+      skip: params.skip ?? 0,
+      limit: params.limit ?? 50,
+      category: params.category,
+      action: params.action,
+      media_id: params.media_id,
+    },
+  });
+  return response.data;
+};
+
+export const clearActivity = async (): Promise<ActivityPurgeResponse> => {
+  const response = await api.post<ActivityPurgeResponse>("/api/activity/clear");
+  return response.data;
+};
+
+export const purgeActivity = async (): Promise<ActivityPurgeResponse> => {
+  const response = await api.post<ActivityPurgeResponse>("/api/activity/purge");
+  return response.data;
+};
