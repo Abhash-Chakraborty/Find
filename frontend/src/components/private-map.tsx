@@ -127,7 +127,7 @@ function createLandOverlay(
 export function mapMarkersToFeatureCollection(markers: readonly MapMarker[]) {
   return {
     type: "FeatureCollection" as const,
-    features: markers.map((marker) => ({
+    features: (markers ?? []).map((marker) => ({
       type: "Feature" as const,
       geometry: {
         type: "Point" as const,
