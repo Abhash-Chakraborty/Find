@@ -293,7 +293,7 @@ module.exports = async function run({ github, context, core }) {
 
   if (shouldTriggerReview) {
     const linkedIssuesText =
-      closingIssueNumbersArray.isArray(closingIssueNumbers) ? closingIssueNumbers.map((number) => `#${number}`).join(", ")
+      closingIssueNumbersArray.isArray(closingIssueNumbers) ? (closingIssueNumbers ?? []).map((number) => `#${number}`).join(", ")
         : "none linked yet";
     const sourceLabelText = [...ELIGIBLE_REVIEW_LABELS].filter((label) => labelSet.has(label)).join(", ");
     const triggerBody = [
