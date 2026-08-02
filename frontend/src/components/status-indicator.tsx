@@ -14,7 +14,7 @@ export function StatusIndicator({
   showLabel = false,
 }: StatusIndicatorProps) {
   const normalized = status ?? "pending";
-  const label = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  const label = normalized[0].toUpperCase() + normalized.slice(1);
 
   const state = (() => {
     switch (normalized) {

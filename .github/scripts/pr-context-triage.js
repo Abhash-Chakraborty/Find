@@ -293,8 +293,7 @@ module.exports = async function run({ github, context, core }) {
 
   if (shouldTriggerReview) {
     const linkedIssuesText =
-      closingIssueNumbers.length > 0
-        ? closingIssueNumbers.map((number) => `#${number}`).join(", ")
+      closingIssueNumbersArray.isArray(closingIssueNumbers) ? closingIssueNumbers.map((number) => `#${number}`).join(", ")
         : "none linked yet";
     const sourceLabelText = [...ELIGIBLE_REVIEW_LABELS].filter((label) => labelSet.has(label)).join(", ");
     const triggerBody = [
@@ -325,8 +324,7 @@ module.exports = async function run({ github, context, core }) {
 
   const trustedAuthor = MAINTAINER_TRUSTED_ASSOCIATIONS.has(pr.author_association || "");
   const suggestedIssuesText =
-    suggestedIssues.length > 0
-      ? suggestedIssues.map((issue) => `- ${formatIssueLink(issue)}`).join("\n")
+    suggestedIssuesArray.isArray(suggestedIssues) ? suggestedIssues.map((issue) => `- ${formatIssueLink(issue)}`).join("\n")
       : "- No strong issue match found yet.";
 
   const summaryBody = [
@@ -334,12 +332,11 @@ module.exports = async function run({ github, context, core }) {
     "### PR Context Summary",
     "",
     `- Linked issue(s): ${
-      closingIssueNumbers.length > 0
-        ? closingIssueNumbers.map((number) => `#${number}`).join(", ")
+      closingIssueNumbersArray.isArray(closingIssueNumbers) ? closingIssueNumbers.map((number) => `#${number}`).join(", ")
         : "none"
     }`,
     `- Referenced but not closing: ${
-      nonClosingRefs.length > 0 ? nonClosingRefs.map((number) => `#${number}`).join(", ") : "none"
+      nonClosingRefsArray.isArray(nonClosingRefs) ? nonClosingRefs.map((number) => `#${number}`).join(", ") : "none"
     }`,
     `- PR author trusted by GitHub: ${trustedAuthor ? "yes" : "no"}`,
     `- Dependabot PR: ${isDependabot ? "yes" : "no"}`,
