@@ -49,12 +49,17 @@ export function MapPrivacySettings({
           aria-checked={checked}
           disabled={enabled === undefined || pending}
           onClick={() => onChange(!checked)}
-          className="relative h-7 w-12 shrink-0 rounded-full border border-[color:var(--frost-strong)] bg-[color:var(--surface-hover)] transition disabled:cursor-wait disabled:opacity-50 aria-checked:border-[color:var(--near-white)] aria-checked:bg-[color:var(--near-white)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--void)]"
+          aria-busy={pending}
+          className="relative h-11 w-12 shrink-0 rounded-full border border-[color:var(--frost-strong)] bg-[color:var(--surface-hover)] transition hover:border-[color:var(--frost-strong)] active:scale-95 disabled:cursor-wait disabled:opacity-50 aria-checked:border-[color:var(--green)] aria-checked:bg-[color:var(--green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--void)]"
         >
           <span
             aria-hidden="true"
-            className="absolute left-1 top-1 size-[1.125rem] rounded-full bg-white shadow transition-transform"
-            style={{ transform: checked ? "translateX(1.25rem)" : undefined }}
+            className="absolute left-1 top-1/2 size-5 rounded-full bg-[color:var(--void)] shadow transition-transform"
+            style={{
+              transform: checked
+                ? "translate(1.25rem, -50%)"
+                : "translateY(-50%)",
+            }}
           />
         </button>
       </div>
@@ -86,7 +91,7 @@ export function MapPrivacySettings({
           {checked && (
             <Link
               href="/map"
-              className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-[color:var(--near-white)] hover:bg-[color:var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
+              className="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-xs font-semibold text-[color:var(--near-white)] outline-none transition hover:bg-[color:var(--surface-hover)] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
             >
               Open map
             </Link>

@@ -23,17 +23,23 @@ export function TrashRetentionSettings({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex gap-3">
-          <Clock3 className="mt-0.5 h-5 w-5 text-[color:var(--silver)]" />
+          <Clock3
+            aria-hidden="true"
+            className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--silver)]"
+          />
           <div>
             <div className="flex items-center gap-2">
-              <h2 id="trash-retention-heading" className="font-semibold">
+              <h2
+                id="trash-retention-heading"
+                className="text-base font-semibold tracking-tight"
+              >
                 Trash retention
               </h2>
               <button
                 type="button"
                 title="Expired items are permanently removed when Trash is opened. Set Never to require manual emptying."
                 aria-label="Expired items are permanently removed when Trash is opened. Set Never to require manual emptying."
-                className="rounded text-[color:var(--muted)] outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
+                className="inline-flex size-11 items-center justify-center rounded-lg text-[color:var(--muted)] outline-none transition hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
               >
                 <Info className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -53,7 +59,7 @@ export function TrashRetentionSettings({
             disabled={pending}
             aria-pressed={value === days}
             onClick={() => onChange(days)}
-            className={`rounded-xl border px-4 py-2 text-sm transition ${
+            className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-medium outline-none transition active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] disabled:cursor-wait disabled:opacity-60 ${
               value === days
                 ? "border-[color:var(--near-white)] bg-[color:var(--near-white)] text-[color:var(--void)]"
                 : "border-[color:var(--frost)] text-[color:var(--silver)] hover:bg-[color:var(--surface-hover)]"
@@ -62,7 +68,7 @@ export function TrashRetentionSettings({
             {days === 0 ? "Never" : `${days} days`}
           </button>
         ))}
-        <label className="flex items-center gap-2 rounded-xl border border-[color:var(--frost)] px-3 py-1.5 text-sm text-[color:var(--silver)]">
+        <label className="flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--frost)] px-3 py-1.5 text-sm text-[color:var(--silver)] transition focus-within:border-[color:var(--frost-strong)] focus-within:ring-2 focus-within:ring-[color:var(--blue)]">
           Custom
           <input
             type="number"
@@ -79,7 +85,8 @@ export function TrashRetentionSettings({
                 onChange(days);
               }
             }}
-            className="w-20 bg-transparent text-right text-[color:var(--near-white)] outline-none"
+            aria-label="Custom retention period in days"
+            className="w-20 bg-transparent text-right text-[color:var(--near-white)] outline-none disabled:cursor-wait disabled:opacity-60"
           />
         </label>
       </div>

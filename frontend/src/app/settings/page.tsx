@@ -47,9 +47,9 @@ export default function SettingsPage() {
   });
 
   return (
-    <main className="page-surface pb-20 pt-8 sm:pt-10 lg:pb-24 lg:pt-12">
+    <main className="page-surface pb-16 pt-8 sm:pb-20 sm:pt-10 lg:pb-24 lg:pt-12">
       <div className="mx-auto w-full max-w-6xl">
-        <header className="mb-7 border-b border-[color:var(--frost)] pb-5 sm:mb-8">
+        <header className="mb-6 border-b border-[color:var(--frost)] pb-6 sm:mb-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <div className="flex flex-wrap items-baseline gap-2">
@@ -63,7 +63,7 @@ export default function SettingsPage() {
                   Settings
                 </h1>
               </div>
-              <p className="mt-2 text-sm text-[color:var(--silver)]">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--silver)]">
                 Appearance, local AI, privacy, and retention.
               </p>
             </div>
@@ -88,7 +88,7 @@ export default function SettingsPage() {
           </div>
         </header>
 
-        <div className="grid gap-8 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
+        <div className="grid gap-6 sm:gap-8 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
           <aside className="lg:sticky lg:top-[calc(var(--nav-height)+2rem)] lg:self-start">
             <nav
               aria-label="Settings sections"
@@ -99,7 +99,7 @@ export default function SettingsPage() {
                   <a
                     key={href}
                     href={href}
-                    className="flex min-w-max items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-[color:var(--silver)] outline-none transition hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] lg:min-w-0"
+                    className="flex min-h-11 min-w-max items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-[color:var(--silver)] outline-none transition hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] lg:min-w-0"
                   >
                     <Icon aria-hidden="true" size={16} />
                     {label}
@@ -150,7 +150,7 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => settingsQuery.refetch()}
-                  className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-[color:var(--near-white)] px-4 text-sm font-semibold text-[color:var(--void)] outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
+                  className="mt-5 inline-flex h-11 items-center gap-2 rounded-xl bg-[color:var(--near-white)] px-4 text-sm font-semibold text-[color:var(--void)] outline-none transition hover:opacity-90 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] disabled:cursor-wait disabled:opacity-60"
                 >
                   <RefreshCw aria-hidden="true" size={15} />
                   Retry
