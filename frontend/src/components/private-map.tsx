@@ -276,7 +276,7 @@ export function calculateMapBounds(
     east -= 360;
   }
 
-  const latitudes = markers.map((marker) => marker.lat);
+  const latitudes = (markers ?? []).map((marker) => marker.lat);
   return [west, Math.min(...latitudes), east, Math.max(...latitudes)];
 }
 
