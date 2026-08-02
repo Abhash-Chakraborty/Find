@@ -150,6 +150,8 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => settingsQuery.refetch()}
+                  disabled={settingsQuery.isFetching}
+                  aria-busy={settingsQuery.isFetching}
                   className="mt-5 inline-flex h-11 items-center gap-2 rounded-xl bg-[color:var(--near-white)] px-4 text-sm font-semibold text-[color:var(--void)] outline-none transition hover:opacity-90 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] disabled:cursor-wait disabled:opacity-60"
                 >
                   <RefreshCw aria-hidden="true" size={15} />
