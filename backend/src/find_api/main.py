@@ -19,6 +19,7 @@ from find_api.core.recovery import run_analysis_recovery_loop
 from find_api.core.storage import init_storage
 from find_api.core.config import settings
 from find_api.core.model_manager import get_model_manager
+from find_api.diagnostics.bundle import ensure_error_log_buffer
 from find_api.routers import (
     auth,
     cluster,
@@ -67,6 +68,9 @@ async def lifespan(app: FastAPI):
     # Initialize database
     logger.info("Initializing database...")
     init_db()
+
+    # Install diagnostics error buffer once at boot (not at import time).
+    ensure_error_log_buffer()
 
     # Initialize configured storage backend
     logger.info("Initializing %s storage...", settings.STORAGE_BACKEND)

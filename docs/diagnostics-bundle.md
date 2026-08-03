@@ -1,5 +1,11 @@
 # Privacy-Safe Local Diagnostics Bundle
 
+> **Admin-only. Local-only. Never uploaded.**
+> `GET /api/admin/diagnostics/bundle` requires admin access (shared mode) and
+> returns a redacted JSON file to the caller only. Find does **not** send this
+> bundle to any external service — paste it into a GitHub issue only after you
+> have reviewed the contents yourself.
+
 Local-only support export for Find. Generate this bundle on your machine, review
 it, then attach the JSON to a GitHub issue when asking for help. **Nothing is
 uploaded automatically** — there is no telemetry, no cloud exporter, and no

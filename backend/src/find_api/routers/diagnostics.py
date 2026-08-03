@@ -14,10 +14,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from find_api.core.dependencies import get_admin_user
-from find_api.diagnostics.bundle import (
-    collect_diagnostics_bundle,
-    ensure_error_log_buffer,
-)
+from find_api.diagnostics.bundle import collect_diagnostics_bundle
 from find_api.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -29,10 +26,6 @@ _BUNDLE_HEADERS = {
     "X-Find-Diagnostics": "local-only",
 }
 _GENERIC_FAILURE = {"error": "Failed to generate diagnostics bundle"}
-
-# Install the in-process error buffer when this router is imported so recent
-# ERROR logs are available by the time an admin requests a bundle.
-ensure_error_log_buffer()
 
 
 @router.get("/admin/diagnostics/bundle")
