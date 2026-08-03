@@ -285,3 +285,38 @@ class TestRunnerScoring:
         dataset = parse_dataset(_dataset())
         with pytest.raises(ValueError):
             run_dataset(dataset, stub_retriever({}), repetitions=0)
+
+
+class TestReviewRegressions:
+    """Cases for bugs found in review of the harness itself."""
+
+    def test_p50_reports_an_observed_sample_on_even_length_input(self):
+        # statistics.median() averages the two middle values, so an even-length
+        # sample produced a p50 no query actually recorded — the one percentile
+        # here that broke the "always an observed value" promise.
+        summary = latency_summary([10.0, 20.0])
+        assert summary["p50_ms"] in (10.0, 20.0)
+        assert summary["p50_ms"] != 15.0
+
+    def test_odd_length_p50_is_unchanged(self):
+        assert latency_summary([5.0, 15.0, 25.0])["p50_ms"] == 15.0
+
+    def test_a_later_repetition_failing_scores_as_a_miss(self):
+        # The first attempt succeeds and the second raises. Keeping the first
+        # ranking would credit precision, recall, and MRR for a query that
+        # errored.
+        dataset = parse_dataset(_dataset())
+        calls = {"n": 0}
+
+        def _flaky(query, k):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return ["m1"]
+            raise RuntimeError("second attempt exploded")
+
+        report = score_outcomes(dataset, run_dataset(dataset, _flaky, repetitions=3))
+        assert report["metrics"]["error_count"] == 1
+        assert report["metrics"]["mrr"] == 0.0
+        assert report["metrics"]["at_k"]["5"]["precision"] == 0.0
+        assert report["metrics"]["at_k"]["5"]["recall"] == 0.0
+        assert report["metrics"]["empty_result_rate"] == 1.0

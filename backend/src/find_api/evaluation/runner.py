@@ -5,8 +5,10 @@ path is identical whether the rankings came from a canned fixture, a live
 search endpoint, or a future experimental branch. Only then are two runs
 actually comparable.
 
-A retriever is any callable ``(query_text, k) -> Sequence[str]`` returning
-ranked media ids, most relevant first.
+A retriever is any callable ``(EvalQuery, k) -> Sequence[str]`` returning
+ranked media ids, most relevant first. It receives the whole query object, not
+just the text, so a retriever can key off the query id (as the stub does) or
+off ``category`` without a second lookup.
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ from find_api.evaluation.metrics import (
     reciprocal_rank,
 )
 
-Retriever = Callable[[str, int], Sequence[str]]
+Retriever = Callable[[EvalQuery, int], Sequence[str]]
 
 RESULT_SCHEMA_VERSION = 1
 
@@ -88,6 +90,10 @@ def run_dataset(
             if attempt == 0:
                 ranking = result
             if error:
+                # Discard any ranking an earlier repetition produced. A query
+                # that failed on some attempts must score as a miss, not keep
+                # credit for precision, recall, and MRR from a lucky first run.
+                ranking = []
                 break
 
         samples.sort()

@@ -150,6 +150,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default=None, help="also write JSON to this path")
     args = parser.parse_args(argv)
 
+    # Checked here so a bad value produces the same "error: ..." line as every
+    # other input problem, rather than a raw traceback out of run_dataset.
+    if args.repetitions < 1:
+        print("error: --repetitions must be at least 1", file=sys.stderr)
+        return 2
+
     try:
         dataset = load_dataset(args.dataset)
         if args.stub:

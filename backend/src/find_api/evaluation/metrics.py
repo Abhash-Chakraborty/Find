@@ -20,7 +20,6 @@ Conventions, stated explicitly because they change the numbers:
 
 from __future__ import annotations
 
-from statistics import median
 from typing import Iterable, Sequence
 
 
@@ -124,7 +123,10 @@ def latency_summary(samples: Sequence[float]) -> dict[str, float]:
     return {
         "count": len(samples),
         "mean_ms": round(sum(samples) / len(samples), 2),
-        "p50_ms": round(median(samples), 2),
+        # percentile(), not statistics.median(): median averages the two middle
+        # values on an even-length sample, which would make p50 the one
+        # percentile here that reports a number no query actually produced.
+        "p50_ms": round(percentile(samples, 50), 2),
         "p95_ms": round(percentile(samples, 95), 2),
         "p99_ms": round(percentile(samples, 99), 2),
         "min_ms": round(min(samples), 2),
