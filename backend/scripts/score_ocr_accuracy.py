@@ -151,12 +151,12 @@ def main():
         m = all_results.get("mobile", {}).get(category)
         s = all_results.get("server", {}).get(category)
         m_str = (
-            f"{m['exact_match_rate']*100:.0f}% / CER {m['avg_char_error_rate']}"
+            f"{m['exact_match_rate'] * 100:.0f}% / CER {m['avg_char_error_rate']}"
             if m
             else "n/a"
         )
         s_str = (
-            f"{s['exact_match_rate']*100:.0f}% / CER {s['avg_char_error_rate']}"
+            f"{s['exact_match_rate'] * 100:.0f}% / CER {s['avg_char_error_rate']}"
             if s
             else "n/a"
         )

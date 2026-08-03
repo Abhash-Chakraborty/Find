@@ -77,8 +77,8 @@ where = ["src"]
 dev = [
   "pytest==9.1.1",
   "pytest-asyncio==1.4.0",
-  "black==26.3.1",
-  "ruff==0.1.14",
+  "black==26.5.1",
+  "ruff==0.16.1",
   "pip-audit==2.10.1",
   "scikit-learn==1.9.0",
   # Used only by the standalone OCR benchmark scripts (scripts/benchmark_ocr_variants.py
@@ -86,6 +86,22 @@ dev = [
   "psutil>=7.2.2",
   "python-levenshtein>=0.27.3",
 ]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# Pin the rule set explicitly rather than inheriting whatever ruff defaults to.
+# Ruff changes its default selection between releases: 0.16 turned on B, BLE, I,
+# S, SIM, UP, RUF and more, which surfaced 874 findings on an otherwise
+# unchanged tree and was the only thing blocking the 0.1.14 -> 0.16 bump.
+# Selecting here means the lint surface changes when we decide to change it,
+# not as a side effect of bumping the linter.
+#
+# This is ruff's own stable default — pyflakes plus the pycodestyle errors that
+# catch real mistakes rather than formatting noise — so it is exactly the
+# baseline the backend was already green on under 0.1.14.
+select = ["E4", "E7", "E9", "F"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
