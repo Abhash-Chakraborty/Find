@@ -240,8 +240,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--variant",
-        default="C0",
-        help=f"Track C ranking variant for --db ({', '.join(sorted(VARIANTS))})",
+        # Defaults to None rather than "C0" so `--variant C3 --all-variants` can
+        # be rejected instead of silently scoring all seven and ignoring the
+        # explicit choice.
+        default=None,
+        help=f"Track C ranking variant for --db, default C0 "
+        f"({', '.join(sorted(VARIANTS))})",
     )
     parser.add_argument(
         "--all-variants",
@@ -275,9 +279,22 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --repetitions must be at least 1", file=sys.stderr)
         return 2
 
-    if (args.all_variants or args.approximate) and not args.db:
-        print("error: --all-variants and --approximate require --db", file=sys.stderr)
+    if (args.all_variants or args.approximate or args.variant) and not args.db:
+        print(
+            "error: --variant, --all-variants, and --approximate require --db",
+            file=sys.stderr,
+        )
         return 2
+
+    if args.all_variants and args.variant:
+        print(
+            "error: --variant and --all-variants are mutually exclusive; "
+            "--all-variants scores every variant",
+            file=sys.stderr,
+        )
+        return 2
+
+    variant_id = args.variant or "C0"
 
     try:
         dataset = load_dataset(args.dataset)
@@ -288,12 +305,20 @@ def main(argv: list[str] | None = None) -> int:
     exact = not args.approximate
 
     if args.db and args.all_variants:
-        report = _run_variants(
-            dataset,
-            [VARIANTS[key] for key in sorted(VARIANTS)],
-            exact=exact,
-            repetitions=args.repetitions,
-        )
+        try:
+            report = _run_variants(
+                dataset,
+                [VARIANTS[key] for key in sorted(VARIANTS)],
+                exact=exact,
+                repetitions=args.repetitions,
+            )
+        except RuntimeError as exc:
+            # Raised by default_embedder() under ML_MODE=mock. That is an
+            # expected operator mistake with a specific remedy, so it gets the
+            # same "error: ..." line as any other bad input rather than a
+            # traceback that buries the explanation.
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         if args.json:
             print(json.dumps(report, indent=2))
         else:
@@ -308,11 +333,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.stub:
             retrieve = stub_retriever(load_stub_run(args.stub))
         elif args.db:
-            variant = get_variant(args.variant)
+            variant = get_variant(variant_id)
             retrieve = variant_retriever(variant, _db_candidate_source(exact))
         else:
             retrieve = _api_retriever(args.base_url, args.timeout, args.token)
-    except (DatasetError, KeyError) as exc:
+    except (DatasetError, KeyError, RuntimeError) as exc:
+        # KeyError from an unknown --variant, RuntimeError from ML_MODE=mock.
+        # KeyError stringifies with quotes around the whole message, so take
+        # its argument directly.
         message = exc.args[0] if isinstance(exc, KeyError) else exc
         print(f"error: {message}", file=sys.stderr)
         return 2
@@ -320,7 +348,7 @@ def main(argv: list[str] | None = None) -> int:
     outcomes = run_dataset(dataset, retrieve, repetitions=args.repetitions)
     report = score_outcomes(dataset, outcomes)
     if args.db:
-        variant = get_variant(args.variant)
+        variant = get_variant(variant_id)
         report["variant"] = {"id": variant.id, "description": variant.description}
         report["retrieval"] = "exact" if exact else "approximate (deployed HNSW index)"
 
