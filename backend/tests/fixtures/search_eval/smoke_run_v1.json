@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "run_id": "smoke-run-v1",
+  "description": "Canned rankings for smoke-v1, consumed by the stub retriever. Chosen so every metric has a non-trivial, hand-checkable value: one perfect query, one mid-rank hit, one partial hit, one total miss, and one empty response.",
+  "rankings": {
+    "q-object-bicycle": ["smoke-001", "smoke-002", "smoke-003", "smoke-004", "smoke-005"],
+    "q-document-invoice": ["smoke-011", "smoke-012", "smoke-010", "smoke-013", "smoke-014"],
+    "q-scene-sunset": ["smoke-022", "smoke-020", "smoke-023", "smoke-024", "smoke-025"],
+    "q-miss-unicorn": ["smoke-031", "smoke-032", "smoke-033"],
+    "q-empty-response": []
+  }
+}
