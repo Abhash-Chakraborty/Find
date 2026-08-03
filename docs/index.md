@@ -52,6 +52,8 @@ This directory is organized by document purpose and implementation status.
 ## Research
 
 - [Vector Search Benchmark Evaluation](research/vector-search-benchmarks.md)
+- [Search Retrieval and Ranking Benchmark Plan](research/search-retrieval-benchmark-plan.md) - experiment design; results blocked on the evaluation harness.
+- [Encrypted Bring-Your-Own-Storage Sync](research/encrypted-byo-storage-sync.md) - provider comparison and v1 boundary for optional encrypted backup.
 
 ## Assets
 
