@@ -9,12 +9,28 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from find_api.core.config import settings
 from find_api.core.dependencies import get_admin_user, get_required_user
+from find_api.core.model_footprint import build_report
 from find_api.core.model_manager import get_model_manager
 from find_api.core.queue import get_job, get_redis_connection
 from find_api.core.runtime_profile import worker_health
 from find_api.models.user import User
 
 router = APIRouter()
+
+
+@router.get("/status/models/footprint")
+def get_model_footprint(_admin: Optional[User] = Depends(get_admin_user)):
+    """
+    Report what each ML model downloads and loads: configured identifier,
+    on-disk cache size, loaded/unloaded state, execution device, and
+    last-use time.
+
+    Admin-only, and never returns filesystem paths (see
+    ``find_api.core.model_footprint`` for the full-path local CLI
+    equivalent). Use this as the measurement source before changing ML
+    model defaults or installer download sizes.
+    """
+    return build_report(include_paths=False)
 
 
 @router.get("/status/models")
