@@ -131,6 +131,35 @@ the clearest evidence before adoption.
 
 Baseline is B0 plus the existing `search_ranking` boost, exact retrieval.
 
+> **Implemented and runnable.** Every variant below now exists as a
+> `RankingVariant` in `backend/src/find_api/evaluation/variants.py` and scores
+> through the #100 harness:
+>
+> ```bash
+> cd backend
+> uv run python scripts/evaluate_search.py \
+>     --dataset my_dataset.json --db --all-variants --out trackc.json
+> ```
+>
+> Three properties of that implementation matter for reading the results:
+>
+> - **One retrieval per query, shared by every variant.** Byte-identical input
+>   means a metric difference is attributable to the ranking rule and nothing
+>   else. The cost is that per-variant latency then covers ranking only; score a
+>   single variant without `--all-variants` when end-to-end latency is the number
+>   being reported. The output records which of the two it is.
+> - **Retrieval is pinned to exact search** (`enable_indexscan`/`enable_bitmapscan`
+>   off) unless `--approximate` is passed, so ANN recall error cannot be
+>   misattributed to a ranking rule.
+> - **C0 is asserted against production**, not approximated. `tests/test_search_variants.py`
+>   reranks the same candidates through `routers/search.py`'s own helpers and
+>   requires identical output across five query shapes and three values of k. A
+>   baseline that has quietly drifted turns every delta in the results table into
+>   a measurement of the drift, so this is the test that matters most.
+>
+> What is still missing is the labeled dataset, not the code. Numbers remain
+> outstanding.
+
 | ID | Variant | Question it answers |
 | --- | --- | --- |
 | C0 | Current: static threshold + existing overlap boost | Reference |
@@ -144,6 +173,20 @@ Baseline is B0 plus the existing `search_ranking` boost, exact retrieval.
 C1 and C5 are deliberately framed as *challenges to existing behaviour*. Both are currently
 unjustified by measurement, and a benchmark that only ever proposes additions will never remove
 anything.
+
+Two of these needed a concrete rule before they could be implemented, and the rule chosen is a
+candidate to be tested rather than a settled design:
+
+- **C2's adaptive cutoff is `mean + z·σ` over the pool's similarities**, `z = 0.5` by default and
+  exposed as `adaptive_z` for sweeping. It has a sharp edge worth knowing before reading its
+  numbers: on a pool with no spread the cutoff collapses onto the common score and, because the
+  filter is strict, discards everything — where C0 would have returned the lot. That is a real
+  property of the rule, not an implementation bug, and it is the reason `adaptive_z` is a knob.
+  It is also anchored to the pool's own mean, so the cutoff is not comparable across queries.
+- **C4's non-semantic bonuses start small** — 0.02 favourite, 0.02 recency at full weight decaying
+  with a 365-day half-life, 0.01 album membership — deliberately below the 0.035 an OCR token
+  overlap earns. If signals this weak already move the metrics, the question of whether they help
+  is answered without a sweep; if they do not, the sweep is cheap.
 
 ## Measurement protocol
 
@@ -220,7 +263,8 @@ evidence because it is free to revert; a schema change cannot.
    data, so this is now a confirmation run against a real library rather than the urgent first
    step, and it can be scheduled alongside Track B instead of ahead of everything.
 2. Track A3/A4 — cheap, runtime-only, fully reversible.
-3. Track C — query-side only, no reindex, so iteration is fast.
+3. Track C — query-side only, no reindex, so iteration is fast. **Implemented; needs only a
+   dataset.** All seven variants score in a single command against one shared candidate pool.
 4. Track B1/B4 — establishes how much the text signals actually contribute before anything is tuned.
 5. Track B2/B3 — tuning, only if B1/B4 show headroom.
 6. Track B5 — last, and only with clear evidence, since it is the only irreversible schema change.
@@ -254,5 +298,8 @@ cheapest measurement that could invalidate the plan runs first.
 - `docs/plans/partial/local-search-quality-roadmap.md` — target metrics and stage sequencing
 - `backend/src/find_api/workers/processors.py` — `generate_hybrid_embedding`, the B0 baseline
 - `backend/src/find_api/ml/search_ranking.py` — existing overlap-based boost and rerank
+- `backend/src/find_api/evaluation/variants.py` — the Track C matrix, C0–C6
+- `backend/src/find_api/evaluation/sources.py` — exact-pinned pgvector candidate source
+- `backend/tests/test_search_variants.py` — the C0-equals-production assertion
 - `backend/src/find_api/routers/search.py` — retrieval query, static threshold, timing instrumentation
 - `backend/alembic/versions/add_hnsw_vector_index.py` — the HNSW index and its default parameters

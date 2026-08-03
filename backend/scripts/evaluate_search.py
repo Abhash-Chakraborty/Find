@@ -18,6 +18,11 @@ Retrievers:
                     stack with an indexed library. Media ids in the dataset
                     must be the media_id values that instance returns.
 
+  --db              Retrieve straight from Postgres and rank with a Track C
+                    variant (issue #99). Needs database access and real model
+                    weights in this process, and pins retrieval to exact search
+                    unless --approximate is passed.
+
 Usage (from the backend directory):
 
     # Smoke: proves the harness itself works
@@ -28,6 +33,10 @@ Usage (from the backend directory):
     # Against a live local instance
     uv run python scripts/evaluate_search.py \
         --dataset my_dataset.json --api --base-url http://localhost:8000
+
+    # The whole Track C matrix, one retrieval per query shared by every variant
+    uv run python scripts/evaluate_search.py \
+        --dataset my_dataset.json --db --all-variants --out trackc.json
 
     # Machine-readable, for before/after comparison
     uv run python scripts/evaluate_search.py ... --json --out baseline.json
@@ -58,6 +67,14 @@ from find_api.evaluation.runner import (  # noqa: E402
     score_outcomes,
     stub_retriever,
 )
+from find_api.evaluation.variants import (  # noqa: E402
+    VARIANTS,
+    PoolCache,
+    RankingVariant,
+    get_variant,
+    max_pool_size,
+    variant_retriever,
+)
 
 
 def _api_retriever(base_url: str, timeout: float, token: str | None):
@@ -77,6 +94,85 @@ def _api_retriever(base_url: str, timeout: float, token: str | None):
         return [str(row["media_id"]) for row in payload.get("results", [])]
 
     return _retrieve
+
+
+def _db_candidate_source(exact: bool):
+    """Build a Postgres-backed candidate source using real model weights."""
+    from find_api.core.database import SessionLocal
+    from find_api.evaluation.sources import default_embedder, postgres_candidate_source
+
+    return postgres_candidate_source(SessionLocal, default_embedder(), exact=exact)
+
+
+def _run_variants(
+    dataset,
+    variants: list[RankingVariant],
+    *,
+    exact: bool,
+    repetitions: int,
+) -> dict:
+    """Score several Track C variants against one shared candidate pool.
+
+    Retrieving once and ranking many times is what makes the comparison fair:
+    every variant sees byte-identical input, so a metric difference is
+    attributable to the ranking rule alone.
+
+    The pool is filled before any variant is scored, not lazily during the first
+    one. Otherwise whichever variant happened to run first would absorb the whole
+    retrieval cost — embedding plus a Postgres round trip, which dwarfs any
+    ranking rule — and would read as dramatically the slowest in the results
+    table for no reason but its position in the loop.
+    """
+    source = _db_candidate_source(exact)
+    cache = PoolCache(source=source, pool_size=max_pool_size(variants, dataset.max_k))
+    for query in dataset.queries:
+        cache.get(query)
+
+    reports: dict[str, dict] = {}
+    for variant in variants:
+        retrieve = variant_retriever(variant, source, cache=cache)
+        outcomes = run_dataset(dataset, retrieve, repetitions=repetitions)
+        report = score_outcomes(dataset, outcomes)
+        report["variant"] = {"id": variant.id, "description": variant.description}
+        reports[variant.id] = report
+
+    return {
+        "result_schema_version": 1,
+        "dataset_id": dataset.dataset_id,
+        "retrieval": "exact" if exact else "approximate (deployed HNSW index)",
+        "shared_candidate_pool": True,
+        "latency_note": (
+            "Candidate retrieval is shared across variants and is performed "
+            "before any of them are scored, so every per-variant latency here "
+            "measures ranking only and they are comparable with each other. "
+            "Score a single variant without --all-variants for end-to-end "
+            "latency."
+        ),
+        "variants": reports,
+    }
+
+
+def _print_variant_comparison(report: dict) -> None:
+    print(f"Dataset       : {report['dataset_id']}")
+    print(f"Retrieval     : {report['retrieval']}")
+    print()
+
+    header = (
+        f"{'VARIANT':<8} {'MRR':>8} {'P@10':>8} {'R@10':>8} {'EMPTY':>8}  DESCRIPTION"
+    )
+    print(header)
+    print("-" * len(header))
+    for variant_id, row in report["variants"].items():
+        metrics = row["metrics"]
+        at_10 = metrics["at_k"].get("10") or next(iter(metrics["at_k"].values()))
+        print(
+            f"{variant_id:<8} {metrics['mrr']:>8.4f} {at_10['precision']:>8.4f} "
+            f"{at_10['recall']:>8.4f} {metrics['empty_result_rate']:>8.4f}  "
+            f"{row['variant']['description']}"
+        )
+
+    print()
+    print(report["latency_note"])
 
 
 def _print_human(report: dict) -> None:
@@ -137,6 +233,33 @@ def main(argv: list[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--stub", metavar="RUN", help="replay canned rankings")
     source.add_argument("--api", action="store_true", help="query a live instance")
+    source.add_argument(
+        "--db",
+        action="store_true",
+        help="retrieve from Postgres and rank with a Track C variant",
+    )
+    parser.add_argument(
+        "--variant",
+        # Defaults to None rather than "C0" so `--variant C3 --all-variants` can
+        # be rejected instead of silently scoring all seven and ignoring the
+        # explicit choice.
+        default=None,
+        help=f"Track C ranking variant for --db, default C0 "
+        f"({', '.join(sorted(VARIANTS))})",
+    )
+    parser.add_argument(
+        "--all-variants",
+        action="store_true",
+        help="score every Track C variant against one shared candidate pool",
+    )
+    parser.add_argument(
+        "--approximate",
+        action="store_true",
+        help=(
+            "use the deployed HNSW index instead of pinning exact search; "
+            "ranking differences then include ANN recall error"
+        ),
+    )
     parser.add_argument("--base-url", default="http://localhost:8000")
     parser.add_argument("--token", default=None, help="bearer token for --api")
     parser.add_argument("--timeout", type=float, default=30.0)
@@ -156,18 +279,78 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --repetitions must be at least 1", file=sys.stderr)
         return 2
 
+    if (args.all_variants or args.approximate or args.variant) and not args.db:
+        print(
+            "error: --variant, --all-variants, and --approximate require --db",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.all_variants and args.variant:
+        print(
+            "error: --variant and --all-variants are mutually exclusive; "
+            "--all-variants scores every variant",
+            file=sys.stderr,
+        )
+        return 2
+
+    variant_id = args.variant or "C0"
+
     try:
         dataset = load_dataset(args.dataset)
-        if args.stub:
-            retrieve = stub_retriever(load_stub_run(args.stub))
-        else:
-            retrieve = _api_retriever(args.base_url, args.timeout, args.token)
     except DatasetError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
+    exact = not args.approximate
+
+    if args.db and args.all_variants:
+        try:
+            report = _run_variants(
+                dataset,
+                [VARIANTS[key] for key in sorted(VARIANTS)],
+                exact=exact,
+                repetitions=args.repetitions,
+            )
+        except RuntimeError as exc:
+            # Raised by default_embedder() under ML_MODE=mock. That is an
+            # expected operator mistake with a specific remedy, so it gets the
+            # same "error: ..." line as any other bad input rather than a
+            # traceback that buries the explanation.
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            _print_variant_comparison(report)
+        if args.out:
+            Path(args.out).write_text(json.dumps(report, indent=2), encoding="utf-8")
+            if not args.json:
+                print(f"\nWrote {args.out}")
+        return 0
+
+    try:
+        if args.stub:
+            retrieve = stub_retriever(load_stub_run(args.stub))
+        elif args.db:
+            variant = get_variant(variant_id)
+            retrieve = variant_retriever(variant, _db_candidate_source(exact))
+        else:
+            retrieve = _api_retriever(args.base_url, args.timeout, args.token)
+    except (DatasetError, KeyError, RuntimeError) as exc:
+        # KeyError from an unknown --variant, RuntimeError from ML_MODE=mock.
+        # KeyError stringifies with quotes around the whole message, so take
+        # its argument directly.
+        message = exc.args[0] if isinstance(exc, KeyError) else exc
+        print(f"error: {message}", file=sys.stderr)
+        return 2
+
     outcomes = run_dataset(dataset, retrieve, repetitions=args.repetitions)
     report = score_outcomes(dataset, outcomes)
+    if args.db:
+        variant = get_variant(variant_id)
+        report["variant"] = {"id": variant.id, "description": variant.description}
+        report["retrieval"] = "exact" if exact else "approximate (deployed HNSW index)"
 
     if args.json:
         print(json.dumps(report, indent=2))
