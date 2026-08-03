@@ -41,6 +41,7 @@ This directory is organized by document purpose and implementation status.
 - [Real ML Troubleshooting](guides/real-ml-troubleshooting.md)
 - [Features Guide](guides/features.md)
 - [Hardware Acceleration](guides/hardware-acceleration.md)
+- [CPU-Only Runtime Profile](guides/cpu-runtime-profile.md)
 - [Search Evaluation Harness](guides/search-evaluation.md)
 - [PR Triage Automation Dry Run](guides/pr-triage-dry-run.md)
 - [TestSprite PR Testing](guides/testsprite-ci.md)
