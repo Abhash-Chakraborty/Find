@@ -1,11 +1,16 @@
 """
 OCR using PaddleOCR (CPU optimized).
 
-The supported runtime is PaddleOCR 3.x with PaddlePaddle 3.2.x. PaddleOCR 3.x
-uses the ``predict`` API and pipeline flags such as
+The supported runtime is PaddleOCR 3.x with PaddlePaddle 3.2.x or 3.3.x.
+PaddleOCR 3.x uses the ``predict`` API and pipeline flags such as
 ``use_textline_orientation``. A small PaddleOCR 2.x fallback remains so older
 local environments fail less abruptly, but the lockfile should resolve the
 current 3.x stack.
+
+PaddlePaddle 3.3.1 regressed its oneDNN kernels and raises
+``NotImplementedError`` on the first prediction, so ``_load_model`` probes once
+after construction and reloads with ``enable_mkldnn=False`` when that happens.
+See ``OCRExtractor._onednn_inference_works``.
 
 PP-OCRv5 ships two hardware-targeted variants for both the detection and
 recognition models:
@@ -93,21 +98,24 @@ class OCRExtractor:
             )
         return resolved
 
-    def _load_model(self):
-        """Loader function for ModelManager"""
-        logger.info("Loading PaddleOCR model (variant=%s)...", self.variant)
+    def _construct(self, *, disable_onednn: bool = False):
+        """Build a PaddleOCR pipeline, returning it plus whether 2.x was used."""
         model_names = PP_OCR_MODELS[self.variant]
+        extra = {"enable_mkldnn": False} if disable_onednn else {}
         # PaddleOCR 3.x replaced the older use_angle_cls/use_gpu/show_log arguments
         # with pipeline-specific flags. Try the current API first, then fall back
         # for older 2.x installs. PaddleOCR 2.x has no mobile/server split, so
         # the requested variant only applies on the 3.x path.
-        legacy_api = False
         try:
-            model = PaddleOCR(
-                use_doc_orientation_classify=False,
-                use_doc_unwarping=False,
-                use_textline_orientation=True,
-                **model_names,
+            return (
+                PaddleOCR(
+                    use_doc_orientation_classify=False,
+                    use_doc_unwarping=False,
+                    use_textline_orientation=True,
+                    **model_names,
+                    **extra,
+                ),
+                False,
             )
         except TypeError as exc:
             # Only a constructor signature mismatch means "this is really a 2.x
@@ -116,10 +124,51 @@ class OCRExtractor:
             # instead of being masked by a legacy retry that silently ignores
             # the requested variant.
             logger.info("Falling back to PaddleOCR 2.x arguments: %s", exc)
-            model = PaddleOCR(
-                use_angle_cls=True, lang=LEGACY_FALLBACK_LANG, use_gpu=False
+            return (
+                PaddleOCR(use_angle_cls=True, lang=LEGACY_FALLBACK_LANG, use_gpu=False),
+                True,
             )
-            legacy_api = True
+
+    @staticmethod
+    def _onednn_inference_works(model) -> bool:
+        """Run one tiny prediction to find out whether oneDNN kernels work here.
+
+        PaddlePaddle 3.3.1 raises ``NotImplementedError`` from its oneDNN
+        instruction path on the first real prediction --
+        ``ConvertPirAttribute2RuntimeAttribute not support
+        [pir::ArrayAttribute<pir::DoubleAttribute>]`` -- which takes down every
+        OCR call in the container. PaddlePaddle 3.2.x is unaffected, so this is
+        a version regression rather than a CPU-profile quirk, and it hits any
+        image built from the current lock.
+
+        The probe has to run an actual prediction because construction succeeds
+        either way; there is no flag to interrogate. It costs one forward pass
+        on a 32x32 blank image, once per load.
+        """
+        try:
+            model.predict(np.zeros((32, 32, 3), dtype=np.uint8))
+        except NotImplementedError:
+            return False
+        except Exception:  # noqa: BLE001 - any other failure is not what this
+            # probe is testing for. Report the runtime as usable and let the
+            # real call surface its own error rather than silently switching
+            # kernels for an unrelated reason.
+            return True
+        return True
+
+    def _load_model(self):
+        """Loader function for ModelManager"""
+        logger.info("Loading PaddleOCR model (variant=%s)...", self.variant)
+
+        model, legacy_api = self._construct()
+
+        if not legacy_api and not self._onednn_inference_works(model):
+            logger.warning(
+                "PaddleOCR oneDNN kernels are unusable in this environment "
+                "(known PaddlePaddle 3.3.x regression); reloading with "
+                "enable_mkldnn=False. OCR will be slower but functional."
+            )
+            model, legacy_api = self._construct(disable_onednn=True)
 
         self._publish_variant_status(legacy_api=legacy_api)
         return model
