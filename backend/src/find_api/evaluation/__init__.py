@@ -23,18 +23,40 @@ from find_api.evaluation.runner import (
     score_outcomes,
     stub_retriever,
 )
+from find_api.evaluation.variants import (
+    VARIANTS,
+    Candidate,
+    PoolCache,
+    RankingVariant,
+    get_variant,
+    max_pool_size,
+    rank,
+    variant_retriever,
+)
+
+# find_api.evaluation.sources is deliberately not re-exported: it reaches for
+# the database and model stack, and this package must stay importable without
+# either.
 
 __all__ = [
     "RESULT_SCHEMA_VERSION",
     "SCHEMA_VERSION",
+    "VARIANTS",
+    "Candidate",
     "DatasetError",
     "EvalDataset",
     "EvalQuery",
+    "PoolCache",
     "QueryOutcome",
+    "RankingVariant",
+    "get_variant",
     "load_dataset",
     "load_stub_run",
+    "max_pool_size",
     "parse_dataset",
+    "rank",
     "run_dataset",
     "score_outcomes",
     "stub_retriever",
+    "variant_retriever",
 ]

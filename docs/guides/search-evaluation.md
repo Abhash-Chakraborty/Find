@@ -142,14 +142,62 @@ relevant hit, plus any retriever error.
 mean recall while destroying one query class is worse for real users than its
 average suggests, and only the per-query view shows that.
 
+## Scoring the Track C ranking variants
+
+`--db` retrieves candidates straight from Postgres and ranks them with one of
+the query-side variants defined in
+`docs/research/search-retrieval-benchmark-plan.md` (issue #99). It needs database
+access and real model weights in the same process.
+
+```bash
+cd backend
+
+# One variant, end-to-end latency included
+uv run python scripts/evaluate_search.py \
+    --dataset my_dataset.json --db --variant C3 --out c3.json
+
+# The whole matrix, one retrieval per query shared by all seven variants
+uv run python scripts/evaluate_search.py \
+    --dataset my_dataset.json --db --all-variants --out trackc.json
+```
+
+| Variant | Changes, relative to production |
+| --- | --- |
+| `C0` | Nothing — the production baseline |
+| `C1` | No similarity threshold |
+| `C2` | Adaptive threshold from the pool's score spread |
+| `C3` | Candidate pool of 100 before reranking, instead of `k` |
+| `C4` | `C3` plus recency, favourite, and album signals |
+| `C5` | Drops the hardcoded `TEXT_QUERY_TERMS` bonus |
+| `C6` | Reweighted boost coefficients and a higher cap |
+
+Three things to know before reading the output:
+
+- **`--all-variants` shares one candidate pool across variants.** That is what
+  makes the comparison fair — identical input, so a metric difference is the
+  ranking rule and nothing else. It also means the reported latency covers
+  ranking only. For end-to-end latency, score a single variant. The output says
+  which mode produced it.
+- **Retrieval is pinned to exact search.** An HNSW index is deployed, so without
+  pinning, ANN recall error would show up as a ranking difference. `--approximate`
+  opts back into the index when the deployed path is what you want to measure.
+- **`ML_MODE=mock` is refused, not silently used.** The mock embedder is
+  unrelated to the production weighting scheme, so it would emit a complete,
+  plausible results table that means nothing. Use `--stub` to exercise plumbing.
+
 ## Extending with a new retriever
 
 A retriever is any callable `(EvalQuery, k) -> Sequence[str]` returning ranked
-media ids. Two ship today: `stub_retriever` (canned rankings) and the `--api`
-retriever (HTTP against a live instance). Scoring is identical for both — which
-is the point, since two runs are only comparable when the scoring path is the
-same. To benchmark an experimental branch, add a retriever rather than forking
-the scoring.
+media ids. Three ship today: `stub_retriever` (canned rankings), the `--api`
+retriever (HTTP against a live instance), and `--db` (pgvector plus a Track C
+variant). Scoring is identical for all of them — which is the point, since two
+runs are only comparable when the scoring path is the same. To benchmark an
+experimental branch, add a retriever rather than forking the scoring.
+
+For a query-side experiment specifically, prefer adding a `RankingVariant` in
+`find_api.evaluation.variants` over a whole retriever: variants are pure
+functions over a `Candidate` pool, so they are unit-testable without a database
+and they automatically share the pool with every other variant in a run.
 
 ## Validation
 
