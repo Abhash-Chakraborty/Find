@@ -1,0 +1,54 @@
+"""Admin-only local diagnostics bundle export.
+
+GET /api/admin/diagnostics/bundle returns a privacy-redacted JSON document
+generated on this host. Nothing is uploaded externally — the caller must
+explicitly request and download the payload.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
+
+from find_api.core.dependencies import get_admin_user
+from find_api.diagnostics.bundle import collect_diagnostics_bundle
+from find_api.models.user import User
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+_BUNDLE_HEADERS = {
+    "Content-Disposition": 'attachment; filename="find-diagnostics-bundle.json"',
+    "X-Find-Diagnostics": "local-only",
+}
+_GENERIC_FAILURE = {"error": "Failed to generate diagnostics bundle"}
+
+
+@router.get("/admin/diagnostics/bundle")
+def export_diagnostics_bundle(
+    _admin: Optional[User] = Depends(get_admin_user),
+):
+    """Return a privacy-safe local diagnostics bundle as JSON.
+
+    Admin-only in shared mode (open in local mode), matching other
+    instance-wide admin endpoints. Requires an explicit HTTP request —
+    no background telemetry or outbound upload is performed.
+    """
+    try:
+        bundle = collect_diagnostics_bundle()
+    except Exception:  # noqa: BLE001 — never leak exception details to clients
+        logger.exception("Diagnostics bundle collection failed")
+        return JSONResponse(
+            status_code=500,
+            content=_GENERIC_FAILURE,
+            headers=_BUNDLE_HEADERS,
+        )
+
+    return JSONResponse(
+        content=bundle,
+        headers=_BUNDLE_HEADERS,
+    )
