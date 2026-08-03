@@ -15,8 +15,8 @@ one process is also the honest arrangement: that is what a Find worker does.
 
 Everything is local. No image, caption, OCR text, embedding, or measurement
 leaves the machine. Model weights are fetched from their normal upstream caches
-on first run exactly as the worker would fetch them; pass --skip-download-check
-off (the default) to fail fast instead of downloading.
+on first run exactly as the worker would fetch them, so the first run of each
+stage includes download time and is reported separately from steady state.
 
 Usage (from the backend directory, inside a CPU-profile container):
 
@@ -202,11 +202,12 @@ def _environment() -> dict:
     try:
         from find_api.core.hardware import detect_capabilities
 
-        report = detect_capabilities()
-        info["capabilities"] = {
-            "cuda_available": getattr(report, "cuda_available", None),
-            "onnx_providers": list(getattr(report, "onnx_providers", []) or []),
-        }
+        # Field names come from CapabilityReport in core/hardware.py. Spelling
+        # them wrong is silent -- getattr's default turns a typo into a
+        # plausible "no GPU detected" reading, which is exactly the claim this
+        # report exists to substantiate -- so use to_dict() and let the
+        # dataclass own the shape.
+        info["capabilities"] = detect_capabilities().to_dict()
     except Exception as exc:  # noqa: BLE001 - capability probing is best effort
         info["capabilities_error"] = f"{type(exc).__name__}: {exc}"
 
@@ -403,6 +404,17 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.out).write_text(json.dumps(report, indent=2), encoding="utf-8")
         if not args.json:
             print(f"\nWrote {args.out}")
+
+    # A stage that could not run is the most important thing this report can
+    # surface, and the report is still worth keeping when one does. Exit 1 so a
+    # caller notices without having to parse the JSON -- which is how the
+    # PaddleOCR oneDNN breakage stayed invisible until a run was read by eye.
+    failed = sorted(
+        name for name, data in report["stages"].items() if data["status"] != "ok"
+    )
+    if failed:
+        print(f"\nStages did not complete: {', '.join(failed)}", file=sys.stderr)
+        return 1
 
     return 0
 

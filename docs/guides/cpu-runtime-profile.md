@@ -2,8 +2,8 @@
 
 - **Status:** Buildable and measured. Model selection is still the GPU-era set — see
   [What this profile is not](#what-this-profile-is-not).
-- **Related:** Issue #339. Model-quality selection depends on #340 (embeddings) and #343
-  (captioning); #341 (OCR) has reported.
+- **Related:** Issue #339. Model-quality selection for the pack still depends on #340 (embeddings)
+  and #343 (captioning), both open. #341 (OCR variants) has already reported.
 
 A production-capable runtime between `ML_MODE=mock` and the CUDA stack. It runs real inference —
 embeddings, captions, OCR, object detection, and faces — on an ordinary laptop, with no CUDA wheels
@@ -30,7 +30,7 @@ image on this machine. The GPU figure is from a locally built image and is indic
 The CPU image installs `torch==2.9.1+cpu` and `onnxruntime` (not `onnxruntime-gpu`) from
 PyTorch's CPU index. Verified in the built image:
 
-```
+```text
 torch 2.9.1+cpu   cuda_available False   torch.version.cuda None
 torchvision 0.24.1+cpu
 ```
@@ -86,9 +86,9 @@ inflation from CPU contention alone. On a machine this size, *anything* else run
 numbers. That is also the honest read on the table above: these are lightly-loaded figures, and a
 real worker processing an upload queue will not see them.
 
-**OCR and captioning are 96% of per-image cost.** Embedding, detection, and faces together come to
-613 ms; OCR and captioning come to 5876 ms. Any CPU optimisation effort that does not target those
-two stages is not worth doing.
+**OCR and captioning are 91% of per-image cost** — 5876 ms of 6489 ms. Embedding, detection, and
+faces together come to 613 ms, which OCR alone beats by 5.8× and captioning by 3.8×. Any CPU
+optimisation effort that does not target those two stages is not worth doing.
 
 ### How to read the latency column
 
@@ -108,11 +108,11 @@ quantised ONNX variants, smaller backbones — is a separate question, tracked a
 `find_api/core/model_footprint.py` and blocked on the model benchmarks in #340 and #343. Adopting
 different defaults without those numbers would be a guess.
 
-The practical consequence is in the table above: OCR and captioning each cost more than an order of
-magnitude over embedding, detection, and faces combined. That is where a CPU-targeted model pack
-would pay off. #343 is measuring the captioning half; #341 has already reported on OCR variants.
-Embedding (#340) is the *cheapest* stage on CPU at 363 ms, so a smaller backbone there buys
-comparatively little — worth knowing before that work is prioritised on GPU-era intuitions.
+The practical consequence is in the table above: OCR costs 5.8× and captioning 3.8× what embedding,
+detection, and faces cost combined. That is where a CPU-targeted model pack would pay off. #343 is
+measuring the captioning half; #341 has already reported on OCR variants. Embedding (#340) is the
+*cheapest* torch stage on CPU at 363 ms, so a smaller backbone there buys comparatively little —
+worth knowing before that work is prioritised on GPU-era intuitions.
 
 ## Fallback behaviour
 
