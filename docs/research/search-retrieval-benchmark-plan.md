@@ -56,8 +56,17 @@ Two consequences follow:
   **`hnsw.ef_search` is never set anywhere in the codebase**, so pgvector's default query-time
   candidate list applies. Nobody chose these values against Find's data.
 - The "recall is perfect by definition because exact search is still used" line in the existing gate
-  list is no longer safe to rely on. **Recall against exact search is now an unmeasured quantity in
-  production**, and quantifying it is the single highest-value measurement in this whole effort.
+  list is no longer safe to rely on, because exact search is not what runs.
+
+> **Measured since, and this paragraph's original conclusion was wrong.** It previously called
+> quantifying that recall "the single highest-value measurement in this whole effort", on the
+> assumption that an unmeasured approximation was probably a degraded one. It is not, on the
+> evidence available: `docs/research/hnsw-index-fidelity.md` reports **recall@10 = 1.0000** for the
+> shipped default configuration on clustered synthetic corpora at 1k and 10k, at the lowest latency
+> of any configuration tested. Recall falls only on near-uniform data where the neighbours are
+> nearly tied and the misses are therefore near-equivalent. Track A stays in the plan as a
+> confirmation step against a real library, not as an outstanding risk, and the pending action to
+> raise `ef_search` is withdrawn.
 
 Practical effect on the protocol: every embedding-quality comparison below must pin retrieval to
 exact search (`SET LOCAL enable_indexscan = off`, or a dedicated exact query path) so that ANN
@@ -206,8 +215,10 @@ evidence because it is free to revert; a schema change cannot.
 
 ## Suggested sequence
 
-1. **Track A2 first**, immediately when #100 lands. It is one measurement, it validates or
-   invalidates the existing gate framing, and it may surface a live regression.
+1. ~~**Track A2 first**~~ — **done on synthetic corpora**, see
+   `docs/research/hnsw-index-fidelity.md`. The defaults measured perfect on realistic (clustered)
+   data, so this is now a confirmation run against a real library rather than the urgent first
+   step, and it can be scheduled alongside Track B instead of ahead of everything.
 2. Track A3/A4 — cheap, runtime-only, fully reversible.
 3. Track C — query-side only, no reindex, so iteration is fast.
 4. Track B1/B4 — establishes how much the text signals actually contribute before anything is tuned.
@@ -233,9 +244,9 @@ cheapest measurement that could invalidate the plan runs first.
 2. `docs/plans/partial/local-search-quality-roadmap.md` lists "no reranking stage" as a current
    weakness; `search_ranking.py` exists. Worth correcting so the roadmap does not motivate work
    that is partly done.
-3. No `hnsw.ef_search` is set anywhere. Even before benchmarking, making this an explicit,
-   documented setting rather than an inherited default is worthwhile — it is currently a
-   production-visible knob nobody chose.
+3. No `hnsw.ef_search` is set anywhere. Measurement since says the inherited default is the right
+   value *and* the cheapest, so this is now purely about making it an explicit, documented choice
+   so a future pgvector default change is a visible event — not a tuning opportunity.
 
 ## References
 
