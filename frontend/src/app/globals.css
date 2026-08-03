@@ -1,6 +1,12 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4: one import replaces the three v3 @tailwind directives. The
+   design tokens and theme extensions still live in tailwind.config.js, which
+   @config keeps authoritative — no CSS-first @theme rewrite needed. */
+@import "tailwindcss";
+/* v4 replacement for tailwindcss-animate, which is v3-only. Same utility
+   names (animate-in, fade-in, zoom-in, …), so no markup changes. Both
+   @import rules stay above @config — CSS requires @import to come first. */
+@import "tw-animate-css";
+@config "../../tailwind.config.js";
 
 @layer base {
   :root {
