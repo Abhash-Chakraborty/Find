@@ -98,6 +98,11 @@ _SENSITIVE_KEY_RE = re.compile(
 )
 
 # Substring matches for nested private media/metadata keys.
+#
+# Intentionally over-redacts: patterns like ``face`` / ``vector`` match as
+# substrings, so keys such as ``interface`` or ``pgvector`` are also denied.
+# That deny-by-default bias is by design — false positives are preferred over
+# leaking private media metadata into a support bundle.
 _SENSITIVE_KEY_SUBSTRING_RE = re.compile(
     r"(?i)(password|passwd|secret|token|api[_-]?key|access[_-]?key|"
     r"secret[_-]?key|authorization|credential|caption|ocr|embedding|"

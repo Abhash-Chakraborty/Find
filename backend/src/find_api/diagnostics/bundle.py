@@ -13,9 +13,10 @@ import sys
 import threading
 import time
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from find_api import __version__
 from find_api.core.config import settings
@@ -26,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 ERROR_LOG_LIMIT = 20
+# Keep health probes short so a hung dependency cannot pin a worker thread.
+HEALTH_PROBE_TIMEOUT_SECONDS = 2.0
 
 PRIVACY_NOTICE = (
     "Local diagnostics only. This bundle is generated on-request, never "
@@ -93,15 +96,37 @@ def _utc_now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
+def _run_with_timeout(
+    fn: Callable[[], Any], timeout_s: float = HEALTH_PROBE_TIMEOUT_SECONDS
+) -> Any:
+    """Run ``fn`` in a worker thread and raise ``TimeoutError`` if it hangs."""
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(fn)
+        try:
+            return future.result(timeout=timeout_s)
+        except FuturesTimeout as exc:
+            future.cancel()
+            raise TimeoutError(
+                f"health probe timed out after {timeout_s:.0f}s"
+            ) from exc
+
+
 def _check_postgresql() -> dict[str, Any]:
     started = time.perf_counter()
-    try:
+
+    def _probe() -> None:
         from sqlalchemy import text
 
         from find_api.core.database import engine
 
         with engine.connect() as conn:
+            # Cap statement runtime on PostgreSQL; SQLite ignores this safely.
+            if conn.dialect.name == "postgresql":
+                conn.execute(text("SET LOCAL statement_timeout = '2000'"))
             conn.execute(text("SELECT 1"))
+
+    try:
+        _run_with_timeout(_probe)
         return {
             "ok": True,
             "latency_ms": round((time.perf_counter() - started) * 1000, 2),
@@ -116,11 +141,22 @@ def _check_postgresql() -> dict[str, Any]:
 
 def _check_redis() -> dict[str, Any]:
     started = time.perf_counter()
-    try:
+
+    def _probe() -> None:
         from redis import Redis
 
-        client = Redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
-        client.ping()
+        client = Redis.from_url(
+            settings.REDIS_URL,
+            socket_connect_timeout=HEALTH_PROBE_TIMEOUT_SECONDS,
+            socket_timeout=HEALTH_PROBE_TIMEOUT_SECONDS,
+        )
+        try:
+            client.ping()
+        finally:
+            client.close()
+
+    try:
+        _run_with_timeout(_probe)
         return {
             "ok": True,
             "latency_ms": round((time.perf_counter() - started) * 1000, 2),
@@ -136,10 +172,34 @@ def _check_redis() -> dict[str, Any]:
 def _check_storage() -> dict[str, Any]:
     started = time.perf_counter()
     backend = settings.STORAGE_BACKEND.lower()
+
+    def _probe_local() -> bool:
+        path = Path(settings.LOCAL_STORAGE_PATH)
+        return path.is_dir() and os.access(path, os.W_OK)
+
+    def _probe_minio() -> bool:
+        import urllib3
+        from minio import Minio
+
+        http_client = urllib3.PoolManager(
+            timeout=urllib3.Timeout(
+                connect=HEALTH_PROBE_TIMEOUT_SECONDS,
+                read=HEALTH_PROBE_TIMEOUT_SECONDS,
+            ),
+            retries=False,
+        )
+        client = Minio(
+            settings.MINIO_ENDPOINT,
+            access_key=settings.MINIO_ACCESS_KEY,
+            secret_key=settings.MINIO_SECRET_KEY,
+            secure=settings.MINIO_SECURE,
+            http_client=http_client,
+        )
+        return bool(client.bucket_exists(settings.MINIO_BUCKET))
+
     try:
         if backend == "local":
-            path = Path(settings.LOCAL_STORAGE_PATH)
-            reachable = path.is_dir() and os.access(path, os.W_OK)
+            reachable = _run_with_timeout(_probe_local)
             result: dict[str, Any] = {
                 "ok": reachable,
                 "backend": "local",
@@ -149,15 +209,7 @@ def _check_storage() -> dict[str, Any]:
                 result["error"] = "Local storage path is not a writable directory"
             return result
 
-        from minio import Minio
-
-        client = Minio(
-            settings.MINIO_ENDPOINT,
-            access_key=settings.MINIO_ACCESS_KEY,
-            secret_key=settings.MINIO_SECRET_KEY,
-            secure=settings.MINIO_SECURE,
-        )
-        exists = client.bucket_exists(settings.MINIO_BUCKET)
+        exists = _run_with_timeout(_probe_minio)
         return {
             "ok": bool(exists),
             "backend": "minio",
