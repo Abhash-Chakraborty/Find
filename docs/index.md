@@ -54,6 +54,7 @@ This directory is organized by document purpose and implementation status.
 
 - [Vector Search Benchmark Evaluation](research/vector-search-benchmarks.md)
 - [Search Retrieval and Ranking Benchmark Plan](research/search-retrieval-benchmark-plan.md) - experiment design; results blocked on the evaluation harness.
+- [HNSW Index Fidelity (Track A)](research/hnsw-index-fidelity.md) - measured recall of the shipped index configuration against exact search.
 - [Encrypted Bring-Your-Own-Storage Sync](research/encrypted-byo-storage-sync.md) - provider comparison and v1 boundary for optional encrypted backup.
 
 ## Assets
