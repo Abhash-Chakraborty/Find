@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Model footprint report — what each ML model downloads and loads.
+Model footprint report - what each ML model downloads and loads.
 
 Prints, per model: configured identifier, on-disk cache size, loaded/
 unloaded state (this process), execution device, and last-use time.
@@ -11,7 +11,7 @@ This is a local admin tool: unlike GET /status/models/footprint, it
 prints filesystem cache paths. Run it on the machine whose cache you
 want to inspect.
 
-Never downloads model weights — every lookup is a local filesystem read
+Never downloads model weights - every lookup is a local filesystem read
 or a local cache-index read (e.g. huggingface_hub.scan_cache_dir()).
 
 Usage (from the backend directory):
@@ -37,8 +37,14 @@ def _human_bytes(n: int) -> str:
     return f"{value:.1f} TB"
 
 
+# Placeholder for "no value". Deliberately ASCII: the default Windows console
+# codepage is cp1252, where an em dash renders as mojibake, and this is a
+# console tool on a platform the project ships a desktop build for.
+_NONE = "-"
+
+
 def _print_human(report: dict, show_paths: bool) -> None:
-    print(f"Model footprint report — generated {report['generated_at']}")
+    print(f"Model footprint report - generated {report['generated_at']}")
     print()
 
     header = f"{'MODEL':<12} {'PACKS':<12} {'CACHED':<7} {'SIZE':>10}  {'LOADED':<7} {'DEVICE':<22} LAST USED"
@@ -46,12 +52,12 @@ def _print_human(report: dict, show_paths: bool) -> None:
     print("-" * len(header))
     for m in report["models"]:
         cache = m["cache"]
-        size = _human_bytes(cache["bytes_on_disk"]) if cache["cached"] else "—"
+        size = _human_bytes(cache["bytes_on_disk"]) if cache["cached"] else _NONE
         print(
             f"{m['key']:<12} {','.join(m['packs']):<12} "
             f"{'yes' if cache['cached'] else 'no':<7} {size:>10}  "
             f"{'yes' if m['loaded'] else 'no':<7} {m['device']:<22} "
-            f"{m['last_used'] or '—'}"
+            f"{m['last_used'] or _NONE}"
         )
         print(f"             identifier: {m['identifier']}")
         if cache.get("note"):

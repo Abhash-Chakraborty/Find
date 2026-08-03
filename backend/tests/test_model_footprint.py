@@ -57,6 +57,41 @@ _NO_SYMLINK_REASON = (
 )
 
 
+class _FakeCachedRepo:
+    """The subset of huggingface_hub's CachedRepoInfo that we read."""
+
+    def __init__(self, repo_id, size_on_disk, nb_files, last_modified, repo_path):
+        self.repo_id = repo_id
+        self.size_on_disk = size_on_disk
+        self.nb_files = nb_files
+        self.last_modified = last_modified
+        self.repo_path = repo_path
+
+
+def _install_fake_hf_hub(monkeypatch, repos):
+    """Inject a stub ``huggingface_hub`` exposing only ``scan_cache_dir``.
+
+    The backend's dev dependency group deliberately excludes the ML extras, so
+    the real ``huggingface_hub`` is absent in CI. Building a real on-disk Hub
+    cache therefore tested nothing there: ``_hf_hub_cache_matches`` bailed out
+    at the import and reported "not cached", which is also what a genuinely
+    empty cache looks like. Stubbing the single function this module calls
+    keeps the needle-matching and aggregation logic — the part that is ours —
+    covered on every platform, with no symlink privileges required.
+    """
+    import sys
+    import types
+
+    module = types.ModuleType("huggingface_hub")
+
+    def _scan_cache_dir(cache_dir=None):
+        return types.SimpleNamespace(repos=list(repos))
+
+    module.scan_cache_dir = _scan_cache_dir
+    monkeypatch.setitem(sys.modules, "huggingface_hub", module)
+    return module
+
+
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch):
     """Fail loudly if any resolver tries to actually download something."""
@@ -77,13 +112,15 @@ def _no_network(monkeypatch):
 
 
 class TestHFHubCacheResolution:
-    def test_finds_cached_repo_by_full_id(self, tmp_path, monkeypatch):
-        hf_home, symlink_used = _make_hf_cache(
-            tmp_path, "microsoft/Florence-2-base", b"0" * 2048
+    def test_finds_cached_repo_by_full_id(self, monkeypatch):
+        _install_fake_hf_hub(
+            monkeypatch,
+            [
+                _FakeCachedRepo(
+                    "microsoft/Florence-2-base", 2048, 1, 1_700_000_000.0, "/cache/f"
+                )
+            ],
         )
-        if not symlink_used:
-            pytest.skip(_NO_SYMLINK_REASON)
-        monkeypatch.setenv("HF_HOME", hf_home)
         monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
 
         info = mf.resolve_florence_cache()
@@ -94,9 +131,47 @@ class TestHFHubCacheResolution:
         assert info.resolver == "hf_hub_cache"
         assert info.last_modified is not None
 
-    def test_no_matching_repo_reports_not_cached(self, tmp_path, monkeypatch):
-        hf_home, _ = _make_hf_cache(tmp_path, "someone/unrelated-model", b"0" * 10)
-        monkeypatch.setenv("HF_HOME", hf_home)
+    def test_matching_is_case_insensitive_and_substring(self, monkeypatch):
+        _install_fake_hf_hub(
+            monkeypatch,
+            [
+                _FakeCachedRepo(
+                    "MICROSOFT/Florence-2-BASE", 64, 1, 1_700_000_000.0, "/cache/f"
+                )
+            ],
+        )
+        monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
+
+        assert mf.resolve_florence_cache().exists is True
+
+    def test_multiple_matching_repos_are_summed_and_noted(self, monkeypatch):
+        _install_fake_hf_hub(
+            monkeypatch,
+            [
+                _FakeCachedRepo(
+                    "microsoft/Florence-2-base", 100, 2, 1_700_000_000.0, "/cache/a"
+                ),
+                _FakeCachedRepo(
+                    "microsoft/Florence-2-base-ft", 40, 3, 1_800_000_000.0, "/cache/b"
+                ),
+                _FakeCachedRepo("someone/unrelated", 999, 9, 1.0, "/cache/c"),
+            ],
+        )
+        monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
+
+        info = mf.resolve_florence_cache()
+
+        assert info.bytes_on_disk == 140
+        assert info.file_count == 5
+        # Newest of the matches, and the unrelated repo must not drag it back.
+        assert info.last_modified is not None
+        assert "2 matching cached repos summed" in (info.note or "")
+
+    def test_no_matching_repo_reports_not_cached(self, monkeypatch):
+        _install_fake_hf_hub(
+            monkeypatch,
+            [_FakeCachedRepo("someone/unrelated-model", 10, 1, 1.0, "/cache/u")],
+        )
         monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
 
         info = mf.resolve_florence_cache()
@@ -104,6 +179,45 @@ class TestHFHubCacheResolution:
         assert info.exists is False
         assert info.bytes_on_disk == 0
         assert info.note
+
+    def test_scan_failure_degrades_to_not_cached(self, monkeypatch):
+        """A corrupted or unreadable cache must not blow up the report."""
+        import sys
+        import types
+
+        module = types.ModuleType("huggingface_hub")
+
+        def _boom(cache_dir=None):
+            raise OSError("corrupted cache")
+
+        module.scan_cache_dir = _boom
+        monkeypatch.setitem(sys.modules, "huggingface_hub", module)
+
+        assert mf._hf_hub_cache_matches("anything") is None
+
+    def test_real_library_reads_an_on_disk_cache(self, tmp_path, monkeypatch):
+        """Integration check against the genuine huggingface_hub, when present.
+
+        Skipped in CI (ML extras are not installed there) and on filesystems
+        without symlink privileges, which scan_cache_dir requires. The stubbed
+        tests above are what actually gate CI.
+        """
+        pytest.importorskip("huggingface_hub")
+        hf_home, symlink_used = _make_hf_cache(
+            tmp_path, "microsoft/Florence-2-base", b"0" * 2048
+        )
+        if not symlink_used:
+            pytest.skip(_NO_SYMLINK_REASON)
+        monkeypatch.setenv("HF_HOME", hf_home)
+        monkeypatch.delenv("HF_HUB_CACHE", raising=False)
+        monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
+        monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
+
+        info = mf.resolve_florence_cache()
+
+        assert info.exists is True
+        assert info.bytes_on_disk == 2048
+        assert info.resolver == "hf_hub_cache"
 
     def test_missing_huggingface_hub_degrades_gracefully(self, monkeypatch):
         """If huggingface_hub can't be imported, resolution must not raise."""
@@ -237,10 +351,17 @@ class TestPaddleOCRCache:
 class TestBuildReport:
     def _wire_all_caches(self, tmp_path, monkeypatch):
         """Point every model at a small, fully cached, temporary footprint."""
-        hf_home, symlink_used = _make_hf_cache(
-            tmp_path, "microsoft/Florence-2-base", b"f" * 100
+        # Florence resolves through huggingface_hub, which is not installed in
+        # the dev/CI environment, so stub it rather than building a real Hub
+        # cache — that also drops the symlink privilege requirement.
+        _install_fake_hf_hub(
+            monkeypatch,
+            [
+                _FakeCachedRepo(
+                    "microsoft/Florence-2-base", 100, 1, 1_700_000_000.0, "/cache/f"
+                )
+            ],
         )
-        monkeypatch.setenv("HF_HOME", hf_home)
         monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
 
         clip_cache = tmp_path / "open_clip_cache"
@@ -263,12 +384,9 @@ class TestBuildReport:
         paddle_home.mkdir()
         (paddle_home / "det.onnx").write_bytes(b"p" * 10)
         monkeypatch.setenv("PADDLE_PDX_CACHE_HOME", str(paddle_home))
-        return symlink_used
 
     def test_pack_totals_sum_correctly(self, tmp_path, monkeypatch):
-        symlink_used = self._wire_all_caches(tmp_path, monkeypatch)
-        if not symlink_used:
-            pytest.skip(_NO_SYMLINK_REASON)
+        self._wire_all_caches(tmp_path, monkeypatch)
         report = mf.build_report(include_paths=True)
 
         # light pack = siglip only
@@ -342,3 +460,46 @@ class TestBuildReport:
 
         assert report["packs"]["full"]["cached_count"] == 0
         assert all(not m["cache"]["cached"] for m in report["models"])
+
+
+class TestCliRendering:
+    """The local CLI must render on a default Windows console.
+
+    Windows defaults to the cp1252 codepage, where the em dash the report
+    previously used as its "no value" placeholder comes out as mojibake. The
+    project ships a Windows desktop build, so operators do hit this.
+    """
+
+    @staticmethod
+    def _load_cli():
+        import importlib.util
+        from pathlib import Path
+
+        script = (
+            Path(__file__).resolve().parents[1]
+            / "scripts"
+            / "model_footprint_report.py"
+        )
+        spec = importlib.util.spec_from_file_location("_mf_cli", script)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module, script
+
+    def test_human_output_is_cp1252_safe(self, capsys):
+        cli, _ = self._load_cli()
+        report = mf.build_report(include_paths=False)
+
+        cli._print_human(report, show_paths=False)
+
+        out = capsys.readouterr().out
+        assert out.strip()
+        # Would raise UnicodeEncodeError on a strict legacy console.
+        out.encode("cp1252")
+        # Placeholders for "not cached" / "never used" must still be present.
+        assert " - " in out or out.rstrip().endswith("-")
+
+    def test_script_source_is_ascii_only(self):
+        _, script = self._load_cli()
+        source = script.read_text(encoding="utf-8")
+        non_ascii = sorted({ch for ch in source if ord(ch) > 127})
+        assert not non_ascii, f"non-ASCII characters in CLI script: {non_ascii}"
