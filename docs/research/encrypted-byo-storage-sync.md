@@ -103,8 +103,11 @@ secret access key, and a TLS flag. For filesystem targets: a path, and nothing e
 - Stored in the existing settings/env mechanism, the same way `MINIO_ACCESS_KEY` is today. They are
   deployment configuration, not user secrets.
 - **Never** written into the database, the backup manifest, or any log line. The diagnostics bundle
-  redaction added in #428 already denies `access_key`, `secret_key`, and `*_url` keys, and the
-  bundle is a good model for what sync logging must not emit.
+  redaction in `backend/src/find_api/diagnostics/redact.py` is the model to copy here: it is
+  allowlist-first, so an unrecognised key is denied by default rather than needing a matching deny
+  rule, with explicit patterns for names like `access_key` / `secret_key` and for named URL keys
+  such as `database_url` and `redis_url`. Sync logging should adopt the same posture — deny unless
+  the field was deliberately allowed — rather than trying to enumerate what to hide.
 - Scoped as narrowly as the provider allows — a bucket-scoped key with put/get/list/delete, never a
   root account key. This must be in the user-facing documentation.
 
@@ -125,9 +128,19 @@ review.
 
 Reuse the primitives the vault design already settled on rather than inventing a second scheme.
 
-- **Content encryption:** AES-256-GCM, streaming, so large images are never fully resident.
+- **Content encryption:** AES-256-GCM, so large images are never fully resident.
   ChaCha20-Poly1305 remains an acceptable alternative on hardware without AES-NI; the vault note
   already covers this trade-off.
+- **Chunk framing is mandatory, and this is the easiest thing here to get catastrophically wrong.**
+  AES-GCM has no safe "streaming" mode of its own: a nonce may never repeat under a given key, and
+  a partial plaintext must never be released before its tag verifies. So an object is split into
+  fixed-size chunks, each encrypted as its own AEAD message with a nonce derived deterministically
+  as `nonce_prefix || chunk_counter` (random 32-bit prefix per object, 64-bit counter), and each
+  chunk's AAD binds the object key **and its chunk index** so chunks cannot be reordered, dropped,
+  or spliced between objects. The final chunk is flagged in its AAD so truncation is detectable.
+  Decryption verifies each chunk before emitting it. Resume works at chunk boundaries only, and a
+  resumed upload must reuse the same nonce prefix and counter sequence — never restart the counter.
+  Implementation must use a reviewed construction rather than hand-rolling this.
 - **Key derivation:** Argon2id from the backup passphrase, with a per-backup random salt stored in
   the manifest. Parameters recorded in the manifest so a future parameter change stays readable.
 - **Key hierarchy:** the passphrase derives a key-encryption key; a random per-backup data key is

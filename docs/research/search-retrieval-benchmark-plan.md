@@ -27,11 +27,17 @@ Before comparing anything, the assumed baseline had to be checked against the co
 have drifted, and the third materially affects how #99 must be run.
 
 **1. Reranking is not absent; it is partial.** The roadmap lists "no reranking stage" as a current
-weakness, but `backend/src/find_api/ml/search_ranking.py` already exists and applies text-aware
-boosting driven by a `TEXT_QUERY_TERMS` set (`invoice`, `receipt`, `screenshot`, `document`, …)
-plus object-label extraction. The baseline for #99 is therefore *vector retrieval plus a keyword-
-triggered metadata boost*, not raw cosine ranking. Measuring "add reranking" against a baseline
-that already reranks would attribute the wrong effect.
+weakness, but `backend/src/find_api/ml/search_ranking.py` already exists and reranks. Its
+`compute_textual_boost()` scores **token overlap between the query and every text signal** —
+caption at 0.015 per overlapping token, OCR at 0.035, object labels at 0.01 — capped at 0.25, then
+adds a flat 0.05 when the query intersects a hardcoded `TEXT_QUERY_TERMS` set (`invoice`,
+`receipt`, `screenshot`, `document`, …) *and* the media has OCR text. `rerank_results()` then sorts
+by boosted score with the raw vector score as a tiebreak.
+
+So the boost is overlap-driven for any query, not gated on a keyword list; the keyword set only
+contributes an extra bump. The baseline for #99 is therefore *vector retrieval plus a graded
+metadata boost*, not raw cosine ranking, and measuring "add reranking" against a baseline that
+already reranks would attribute the wrong effect.
 
 **2. Latency instrumentation is already in place.** `routers/search.py` records `embedding_ms` and
 separates query-embedding time from retrieval. #99 does not need to add timing plumbing; it needs
@@ -118,12 +124,13 @@ Baseline is B0 plus the existing `search_ranking` boost, exact retrieval.
 
 | ID | Variant | Question it answers |
 | --- | --- | --- |
-| C0 | Current: static threshold + existing keyword boost | Reference |
+| C0 | Current: static threshold + existing overlap boost | Reference |
 | C1 | No threshold | How many valid results does the static cutoff discard? The roadmap already flags this as suspected |
 | C2 | Adaptive threshold from score distribution | Can the cutoff adapt to per-query score spread instead of a constant? |
 | C3 | Wider candidate pool, then metadata rerank | The issue's "candidate-pool reranking" requirement — retrieve k=100, rerank to 24 |
 | C4 | C3 plus recency/favourite/album signals | Do non-semantic signals help or just add noise? |
-| C5 | Query expansion for `TEXT_QUERY_TERMS` | Is the hardcoded keyword list earning its place, or is it overfit? |
+| C5 | Drop or expand the `TEXT_QUERY_TERMS` bonus | Is the hardcoded 0.05 keyword bump earning its place on top of the overlap score, or is it overfit? |
+| C6 | Reweight the per-signal boost coefficients | Are 0.015 / 0.035 / 0.01 and the 0.25 cap the right shape, or were they picked by feel? |
 
 C1 and C5 are deliberately framed as *challenges to existing behaviour*. Both are currently
 unjustified by measurement, and a benchmark that only ever proposes additions will never remove
@@ -235,6 +242,6 @@ cheapest measurement that could invalidate the plan runs first.
 - `docs/research/vector-search-benchmarks.md` — index performance, ANN candidates, adoption gates
 - `docs/plans/partial/local-search-quality-roadmap.md` — target metrics and stage sequencing
 - `backend/src/find_api/workers/processors.py` — `generate_hybrid_embedding`, the B0 baseline
-- `backend/src/find_api/ml/search_ranking.py` — existing keyword/object boosting
+- `backend/src/find_api/ml/search_ranking.py` — existing overlap-based boost and rerank
 - `backend/src/find_api/routers/search.py` — retrieval query, static threshold, timing instrumentation
 - `backend/alembic/versions/add_hnsw_vector_index.py` — the HNSW index and its default parameters
