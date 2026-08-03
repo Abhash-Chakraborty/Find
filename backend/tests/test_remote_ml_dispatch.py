@@ -27,8 +27,9 @@ class TestAnalyzeDispatch:
         fake = MagicMock(
             return_value={"caption": "a bike", "objects": [], "ocr_text": ""}
         )
-        with patch("find_api.ml.remote_client.remote_analyze", fake), patch(
-            "find_api.ml.remote_client._feature_enabled", lambda f: True
+        with (
+            patch("find_api.ml.remote_client.remote_analyze", fake),
+            patch("find_api.ml.remote_client._feature_enabled", lambda f: True),
         ):
             result = processors.extract_image_metadata(_rgb_image())
 
@@ -42,8 +43,9 @@ class TestAnalyzeDispatch:
         monkeypatch.setattr(processors, "current_ml_mode", lambda: "remote")
 
         fake = MagicMock()
-        with patch("find_api.ml.remote_client.remote_analyze", fake), patch(
-            "find_api.ml.remote_client._feature_enabled", lambda f: False
+        with (
+            patch("find_api.ml.remote_client.remote_analyze", fake),
+            patch("find_api.ml.remote_client._feature_enabled", lambda f: False),
         ):
             result = processors.extract_image_metadata(_rgb_image())
 
@@ -54,8 +56,9 @@ class TestAnalyzeDispatch:
         monkeypatch.setattr(processors, "current_ml_mode", lambda: "remote")
 
         fake = MagicMock(return_value=[0.1] * 768)
-        with patch("find_api.ml.remote_client.remote_embed", fake), patch(
-            "find_api.ml.remote_client._feature_enabled", lambda f: True
+        with (
+            patch("find_api.ml.remote_client.remote_embed", fake),
+            patch("find_api.ml.remote_client._feature_enabled", lambda f: True),
         ):
             vector = processors.generate_hybrid_embedding(_rgb_image(), {})
 
@@ -79,8 +82,9 @@ class TestClusterDispatch:
         embeddings = np.eye(4, dtype=np.float32)
         fake = MagicMock(return_value={"labels": [0, 0, 1, 1], "info": {"n": 4}})
 
-        with patch("find_api.ml.remote_client.remote_cluster", fake), patch(
-            "find_api.ml.remote_client._feature_enabled", lambda f: True
+        with (
+            patch("find_api.ml.remote_client.remote_cluster", fake),
+            patch("find_api.ml.remote_client._feature_enabled", lambda f: True),
         ):
             labels, info = jobs._remote_cluster_embeddings(embeddings)
 
@@ -98,9 +102,11 @@ class TestClusterDispatch:
         fake_local = MagicMock()
         fake_local.cluster.return_value = (np.array([-1, -1, -1, -1]), {})
 
-        with patch("find_api.ml.remote_client.remote_cluster", fake_remote), patch(
-            "find_api.ml.remote_client._feature_enabled", lambda f: False
-        ), patch("find_api.ml.clusterer.get_image_clusterer", lambda: fake_local):
+        with (
+            patch("find_api.ml.remote_client.remote_cluster", fake_remote),
+            patch("find_api.ml.remote_client._feature_enabled", lambda f: False),
+            patch("find_api.ml.clusterer.get_image_clusterer", lambda: fake_local),
+        ):
             jobs._remote_cluster_embeddings(embeddings)
 
         assert fake_remote.call_count == 0
@@ -136,9 +142,12 @@ class TestFeatureContractIsHonoured:
         monkeypatch.setattr(processors, "current_ml_mode", lambda: "remote")
 
         fake = MagicMock(return_value={"caption": "x"})
-        with patch("find_api.ml.remote_client.remote_analyze", fake), patch(
-            "find_api.ml.remote_client._feature_enabled",
-            lambda f: f in {"caption", "detect"},
+        with (
+            patch("find_api.ml.remote_client.remote_analyze", fake),
+            patch(
+                "find_api.ml.remote_client._feature_enabled",
+                lambda f: f in {"caption", "detect"},
+            ),
         ):
             result = processors.extract_image_metadata(_rgb_image())
 
@@ -175,9 +184,10 @@ class TestDisabledEmbeddingIsNotPersistedAsMock:
         """
         monkeypatch.setattr(processors, "current_ml_mode", lambda: "remote")
 
-        with patch(
-            "find_api.ml.remote_client._feature_enabled", lambda f: False
-        ), pytest.raises(processors.RemoteFeatureDisabled):
+        with (
+            patch("find_api.ml.remote_client._feature_enabled", lambda f: False),
+            pytest.raises(processors.RemoteFeatureDisabled),
+        ):
             processors.generate_hybrid_embedding(_rgb_image(), {})
 
 
