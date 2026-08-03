@@ -88,7 +88,12 @@ export default function SettingsPage() {
           </div>
         </header>
 
-        <div className="grid gap-6 sm:gap-8 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
+        {/* The single-column track must be minmax(0,1fr), not the implicit
+            `auto`. An auto track sizes to max-content, so one non-wrapping
+            value in the About card stretched the column to ~650px inside a
+            358px container and pushed the whole page into horizontal scroll
+            on phones. */}
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 sm:gap-8 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
           <aside className="lg:sticky lg:top-[calc(var(--nav-height)+2rem)] lg:self-start">
             <nav
               aria-label="Settings sections"

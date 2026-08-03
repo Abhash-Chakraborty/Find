@@ -19,7 +19,11 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
       <dt className="text-sm text-[color:var(--silver)]">{label}</dt>
-      <dd className="truncate text-sm font-medium text-[color:var(--near-white)] sm:max-w-[60%] sm:text-right">
+      {/* Wrap on phones, where the row is stacked and the value has a whole
+          line to itself; only truncate from sm: up, where label and value
+          share one line. `truncate` implies white-space: nowrap, so applying
+          it unconditionally also gave this cell a max-content minimum. */}
+      <dd className="break-words text-sm font-medium text-[color:var(--near-white)] sm:max-w-[60%] sm:truncate sm:text-right">
         {value}
       </dd>
     </div>
