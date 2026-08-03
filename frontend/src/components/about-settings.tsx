@@ -1,12 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BadgeInfo, Check, ClipboardCopy } from "lucide-react";
+import { BadgeInfo, Check, ClipboardCopy, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import { getAppConfig, getRuntimeConfig } from "@/lib/api";
 import { buildSupportSummary, formatWorkerAge } from "@/lib/support-summary";
 
-type CopyState = "idle" | "copied" | "error";
+type CopyState = "idle" | "copying" | "copied" | "error";
 
 const WORKER_LABEL: Record<string, string> = {
   healthy: "Healthy",
@@ -17,9 +17,13 @@ const WORKER_LABEL: Record<string, string> = {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5">
+    <div className="flex flex-col gap-0.5 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
       <dt className="text-sm text-[color:var(--silver)]">{label}</dt>
-      <dd className="truncate text-sm font-medium text-[color:var(--near-white)]">
+      {/* Wrap on phones, where the row is stacked and the value has a whole
+          line to itself; only truncate from sm: up, where label and value
+          share one line. `truncate` implies white-space: nowrap, so applying
+          it unconditionally also gave this cell a max-content minimum. */}
+      <dd className="break-words text-sm font-medium text-[color:var(--near-white)] sm:max-w-[60%] sm:truncate sm:text-right">
         {value}
       </dd>
     </div>
@@ -56,6 +60,7 @@ export function AboutSettings() {
   };
 
   const onCopy = async () => {
+    setCopyState("copying");
     try {
       await navigator.clipboard.writeText(buildSupportSummary(summaryInput));
       setCopyState("copied");
@@ -72,9 +77,15 @@ export function AboutSettings() {
       aria-labelledby="about-heading"
     >
       <div className="flex gap-3">
-        <BadgeInfo className="mt-0.5 h-5 w-5 text-[color:var(--silver)]" />
+        <BadgeInfo
+          aria-hidden="true"
+          className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--silver)]"
+        />
         <div className="min-w-0 flex-1">
-          <h2 id="about-heading" className="font-semibold">
+          <h2
+            id="about-heading"
+            className="text-base font-semibold tracking-tight"
+          >
             About this instance
           </h2>
           <p className="mt-1 text-sm text-[color:var(--silver)]">
@@ -133,9 +144,17 @@ export function AboutSettings() {
               data-testid="copy-support-summary"
               onClick={onCopy}
               aria-label="Copy support summary to the clipboard"
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-[color:var(--frost)] px-4 text-sm font-medium text-[color:var(--silver)] outline-none transition hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
+              aria-busy={copyState === "copying"}
+              disabled={copyState === "copying"}
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-[color:var(--frost)] px-4 text-sm font-medium text-[color:var(--silver)] outline-none transition hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] disabled:cursor-wait disabled:opacity-60"
             >
-              {copyState === "copied" ? (
+              {copyState === "copying" ? (
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="animate-spin"
+                  size={15}
+                />
+              ) : copyState === "copied" ? (
                 <Check aria-hidden="true" size={15} />
               ) : (
                 <ClipboardCopy aria-hidden="true" size={15} />
@@ -153,6 +172,7 @@ export function AboutSettings() {
                   : "text-[color:var(--silver)]"
               }`}
             >
+              {copyState === "copying" && "Copying support summary…"}
               {copyState === "copied" && "Support summary copied."}
               {copyState === "error" &&
                 "Couldn't copy. Select the details above and copy manually."}

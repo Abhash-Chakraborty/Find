@@ -64,12 +64,17 @@ export function AiRuntimeSettings({
           aria-checked={checked}
           disabled={enabled === undefined || pending}
           onClick={() => onChange(!checked)}
-          className="relative h-7 w-12 shrink-0 rounded-full border border-[color:var(--frost-strong)] bg-[color:var(--surface-hover)] transition disabled:cursor-wait disabled:opacity-50 aria-checked:border-[color:var(--green)] aria-checked:bg-[color:var(--green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
+          aria-busy={pending}
+          className="relative h-7 w-12 shrink-0 rounded-full border border-[color:var(--frost-strong)] bg-[color:var(--surface-hover)] transition before:absolute before:-inset-2 before:content-[''] hover:border-[color:var(--frost-strong)] active:scale-95 disabled:cursor-wait disabled:opacity-50 aria-checked:border-[color:var(--green)] aria-checked:bg-[color:var(--green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
         >
           <span
             aria-hidden="true"
-            className="absolute left-1 top-1 size-[1.125rem] rounded-full bg-white shadow transition-transform"
-            style={{ transform: checked ? "translateX(1.25rem)" : undefined }}
+            className="absolute left-1 top-1/2 size-5 rounded-full bg-white shadow transition-transform"
+            style={{
+              transform: checked
+                ? "translate(1.25rem, -50%)"
+                : "translateY(-50%)",
+            }}
           />
         </button>
       </div>
@@ -122,7 +127,7 @@ export function AiRuntimeSettings({
           onChange={(event) =>
             onModeChange(event.target.value as "disabled" | "full" | "mock")
           }
-          className="mt-3 h-11 w-full rounded-xl border border-[color:var(--frost)] bg-[color:var(--void)] px-3 text-sm text-[color:var(--near-white)] outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] sm:max-w-xs"
+          className="mt-3 h-11 w-full rounded-xl border border-[color:var(--frost)] bg-[color:var(--void)] px-3 text-sm text-[color:var(--near-white)] outline-none transition hover:border-[color:var(--frost-strong)] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] disabled:cursor-wait disabled:opacity-60 sm:max-w-xs"
         >
           {mode && !supportedModes.includes(mode) && (
             <option value={mode} disabled>
@@ -142,7 +147,7 @@ export function AiRuntimeSettings({
       </div>
 
       <details className="border-t border-[color:var(--frost)] px-5 py-4">
-        <summary className="cursor-pointer text-sm font-semibold">
+        <summary className="cursor-pointer rounded-lg text-sm font-semibold outline-none transition hover:text-[color:var(--near-white)] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]">
           Change the installed build
         </summary>
         <p className="mt-2 text-xs leading-5 text-[color:var(--silver)]">
