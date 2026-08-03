@@ -165,14 +165,44 @@ _PRIVATE_FIELD_ASSIGN_RE = re.compile(
 _QUOTED_CONTENT_RE = re.compile(r"""(['"])([^'"\n]{8,})\1""")
 
 
+# Values under these keys are operator-declared configuration identifiers —
+# model names out of settings, not anything a user supplied. They are exempt
+# from filename scrubbing only, because names like ``yolo26n.pt`` and
+# ``ViT-B-16-SigLIP`` look exactly like filenames to the generic pattern and
+# would otherwise collapse to ``<filename>``, which is the whole point of the
+# models section. Credential and path scrubbing still applies to them.
+_MODEL_IDENTIFIER_KEYS: frozenset[str] = frozenset(
+    {
+        "clip_model",
+        "clip_pretrained",
+        "blip_model",
+        "yolo_model",
+        "configured_models",
+        "loaded_models",
+    }
+)
+
+
 def _is_sensitive_key(key: str) -> bool:
     if _SENSITIVE_KEY_RE.match(key):
         return True
+    # The substring heuristic is a deny-by-default net for keys nobody vetted.
+    # Curated allowlist entries have been reviewed, so it must not override
+    # them — otherwise ``embedding_dim`` (an int, explicitly allowlisted) is
+    # destroyed just for containing "embedding". Exact-match sensitive names
+    # above still win over the allowlist.
+    if key in ALLOWED_KEYS:
+        return False
     return bool(_SENSITIVE_KEY_SUBSTRING_RE.search(key))
 
 
-def scrub_string(value: str) -> str:
-    """Remove paths, filenames, credentials, and token-like substrings."""
+def scrub_string(value: str, *, scrub_filenames: bool = True) -> str:
+    """Remove paths, filenames, credentials, and token-like substrings.
+
+    ``scrub_filenames=False`` keeps filename-shaped tokens intact. It is only
+    for operator-declared config identifiers (see ``_MODEL_IDENTIFIER_KEYS``);
+    every other rule, including path and credential scrubbing, still runs.
+    """
     msg = _URL_CREDS_RE.sub(r"\1<credentials>@", value)
     msg = _BEARER_RE.sub(f"Bearer {REDACTED}", msg)
     msg = _SECRET_ASSIGN_RE.sub(r"\1=<redacted>", msg)
@@ -180,11 +210,12 @@ def scrub_string(value: str) -> str:
     msg = _QUOTED_CONTENT_RE.sub(r"\1<redacted>\1", msg)
     msg = _TOKEN_RE.sub(REDACTED, msg)
     msg = _PATH_RE.sub("<path>", msg)
-    msg = _FILENAME_RE.sub("<filename>", msg)
+    if scrub_filenames:
+        msg = _FILENAME_RE.sub("<filename>", msg)
     return msg
 
 
-def redact_payload(data: Any) -> Any:
+def redact_payload(data: Any, *, scrub_filenames: bool = True) -> Any:
     """Recursively redact a diagnostics payload using allowlist + scrubbing.
 
     - Sensitive dict keys are renamed to ``redacted_key`` (value ``[REDACTED]``)
@@ -193,28 +224,37 @@ def redact_payload(data: Any) -> Any:
       ``[REDACTED]`` values.
     - Strings under allowlisted keys are still pattern-scrubbed.
     - Lists and nested dicts are walked recursively.
+
+    ``scrub_filenames`` is threaded down so a model-identifier key can exempt
+    its own value — including list values like ``configured_models`` — without
+    weakening any other rule.
     """
     if isinstance(data, dict):
         out: dict[str, Any] = {}
+        # Several sensitive keys in one dict must not collapse onto a single
+        # ``redacted_key`` entry, which would silently drop all but the last.
+        redacted_key_count = 0
         for key, value in data.items():
             key_str = str(key)
             if _is_sensitive_key(key_str):
-                out[REDACTED_KEY] = REDACTED
+                suffix = f"_{redacted_key_count}" if redacted_key_count else ""
+                out[f"{REDACTED_KEY}{suffix}"] = REDACTED
+                redacted_key_count += 1
                 continue
             if key_str not in ALLOWED_KEYS:
                 out[key_str] = REDACTED
                 continue
-            out[key_str] = redact_payload(value)
+            out[key_str] = redact_payload(
+                value,
+                scrub_filenames=key_str not in _MODEL_IDENTIFIER_KEYS,
+            )
         return out
 
-    if isinstance(data, list):
-        return [redact_payload(item) for item in data]
-
-    if isinstance(data, tuple):
-        return [redact_payload(item) for item in data]
+    if isinstance(data, (list, tuple)):
+        return [redact_payload(item, scrub_filenames=scrub_filenames) for item in data]
 
     if isinstance(data, str):
-        return scrub_string(data)
+        return scrub_string(data, scrub_filenames=scrub_filenames)
 
     # bool/int/float/None and other primitives pass through unchanged.
     return data

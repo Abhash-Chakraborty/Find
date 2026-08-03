@@ -100,7 +100,8 @@ def _run_with_timeout(
     fn: Callable[[], Any], timeout_s: float = HEALTH_PROBE_TIMEOUT_SECONDS
 ) -> Any:
     """Run ``fn`` in a worker thread and raise ``TimeoutError`` if it hangs."""
-    with ThreadPoolExecutor(max_workers=1) as pool:
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
         future = pool.submit(fn)
         try:
             return future.result(timeout=timeout_s)
@@ -109,6 +110,13 @@ def _run_with_timeout(
             raise TimeoutError(
                 f"health probe timed out after {timeout_s:.0f}s"
             ) from exc
+    finally:
+        # Deliberately not `with ThreadPoolExecutor(...)`: Executor.__exit__
+        # calls shutdown(wait=True), which blocks until the probe thread
+        # finishes and so reinstates the exact stall this timeout exists to
+        # prevent. Abandon the thread instead — every probe already sets its
+        # own socket-level timeout, so it unwinds on its own shortly after.
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def _check_postgresql() -> dict[str, Any]:
@@ -248,9 +256,13 @@ def _collect_migration_state() -> dict[str, Any]:
         script = ScriptDirectory.from_config(cfg)
         heads = list(script.get_heads())
 
-        with engine.connect() as conn:
-            context = MigrationContext.configure(conn)
-            current = context.get_current_revision()
+        def _read_current_revision() -> Any:
+            with engine.connect() as conn:
+                return MigrationContext.configure(conn).get_current_revision()
+
+        # Same bound as the health probes: this opens a real DB connection, so
+        # an unreachable database must not stall the whole bundle.
+        current = _run_with_timeout(_read_current_revision)
 
         if current is None and not heads:
             status = "empty"
@@ -393,28 +405,33 @@ def _collect_recent_errors() -> list[dict[str, Any]]:
         from find_api.core.database import SessionLocal
         from find_api.models.media import Media
 
-        db = SessionLocal()
-        try:
-            rows = (
-                db.query(Media.error_message, Media.updated_at, Media.created_at)
-                .filter(Media.status == "failed", Media.error_message.isnot(None))
-                .order_by(Media.id.desc())
-                .limit(ERROR_LOG_LIMIT)
-                .all()
-            )
-            for error_message, updated_at, created_at in rows:
-                ts = updated_at or created_at
-                entries.append(
-                    {
-                        "timestamp": ts.isoformat() if ts is not None else None,
-                        "level": "ERROR",
-                        "logger": "media.analysis",
-                        "message": scrub_string(str(error_message)),
-                        "source": "media",
-                    }
+        def _read_failed_media() -> list[Any]:
+            db = SessionLocal()
+            try:
+                return (
+                    db.query(Media.error_message, Media.updated_at, Media.created_at)
+                    .filter(Media.status == "failed", Media.error_message.isnot(None))
+                    .order_by(Media.id.desc())
+                    .limit(ERROR_LOG_LIMIT)
+                    .all()
                 )
-        finally:
-            db.close()
+            finally:
+                db.close()
+
+        # Bounded for the same reason as the health probes — an unreachable
+        # database degrades the errors section instead of hanging the request.
+        rows = _run_with_timeout(_read_failed_media)
+        for error_message, updated_at, created_at in rows:
+            ts = updated_at or created_at
+            entries.append(
+                {
+                    "timestamp": ts.isoformat() if ts is not None else None,
+                    "level": "ERROR",
+                    "logger": "media.analysis",
+                    "message": scrub_string(str(error_message)),
+                    "source": "media",
+                }
+            )
     except Exception as exc:  # noqa: BLE001
         logger.debug("Could not load media analysis errors: %s", exc)
 

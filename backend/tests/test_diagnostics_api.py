@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from contextlib import ExitStack
 from unittest.mock import patch
 
@@ -247,3 +248,91 @@ class TestDiagnosticsBundleSharedModeAuth:
         )
         assert resp.headers["x-find-diagnostics"] == "local-only"
         assert resp.json()["schema_version"] == 1
+
+
+class TestHealthProbeTimeoutIsEnforced:
+    """The probe timeout must bound wall-clock time, not just raise late.
+
+    ``with ThreadPoolExecutor(...)`` calls ``shutdown(wait=True)`` on exit, so
+    the original helper blocked until the hung probe finished and the timeout
+    had no effect. These assert the bound is real.
+    """
+
+    def test_returns_promptly_when_the_probe_hangs(self):
+        from find_api.diagnostics.bundle import _run_with_timeout
+
+        started = time.perf_counter()
+        with pytest.raises(TimeoutError):
+            _run_with_timeout(lambda: time.sleep(30), timeout_s=0.2)
+        elapsed = time.perf_counter() - started
+
+        # Generous ceiling for slow CI, still far below the 30s hang.
+        assert elapsed < 5, f"timeout did not bound wall clock: {elapsed:.2f}s"
+
+    def test_returns_value_when_the_probe_completes(self):
+        from find_api.diagnostics.bundle import _run_with_timeout
+
+        assert _run_with_timeout(lambda: "healthy", timeout_s=5) == "healthy"
+
+    def test_propagates_probe_exceptions_unchanged(self):
+        from find_api.diagnostics.bundle import _run_with_timeout
+
+        def _boom():
+            raise ValueError("probe exploded")
+
+        with pytest.raises(ValueError, match="probe exploded"):
+            _run_with_timeout(_boom, timeout_s=5)
+
+
+class TestUnmockedBundleOverTheWire:
+    """Exercise the real collector through the real endpoint.
+
+    Every other endpoint test patches ``collect_diagnostics_bundle``, so none
+    of them prove a genuine bundle survives strict JSON serialisation or that
+    the redaction layer leaves the reported fields intact end to end.
+    """
+
+    def test_real_bundle_serialises_and_keeps_useful_fields(self, client):
+        from find_api.diagnostics import bundle as bundle_mod
+
+        # Stub only the outbound probes so the test stays fast and offline.
+        # Model collection, redaction, and serialisation all run for real —
+        # those are the paths no other endpoint test covers.
+        with ExitStack() as stack:
+            for name, value in (
+                ("_check_postgresql", {"ok": True, "latency_ms": 1.0}),
+                ("_check_redis", {"ok": True, "latency_ms": 1.0}),
+                (
+                    "_check_storage",
+                    {"ok": True, "backend": "minio", "latency_ms": 1.0},
+                ),
+                (
+                    "_collect_migration_state",
+                    {"status": "ok", "current": "abc", "heads": ["abc"]},
+                ),
+            ):
+                stack.enter_context(patch.object(bundle_mod, name, return_value=value))
+            resp = client.get(_ENDPOINT)
+
+        assert resp.status_code == 200
+        body = resp.json()
+
+        # Strict: no default=str fallback, so a stray datetime fails loudly.
+        json.dumps(body)
+
+        assert body["schema_version"] == 1
+        assert set(body) >= {
+            "app",
+            "runtime",
+            "migrations",
+            "services",
+            "queue",
+            "models",
+            "errors",
+        }
+        # Model identifiers must stay readable — a filename-shaped name like
+        # yolo26n.pt previously collapsed to "<filename>".
+        assert body["models"]["yolo_model"].endswith(".pt")
+        assert isinstance(body["models"]["embedding_dim"], int)
+        assert isinstance(body["errors"], list)
+        _assert_no_leakage(body)

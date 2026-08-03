@@ -391,3 +391,103 @@ def test_sensitive_key_names_always_redacted(key):
     assert key not in payload
     assert payload[REDACTED_KEY] == REDACTED
     assert payload["schema_version"] == 1
+
+
+class TestAllowlistBeatsSubstringHeuristic:
+    """The substring deny-net must not eat curated allowlist entries.
+
+    ``embedding_dim`` is an int on the allowlist, but contains "embedding",
+    so the substring heuristic used to replace the whole entry with
+    ``redacted_key: [REDACTED]`` and drop a field the models section needs.
+    """
+
+    def test_embedding_dim_survives(self):
+        payload = redact_payload({"embedding_dim": 768, "schema_version": 1})
+        assert payload["embedding_dim"] == 768
+        assert REDACTED_KEY not in payload
+
+    def test_non_allowlisted_lookalike_still_redacted(self):
+        # Not on the allowlist, so the substring net must still catch it.
+        payload = redact_payload({"embedding_cache": "leak-me", "schema_version": 1})
+        assert "embedding_cache" not in payload
+        assert payload[REDACTED_KEY] == REDACTED
+
+    def test_exact_sensitive_name_still_wins_over_allowlist(self):
+        # "error" is allowlisted; "token" is not, and is an exact sensitive
+        # name, so it must be stripped regardless.
+        payload = redact_payload({"token": _EXAMPLE_API_KEY, "error": "boom"})
+        assert "token" not in payload
+        assert payload[REDACTED_KEY] == REDACTED
+        _assert_no_leakage(payload)
+
+
+class TestMultipleSensitiveKeys:
+    """Several sensitive keys in one dict must not collapse into one entry."""
+
+    def test_each_sensitive_key_gets_its_own_placeholder(self):
+        payload = redact_payload(
+            {
+                "password": _EXAMPLE_PASSWORD,
+                "api_key": _EXAMPLE_API_KEY,
+                "caption": "A smiling woman standing by the lake at sunset",
+                "schema_version": 1,
+            }
+        )
+        placeholders = [k for k in payload if k.startswith(REDACTED_KEY)]
+        assert len(placeholders) == 3, payload
+        assert all(payload[k] == REDACTED for k in placeholders)
+        assert payload["schema_version"] == 1
+        _assert_no_leakage(payload)
+
+
+class TestModelIdentifiersSurvive:
+    """Model names are operator config, not user data, and must stay readable.
+
+    ``yolo26n.pt`` is filename-shaped, so the generic filename pattern used to
+    reduce it — and every entry of ``configured_models`` — to ``<filename>``,
+    which defeats the point of reporting model state.
+    """
+
+    def test_filename_shaped_model_name_is_kept(self):
+        payload = redact_payload({"models": {"yolo_model": "yolo26n.pt"}})
+        assert payload["models"]["yolo_model"] == "yolo26n.pt"
+
+    def test_configured_models_list_is_kept(self):
+        payload = redact_payload(
+            {
+                "models": {
+                    "configured_models": [
+                        "yolo26n.pt",
+                        "ViT-B-16-SigLIP",
+                        "Salesforce/blip-image-captioning-base",
+                    ]
+                }
+            }
+        )
+        assert payload["models"]["configured_models"] == [
+            "yolo26n.pt",
+            "ViT-B-16-SigLIP",
+            "Salesforce/blip-image-captioning-base",
+        ]
+
+    def test_exemption_does_not_disable_other_scrubbing(self):
+        # Credentials and absolute paths must still be removed even under an
+        # exempt key — only the filename rule is relaxed.
+        payload = redact_payload(
+            {
+                "models": {
+                    "clip_model": f"model loaded from {_EXAMPLE_DSN}",
+                    "blip_model": "/var/lib/find/storage/uploads/ab/abcdef.jpg",
+                }
+            }
+        )
+        _assert_no_leakage(payload)
+
+    def test_exemption_does_not_leak_into_sibling_keys(self):
+        # A filename under a normal key inside the same section is still
+        # scrubbed — the exemption is per-key, not per-section.
+        payload = redact_payload(
+            {"models": {"yolo_model": "yolo26n.pt", "message": "wrote holiday.jpg"}}
+        )
+        assert payload["models"]["yolo_model"] == "yolo26n.pt"
+        assert "holiday.jpg" not in payload["models"]["message"]
