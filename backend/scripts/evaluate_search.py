@@ -115,12 +115,18 @@ def _run_variants(
 
     Retrieving once and ranking many times is what makes the comparison fair:
     every variant sees byte-identical input, so a metric difference is
-    attributable to the ranking rule alone. The cost is that reported latency
-    covers ranking only for all but the first variant, which is recorded in the
-    output rather than left for the reader to infer.
+    attributable to the ranking rule alone.
+
+    The pool is filled before any variant is scored, not lazily during the first
+    one. Otherwise whichever variant happened to run first would absorb the whole
+    retrieval cost — embedding plus a Postgres round trip, which dwarfs any
+    ranking rule — and would read as dramatically the slowest in the results
+    table for no reason but its position in the loop.
     """
     source = _db_candidate_source(exact)
     cache = PoolCache(source=source, pool_size=max_pool_size(variants, dataset.max_k))
+    for query in dataset.queries:
+        cache.get(query)
 
     reports: dict[str, dict] = {}
     for variant in variants:
@@ -136,9 +142,11 @@ def _run_variants(
         "retrieval": "exact" if exact else "approximate (deployed HNSW index)",
         "shared_candidate_pool": True,
         "latency_note": (
-            "Candidate retrieval is shared across variants, so per-variant "
-            "latency measures ranking only. Score a single variant without "
-            "--all-variants for end-to-end latency."
+            "Candidate retrieval is shared across variants and is performed "
+            "before any of them are scored, so every per-variant latency here "
+            "measures ranking only and they are comparable with each other. "
+            "Score a single variant without --all-variants for end-to-end "
+            "latency."
         ),
         "variants": reports,
     }

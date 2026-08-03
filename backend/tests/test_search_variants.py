@@ -401,6 +401,39 @@ def test_pool_cache_keys_on_query_id_not_text(pool):
     assert calls == ["bicycle", "bicycle"]
 
 
+def test_prewarming_the_cache_leaves_no_variant_paying_for_retrieval(pool):
+    """Filling the pool up front is what makes per-variant latency comparable.
+
+    Lazily, the first variant scored would absorb the whole retrieval cost --
+    query embedding plus a Postgres round trip, which dwarfs any ranking rule --
+    and would read as the slowest variant purely because of loop order. This is
+    the behaviour `_run_variants` relies on.
+    """
+    calls: list[str] = []
+
+    def source(query_text: str, pool_size: int):
+        calls.append(query_text)
+        return pool
+
+    queries = [
+        EvalQuery(id="q1", query="bicycle", relevant=("1",)),
+        EvalQuery(id="q2", query="invoice", relevant=("2",)),
+    ]
+    cache = PoolCache(source=source, pool_size=max_pool_size([C0, C3], 10))
+
+    for query in queries:
+        cache.get(query)
+    assert len(calls) == 2
+
+    for variant in (C0, C3, C5):
+        retrieve = variant_retriever(variant, source, cache=cache, now=NOW)
+        for query in queries:
+            retrieve(query, 10)
+
+    # No variant, including the first one scored, triggered a retrieval.
+    assert len(calls) == 2
+
+
 def test_uncached_retriever_requests_at_least_k(pool):
     """Without a cache, the source must still be asked for enough rows."""
     requested: list[int] = []
