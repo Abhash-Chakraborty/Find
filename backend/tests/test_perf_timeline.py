@@ -92,9 +92,9 @@ class TestTimelinePerf:
                 f"{MONTHS} months: {elapsed * 1000:.1f} ms "
                 f"(budget {BUCKETS_BUDGET_S * 1000:.0f} ms)"
             )
-        assert (
-            elapsed < BUCKETS_BUDGET_S
-        ), f"/timeline/buckets took {elapsed:.3f}s (budget {BUCKETS_BUDGET_S}s)"
+        assert elapsed < BUCKETS_BUDGET_S, (
+            f"/timeline/buckets took {elapsed:.3f}s (budget {BUCKETS_BUDGET_S}s)"
+        )
 
     def test_single_bucket_window_under_budget(self, client, seeded, capsys):
         # Pick a month that actually has assets.
@@ -114,9 +114,9 @@ class TestTimelinePerf:
                 f"\n[perf] /timeline/bucket ({month_key}, {body['count']} assets): "
                 f"{elapsed * 1000:.1f} ms (budget {BUCKET_BUDGET_S * 1000:.0f} ms)"
             )
-        assert (
-            elapsed < BUCKET_BUDGET_S
-        ), f"/timeline/bucket took {elapsed:.3f}s (budget {BUCKET_BUDGET_S}s)"
+        assert elapsed < BUCKET_BUDGET_S, (
+            f"/timeline/bucket took {elapsed:.3f}s (budget {BUCKET_BUDGET_S}s)"
+        )
 
     def test_liked_filter_aggregate_under_budget(self, client, seeded):
         # The favorites filter must not change the query's scaling characteristics.
