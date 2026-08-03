@@ -77,8 +77,8 @@ where = ["src"]
 dev = [
   "pytest==9.1.1",
   "pytest-asyncio==1.4.0",
-  "black==26.3.1",
-  "ruff==0.1.14",
+  "black==26.5.1",
+  "ruff==0.16.1",
   "pip-audit==2.10.1",
   "scikit-learn==1.9.0",
   # Used only by the standalone OCR benchmark scripts (scripts/benchmark_ocr_variants.py
