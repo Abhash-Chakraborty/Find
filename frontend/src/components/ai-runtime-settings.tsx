@@ -65,11 +65,11 @@ export function AiRuntimeSettings({
           disabled={enabled === undefined || pending}
           onClick={() => onChange(!checked)}
           aria-busy={pending}
-          className="relative h-11 w-12 shrink-0 rounded-full border border-[color:var(--frost-strong)] bg-[color:var(--surface-hover)] transition hover:border-[color:var(--frost-strong)] active:scale-95 disabled:cursor-wait disabled:opacity-50 aria-checked:border-[color:var(--green)] aria-checked:bg-[color:var(--green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
+          className="relative h-7 w-12 shrink-0 rounded-full border border-[color:var(--frost-strong)] bg-[color:var(--surface-hover)] transition before:absolute before:-inset-2 before:content-[''] hover:border-[color:var(--frost-strong)] active:scale-95 disabled:cursor-wait disabled:opacity-50 aria-checked:border-[color:var(--green)] aria-checked:bg-[color:var(--green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
         >
           <span
             aria-hidden="true"
-            className="absolute left-1 top-1/2 size-5 rounded-full bg-[color:var(--void)] shadow transition-transform"
+            className="absolute left-1 top-1/2 size-5 rounded-full bg-white shadow transition-transform"
             style={{
               transform: checked
                 ? "translate(1.25rem, -50%)"

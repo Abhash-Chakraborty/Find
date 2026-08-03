@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock3, Info } from "lucide-react";
+import { useId, useState } from "react";
 
 interface TrashRetentionSettingsProps {
   value: number;
@@ -15,6 +16,9 @@ export function TrashRetentionSettings({
   pending,
   onChange,
 }: TrashRetentionSettingsProps) {
+  const [showInfo, setShowInfo] = useState(false);
+  const infoId = useId();
+
   return (
     <section
       id="trash-retention"
@@ -37,8 +41,14 @@ export function TrashRetentionSettings({
               </h2>
               <button
                 type="button"
-                title="Expired items are permanently removed when Trash is opened. Set Never to require manual emptying."
-                aria-label="Expired items are permanently removed when Trash is opened. Set Never to require manual emptying."
+                aria-controls={infoId}
+                aria-expanded={showInfo}
+                aria-label={
+                  showInfo
+                    ? "Hide trash retention details"
+                    : "Show trash retention details"
+                }
+                onClick={() => setShowInfo((current) => !current)}
                 className="inline-flex size-11 items-center justify-center rounded-lg text-[color:var(--muted)] outline-none transition hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
               >
                 <Info className="h-4 w-4" aria-hidden="true" />
@@ -46,6 +56,14 @@ export function TrashRetentionSettings({
             </div>
             <p className="mt-1 text-sm text-[color:var(--silver)]">
               Permanently delete trashed photos after a chosen delay.
+            </p>
+            <p
+              id={infoId}
+              hidden={!showInfo}
+              className="mt-2 text-sm leading-6 text-[color:var(--silver)]"
+            >
+              Expired items are permanently removed when Trash is opened. Set
+              Never to require manual emptying.
             </p>
           </div>
         </div>
