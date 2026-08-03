@@ -133,3 +133,94 @@ class TestOCRErrorHandling:
         img = Image.new("RGB", (1, 1))
         result = ocr_extractor.extract_text(img)
         assert isinstance(result, str)
+
+
+class TestOneDnnFallback:
+    """The PaddlePaddle 3.3.1 oneDNN regression and the reload that works around it.
+
+    3.3.1 raises NotImplementedError from its oneDNN instruction path on the
+    first prediction, which takes down every OCR call in a container built from
+    the current lock. 3.2.x is unaffected, so the fallback must trigger on the
+    failure rather than on a version check or a profile flag.
+    """
+
+    def test_probe_reports_unusable_on_not_implemented_error(self, ocr_extractor):
+        class Broken:
+            def predict(self, _image):
+                raise NotImplementedError("ConvertPirAttribute2RuntimeAttribute")
+
+        assert ocr_extractor._onednn_inference_works(Broken()) is False
+
+    def test_probe_reports_usable_on_success(self, ocr_extractor):
+        class Working:
+            def predict(self, _image):
+                return []
+
+        assert ocr_extractor._onednn_inference_works(Working()) is True
+
+    def test_probe_does_not_swallow_unrelated_failures(self, ocr_extractor):
+        """An unrelated error must not silently switch kernels.
+
+        Downgrading oneDNN because a model download failed would hide the real
+        problem and make OCR quietly slower forever.
+        """
+
+        class Unrelated:
+            def predict(self, _image):
+                raise RuntimeError("model weights missing")
+
+        assert ocr_extractor._onednn_inference_works(Unrelated()) is True
+
+    def test_load_model_reloads_without_onednn_when_probe_fails(
+        self, ocr_extractor, monkeypatch
+    ):
+        constructed: list[bool] = []
+
+        def fake_construct(*, disable_onednn=False):
+            constructed.append(disable_onednn)
+            return object(), False
+
+        monkeypatch.setattr(ocr_extractor, "_construct", fake_construct)
+        monkeypatch.setattr(
+            ocr_extractor, "_onednn_inference_works", lambda _model: False
+        )
+        monkeypatch.setattr(ocr_extractor, "_publish_variant_status", lambda **_: None)
+
+        ocr_extractor._load_model()
+
+        assert constructed == [False, True]
+
+    def test_load_model_keeps_onednn_when_probe_succeeds(
+        self, ocr_extractor, monkeypatch
+    ):
+        constructed: list[bool] = []
+
+        def fake_construct(*, disable_onednn=False):
+            constructed.append(disable_onednn)
+            return object(), False
+
+        monkeypatch.setattr(ocr_extractor, "_construct", fake_construct)
+        monkeypatch.setattr(
+            ocr_extractor, "_onednn_inference_works", lambda _model: True
+        )
+        monkeypatch.setattr(ocr_extractor, "_publish_variant_status", lambda **_: None)
+
+        ocr_extractor._load_model()
+
+        assert constructed == [False]
+
+    def test_legacy_2x_path_skips_the_probe(self, ocr_extractor, monkeypatch):
+        """PaddleOCR 2.x has no oneDNN pipeline flag, so probing it is pointless."""
+        probed: list[object] = []
+
+        monkeypatch.setattr(ocr_extractor, "_construct", lambda **_: (object(), True))
+        monkeypatch.setattr(
+            ocr_extractor,
+            "_onednn_inference_works",
+            lambda model: probed.append(model) or True,
+        )
+        monkeypatch.setattr(ocr_extractor, "_publish_variant_status", lambda **_: None)
+
+        ocr_extractor._load_model()
+
+        assert probed == []

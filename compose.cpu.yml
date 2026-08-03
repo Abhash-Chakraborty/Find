@@ -28,6 +28,15 @@ services:
       USE_GPU: "false"
     volumes:
       - model_cache:/root/.cache
+      # PaddleOCR and InsightFace do not use XDG cache paths, so a single
+      # /root/.cache mount silently misses them: PP-OCRv5 weights land in
+      # /root/.paddlex/official_models and antelopev2 in /root/.insightface,
+      # both inside the container's writable layer. Without these two mounts
+      # every `compose up` that recreates the container re-downloads roughly
+      # 100 MB of OCR and 360 MB of face weights, which reads as "first run is
+      # slow" forever rather than once.
+      - paddlex_cache:/root/.paddlex
+      - insightface_cache:/root/.insightface
   worker:
     extends:
       file: compose.base.yml
@@ -45,6 +54,15 @@ services:
       USE_GPU: "false"
     volumes:
       - model_cache:/root/.cache
+      # PaddleOCR and InsightFace do not use XDG cache paths, so a single
+      # /root/.cache mount silently misses them: PP-OCRv5 weights land in
+      # /root/.paddlex/official_models and antelopev2 in /root/.insightface,
+      # both inside the container's writable layer. Without these two mounts
+      # every `compose up` that recreates the container re-downloads roughly
+      # 100 MB of OCR and 360 MB of face weights, which reads as "first run is
+      # slow" forever rather than once.
+      - paddlex_cache:/root/.paddlex
+      - insightface_cache:/root/.insightface
   web:
     extends:
       file: compose.base.yml
@@ -55,3 +73,5 @@ volumes:
   redis_data:
   minio_data:
   model_cache:
+  paddlex_cache:
+  insightface_cache:

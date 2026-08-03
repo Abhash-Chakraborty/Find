@@ -125,6 +125,17 @@ torchvision = [
 # which is GHSA-affected (<83.0.0). The build-system pin above only governs
 # building this package, not the resolved environment, so constrain it here.
 constraint-dependencies = ["setuptools>=83.0.0"]
+# The container images are linux/amd64, but uv only guarantees the lock has
+# wheels for the platform it was locked on. Locking on Windows let the cpu
+# extra pick torchvision 0.24.1+d801a34, a local-version variant that ships a
+# win_arm64 wheel and nothing else, for the linux x86_64 marker branch — so
+# `uv sync --locked --extra cpu` inside the Dockerfile failed outright. Naming
+# the container platform here makes uv resolve to a build that actually has a
+# linux x86_64 wheel, and makes a future recurrence a lock-time error on the
+# contributor's machine instead of a build-time one in CI.
+required-environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 conflicts = [
   [
     { extra = "cpu" },
