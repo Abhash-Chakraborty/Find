@@ -35,6 +35,13 @@ bracket the real case:
 Real embeddings sit between the two. Deciding production settings still needs a
 real indexed library - see Track A2 in the plan.
 
+WRITES TO THE DATABASE - USE A THROWAWAY ONE
+
+This script DROPs and CREATEs a table named `hnsw_bench` and an index on it. It
+does not read or touch `media`. Point it at a scratch database, never at a
+production DSN. It also cannot measure a real library: the corpus is generated,
+so there is no flag to feed it real SigLIP vectors.
+
 Usage (needs a pgvector database; nothing else in the stack is required):
 
     docker run -d --name find-eval-pg \
@@ -61,10 +68,13 @@ import psycopg2
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from find_api.core.config import settings  # noqa: E402
 from find_api.evaluation.metrics import recall_at_k  # noqa: E402
 
 TABLE = "hnsw_bench"
-DIM = 768  # settings.EMBEDDING_DIM - SigLIP ViT-B-16
+# Read from settings rather than hardcoded: measuring a different width than
+# production indexes would make every number here quietly inapplicable.
+DIM = settings.EMBEDDING_DIM
 INDEX_NAME = "ix_hnsw_bench_vector"
 
 

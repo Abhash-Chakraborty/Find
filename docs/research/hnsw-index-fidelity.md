@@ -148,22 +148,34 @@ Outstanding, and still requiring a real indexed library:
 
 ## Recommendation
 
-**Change nothing about the index for now**, and drop the pending action to raise
-`ef_search`. The evidence available says the defaults are both correct and the
-cheapest option on realistic data.
+Scoped to what was actually measured — synthetic clustered corpora at 1k and
+10k, 768 dimensions, pgvector 0.8.4:
+
+**Make no index change on the strength of this evidence**, and drop the pending
+action to raise `ef_search`. On the tested clustered corpora the defaults were
+both exact and the cheapest option, so raising `ef_search` would buy latency and
+nothing else. That is a reason *not to act yet*, not a clearance of the
+configuration for all real libraries — the uniform results show the same
+defaults falling to 0.59 recall once neighbours stop being separated, and
+nothing here establishes which regime real SigLIP vectors sit in.
 
 Keep the explicit-setting suggestion, but for a different reason than before:
 `hnsw.ef_search` being unset is worth documenting as a deliberate choice rather
 than an inherited default, so a future pgvector version changing it is a visible
 event. That is a documentation change, not a tuning one.
 
-Re-run against a real library before treating any of this as settled:
+### Confirming against a real library
 
-```bash
-cd backend
-uv run python scripts/benchmark_hnsw_recall.py \
-    --dsn "$DATABASE_URL" --sizes 10000 --json --out hnsw_recall.json
-```
+`benchmark_hnsw_recall.py` **cannot** do this. It generates its corpus, has no
+flag for real vectors, and DROPs/CREATEs its own `hnsw_bench` table — so it must
+be pointed at a scratch database, never at a production DSN, and running it
+against `$DATABASE_URL` would measure synthetic data while writing to the real
+database.
+
+A real-corpus Track A run needs a separate, read-only measurement against the
+actual `media` table: sample query vectors from indexed rows, take exact top-k
+with `enable_indexscan = off`, compare against the normal indexed path, and
+report the neighbour margin alongside. That is the outstanding work.
 
 ## References
 
