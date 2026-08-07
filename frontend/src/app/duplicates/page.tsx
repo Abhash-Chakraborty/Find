@@ -61,7 +61,7 @@ function DuplicateCard({
   isKeeping: boolean;
 }) {
   return (
-    <article className="rounded-xl border border-[var(--frost)] bg-[color:var(--frost-soft)] p-4 shadow-sm">
+    <article className="rounded-xl border border-[var(--frost)] bg-[color:var(--frost-soft)] p-4 shadow-xs">
       <div className="grid grid-cols-2 gap-4">
         <DuplicateImage
           id={pair.original_id}

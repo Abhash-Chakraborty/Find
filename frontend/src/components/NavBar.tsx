@@ -122,7 +122,7 @@ export default function NavBar({
                       aria-current={active ? "page" : undefined}
                       className={`group flex min-h-10 items-center rounded-xl py-2 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--blue)] ${collapsed ? "justify-center px-2" : "gap-3 px-3"} ${
                         active
-                          ? "bg-[color:var(--near-white)] text-[color:var(--void)] shadow-sm"
+                          ? "bg-[color:var(--near-white)] text-[color:var(--void)] shadow-xs"
                           : "text-[color:var(--silver)] hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)]"
                       }`}
                     >

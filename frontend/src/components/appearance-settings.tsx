@@ -42,7 +42,7 @@ export function AppearanceSettings() {
         {OPTIONS.map(({ value: option, label, icon: Icon }) => (
           <label
             key={option}
-            className={`flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition active:scale-[0.98] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[color:var(--blue)] ${value === option ? "bg-[color:var(--near-white)] text-[color:var(--void)] shadow-sm" : "text-[color:var(--silver)] hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)]"}`}
+            className={`flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition active:scale-[0.98] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[color:var(--blue)] ${value === option ? "bg-[color:var(--near-white)] text-[color:var(--void)] shadow-xs" : "text-[color:var(--silver)] hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--near-white)]"}`}
           >
             <input
               className="sr-only"
