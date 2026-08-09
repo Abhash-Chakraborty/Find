@@ -206,7 +206,7 @@ export function AppShell({ children }: AppShellProps) {
             className="group flex min-w-0 items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--blue)]"
             aria-label="FIND. Photos"
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--frost)] bg-[color:var(--near-white)] p-1 shadow-sm dark:bg-[color:var(--frost-soft)]">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--frost)] bg-[color:var(--near-white)] p-1 shadow-xs dark:bg-[color:var(--frost-soft)]">
               <Image
                 src="/Find-Logo.svg"
                 alt=""
@@ -314,7 +314,7 @@ export function AppShell({ children }: AppShellProps) {
         type="button"
         aria-label="Close navigation menu"
         onClick={() => setDrawerOpen(false)}
-        className={`fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm transition lg:hidden ${
+        className={`fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs transition lg:hidden ${
           drawerOpen
             ? "visible opacity-100"
             : "invisible pointer-events-none opacity-0"
