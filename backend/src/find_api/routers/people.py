@@ -4,9 +4,8 @@ People router - API endpoints for person groups and face clusters
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from find_api.core.database import get_db
 from find_api.core.config import settings
@@ -79,29 +78,29 @@ def list_people(
 
     persons = db.query(Person).order_by(Person.created_at.desc()).all()
 
+    # One query for every (person, media) face pair instead of a count query
+    # and a sample query per person. face_count and sample_media_ids are both
+    # derived from it below.
+    faces_query = (
+        db.query(Face.person_id, Face.media_id)
+        .join(Media, Media.id == Face.media_id)
+        .filter(Media.is_hidden.is_(False))
+    )
+    if scope_user_id is not None:
+        faces_query = faces_query.filter(Media.uploader_user_id == scope_user_id)
+
+    face_counts: Dict[int, int] = {}
+    sample_media_ids_by_person: Dict[int, List[int]] = {}
+    for person_id, media_id in faces_query.all():
+        face_counts[person_id] = face_counts.get(person_id, 0) + 1
+        samples = sample_media_ids_by_person.setdefault(person_id, [])
+        if media_id not in samples and len(samples) < 4:
+            samples.append(media_id)
+
     result = []
     for person in persons:
-        # Count how many faces belong to this person
-        count_query = (
-            db.query(func.count(Face.id))
-            .join(Media, Media.id == Face.media_id)
-            .filter(Face.person_id == person.id, Media.is_hidden.is_(False))
-        )
-        if scope_user_id is not None:
-            count_query = count_query.filter(Media.uploader_user_id == scope_user_id)
-        face_count = count_query.scalar()
-
-        # Get up to 4 sample media IDs for thumbnail preview
-        sample_query = (
-            db.query(Face.media_id)
-            .join(Media, Media.id == Face.media_id)
-            .filter(Face.person_id == person.id)
-            .filter(Media.is_hidden.is_(False))
-        )
-        if scope_user_id is not None:
-            sample_query = sample_query.filter(Media.uploader_user_id == scope_user_id)
-        sample_faces = sample_query.distinct().limit(4).all()
-        sample_media_ids = [f.media_id for f in sample_faces]
+        face_count = face_counts.get(person.id, 0)
+        sample_media_ids = sample_media_ids_by_person.get(person.id, [])
         # Skip groups with no visible faces. face_count/sample_media_ids are
         # already scoped to the caller in shared mode, so this also hides
         # person groups the user has none of their own media in.
