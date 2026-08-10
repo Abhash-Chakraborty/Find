@@ -271,17 +271,27 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
 
         db.commit()
         invalidate_query_cache()
-        record_activity(
-            db,
-            "upload",
-            "completed",
-            user_id=media.uploader_user_id,
-            media_id=media.id,
-            payload={"filename": media.filename},
-        )
+
+        def record_upload_completed() -> None:
+            """Record the success only once every remaining step has survived.
+
+            Called immediately before each successful return rather than here, right
+            after the indexing commit. Steps still to run after this point can raise
+            into the outer handler, which writes ``upload.failed`` for the same media --
+            and the feed then carries both a completed and a failed row for one job.
+            """
+            record_activity(
+                db,
+                "upload",
+                "completed",
+                user_id=media.uploader_user_id,
+                media_id=media.id,
+                payload={"filename": media.filename},
+            )
 
         if runtime.applied_mode == "disabled":
             logger.info("Metadata-only processing complete for media %s", media_id)
+            record_upload_completed()
             return {
                 "media_id": media_id,
                 "status": "success",
@@ -340,6 +350,7 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
         except Exception as e:
             logger.warning(f"Cleanup failed after processing media {media_id}: {e}")
 
+        record_upload_completed()
         return {"media_id": media_id, "status": "success", "metadata": metadata}
 
     except Exception as e:
