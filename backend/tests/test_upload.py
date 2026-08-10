@@ -1,19 +1,20 @@
 import concurrent.futures
+import hashlib
 import io
 import os
 import zipfile
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image
 from find_api.core.config import PILLOW_MAX_IMAGE_PIXELS, Settings
 from find_api.models.media import Media
-from find_api.routers.upload import _verify_image_content
+from find_api.routers.upload import _ingest_image, _verify_image_content
 
 
-def get_valid_image_bytes():
+def get_valid_image_bytes(color="red"):
     """Generate a 1x1 valid PNG for testing."""
-    img = Image.new("RGB", (1, 1), color="red")
+    img = Image.new("RGB", (1, 1), color=color)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -92,6 +93,59 @@ class TestUploadSuccess:
         )
         assert response.status_code == 200
         assert response.json()["results"][0]["status"] == "duplicate"
+
+
+class TestUploadRace:
+    """A file_hash race during insert must not poison the shared session."""
+
+    def test_race_on_insert_is_recovered_without_poisoning_session(self, client, db):
+        data = get_valid_image_bytes()
+        file_hash = hashlib.sha256(data).hexdigest()
+
+        # Row inserted by a "concurrent" request that our own existing-file
+        # check below has not seen yet.
+        existing = Media(
+            file_hash=file_hash,
+            minio_key=f"images/{file_hash[:2]}/{file_hash}.png",
+            filename="first.png",
+            content_type="image/png",
+            file_size=len(data),
+            status="pending",
+        )
+        db.add(existing)
+        db.commit()
+
+        real_query = db.query
+        seen = False
+
+        def query_once_empty(model):
+            nonlocal seen
+            if not seen:
+                seen = True
+                empty = MagicMock()
+                empty.filter.return_value.first.return_value = None
+                return empty
+            return real_query(model)
+
+        with patch.object(db, "query", side_effect=query_once_empty):
+            raced = _ingest_image(
+                filename="second.png",
+                content_type="image/png",
+                file_data=data,
+                db=db,
+            )
+
+        assert raced["status"] == "duplicate"
+        assert raced["media_id"] == existing.id
+
+        # Session must still work for the next file in the same batch.
+        next_result = _ingest_image(
+            filename="third.png",
+            content_type="image/png",
+            file_data=get_valid_image_bytes(color="blue"),
+            db=db,
+        )
+        assert next_result["status"] == "uploaded"
 
 
 class TestUploadInvalid:

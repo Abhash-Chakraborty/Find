@@ -12,6 +12,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from PIL import Image
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from find_api.core.config import settings
@@ -294,7 +295,17 @@ def _ingest_image(
     media = Media(**media_kwargs)
 
     db.add(media)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another request inserted the same file_hash first.
+        db.rollback()
+        existing = db.query(Media).filter(Media.file_hash == file_hash).first()
+        if existing is None:
+            raise
+        logger.info(f"File {filename} already exists (hash: {file_hash})")
+        return {"filename": filename, "status": "duplicate", "media_id": existing.id}
+
     db.refresh(media)
 
     job = get_task_queue().enqueue(
