@@ -159,3 +159,43 @@ def test_people_list_counts_and_samples_are_not_mixed_between_people(client, db)
     assert set(by_id[person_a.id]["sample_media_ids"]) == {media_1.id, media_2.id}
     assert by_id[person_b.id]["face_count"] == 1
     assert by_id[person_b.id]["sample_media_ids"] == [media_3.id]
+
+
+def test_people_list_query_count_does_not_grow_with_people(client, db):
+    """The point of the batching: cost must not scale with N.
+
+    Asserting the response shape alone would not have caught the original
+    1 + 2N pattern, since it returned correct data — it was only slow. This
+    fails if anyone reintroduces a per-person query.
+    """
+    from sqlalchemy import event
+
+    engine = db.get_bind()
+
+    def count_selects_for(batch: str, person_count: int) -> int:
+        # Names are hashed into file_hash, which is unique, so each batch needs
+        # its own prefix rather than restarting the counter.
+        for index in range(person_count):
+            _seed_person_group(db, name=f"{batch}{index}")
+
+        statements: list[str] = []
+
+        def record(conn, cursor, statement, params, context, executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            assert client.get("/api/people").status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+        return len(statements)
+
+    few = count_selects_for("Few", 3)
+    many = count_selects_for("Many", 20)
+
+    # Constant, not merely "fewer": 23 people must cost the same as 3.
+    assert few == many, (
+        f"query count grew with the number of people: {few} -> {many}; "
+        "a per-person query has been reintroduced"
+    )
