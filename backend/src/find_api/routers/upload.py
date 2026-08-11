@@ -69,6 +69,12 @@ async def upload_images(
             raise
         except Exception:
             logger.exception("Failed to upload %s", file.filename)
+            # The session is shared by every file in this request, and a failed
+            # commit leaves it unusable until rolled back. Without this, one bad
+            # file fails the whole remainder of the batch with
+            # PendingRollbackError. Already-committed files are unaffected --
+            # rollback only discards work that never landed.
+            db.rollback()
             results.append(
                 {
                     "filename": file.filename,
@@ -202,6 +208,10 @@ async def upload_bulk_images(
                     )
                 except Exception:
                     logger.exception("Failed to process %s from bulk upload", filename)
+                    # See the note in upload_images: the session is shared
+                    # across the archive, so a failed commit has to be cleared
+                    # or every later member fails too.
+                    db.rollback()
                     results.append(
                         {
                             "filename": filename,

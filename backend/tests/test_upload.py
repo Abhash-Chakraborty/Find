@@ -207,6 +207,63 @@ class TestUploadRace:
         assert next_result["status"] == "uploaded"
 
 
+class TestBatchSessionRecovery:
+    """A failure on one file must not fail the rest of the batch.
+
+    The file_hash race above is the reachable trigger, but any commit failure
+    leaves the shared session inactive -- an unexpected constraint violation, a
+    dropped connection. The generic handlers have to clear it too, or the first
+    unlucky file takes every later one with it.
+    """
+
+    def _zip_of(self, names_and_bytes):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "a", zipfile.ZIP_DEFLATED) as archive:
+            for name, data in names_and_bytes:
+                archive.writestr(name, data)
+        buffer.seek(0)
+        return buffer.read()
+
+    def test_bulk_upload_survives_a_non_hash_commit_failure(self, client):
+        payload = self._zip_of(
+            [
+                ("first.png", get_valid_image_bytes(color="red")),
+                ("second.png", get_valid_image_bytes(color="blue")),
+            ]
+        )
+
+        real_ingest = _ingest_image
+        calls = {"n": 0}
+
+        def poison_first_commit(**kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                db = kwargs["db"]
+                # Land the session in exactly the state a failed flush leaves
+                # it in, without pretending the error came from file_hash.
+                db.add(Media(file_hash=None, minio_key="k", filename="bad"))
+                try:
+                    db.commit()
+                except Exception as exc:
+                    raise RuntimeError("commit failed") from exc
+            return real_ingest(**kwargs)
+
+        with patch(
+            "find_api.routers.upload._ingest_image", side_effect=poison_first_commit
+        ):
+            response = client.post(
+                "/api/upload/bulk",
+                files=[("file", ("images.zip", payload, "application/zip"))],
+            )
+
+        assert response.status_code == 200
+        results = {r["filename"]: r["status"] for r in response.json()["results"]}
+
+        assert results["first.png"] == "failed"
+        # The whole point: the unrelated second file still goes through.
+        assert results["second.png"] == "uploaded"
+
+
 class TestUploadInvalid:
     """Invalid upload behavior."""
 
