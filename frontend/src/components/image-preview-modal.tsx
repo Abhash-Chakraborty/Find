@@ -297,6 +297,8 @@ export function ImagePreviewModal({
     if (media.id) {
       setLikedOverride(null);
       setConfirmingDelete(false);
+      setCaptionCopied(false);
+      setOcrCopied(false);
     }
   }, [media.id]);
 
