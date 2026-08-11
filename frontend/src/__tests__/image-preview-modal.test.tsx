@@ -269,6 +269,59 @@ describe("ImagePreviewModal", () => {
     );
   });
 
+  it("ignores a clipboard write that resolves after navigating away", async () => {
+    // Clearing the flags on media.id change is not sufficient on its own:
+    // writeText is a promise, so a copy started on image 1 can resolve after
+    // the switch to image 2 and re-set the indicator for the wrong image.
+    let resolveWrite: (() => void) | undefined;
+    mockClipboard(
+      vi.fn().mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveWrite = resolve;
+          }),
+      ),
+    );
+    apiMocks.getImageDetail.mockResolvedValue(
+      detailFor({ metadata: { caption: "A sunny day" } }),
+    );
+
+    const { queryClient, rerender } = renderModal();
+    await openDetails();
+    fireEvent.click(await screen.findByLabelText("Copy caption to clipboard"));
+
+    // Navigate before the write settles.
+    apiMocks.getImageDetail.mockResolvedValue(
+      detailFor({ id: 2, metadata: { caption: "A rainy day" } }),
+    );
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ImagePreviewModal
+          media={{ ...BASE_MEDIA, id: 2, filename: "other.jpg" }}
+          onClose={vi.fn()}
+          syncUrl={false}
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText("Copy caption to clipboard"),
+      ).toBeInTheDocument(),
+    );
+
+    resolveWrite?.();
+
+    // The late completion belongs to image 1 and must not mark image 2 copied.
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText("Copy caption to clipboard"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByLabelText("Caption copied to clipboard"),
+    ).not.toBeInTheDocument();
+  });
+
   it("submits a caption correction for training", async () => {
     apiMocks.submitCaptionCorrection.mockResolvedValue({ status: "ok" });
     apiMocks.getImageDetail.mockResolvedValue(
