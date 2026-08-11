@@ -1,19 +1,21 @@
 import concurrent.futures
+import hashlib
 import io
 import os
 import zipfile
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image
+from sqlalchemy.exc import IntegrityError
 from find_api.core.config import PILLOW_MAX_IMAGE_PIXELS, Settings
 from find_api.models.media import Media
-from find_api.routers.upload import _verify_image_content
+from find_api.routers.upload import _ingest_image, _verify_image_content
 
 
-def get_valid_image_bytes():
+def get_valid_image_bytes(color="red"):
     """Generate a 1x1 valid PNG for testing."""
-    img = Image.new("RGB", (1, 1), color="red")
+    img = Image.new("RGB", (1, 1), color=color)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -92,6 +94,174 @@ class TestUploadSuccess:
         )
         assert response.status_code == 200
         assert response.json()["results"][0]["status"] == "duplicate"
+
+
+class TestUploadRace:
+    """A file_hash race during insert must not poison the shared session."""
+
+    def test_race_on_insert_is_recovered_without_poisoning_session(self, client, db):
+        data = get_valid_image_bytes()
+        file_hash = hashlib.sha256(data).hexdigest()
+
+        # Row inserted by a "concurrent" request that our own existing-file
+        # check below has not seen yet.
+        existing = Media(
+            file_hash=file_hash,
+            minio_key=f"images/{file_hash[:2]}/{file_hash}.png",
+            filename="first.png",
+            content_type="image/png",
+            file_size=len(data),
+            status="pending",
+        )
+        db.add(existing)
+        db.commit()
+
+        real_query = db.query
+        seen = False
+
+        def query_once_empty(model):
+            nonlocal seen
+            if not seen:
+                seen = True
+                empty = MagicMock()
+                empty.filter.return_value.first.return_value = None
+                return empty
+            return real_query(model)
+
+        with patch.object(db, "query", side_effect=query_once_empty):
+            raced = _ingest_image(
+                filename="second.png",
+                content_type="image/png",
+                file_data=data,
+                db=db,
+            )
+
+        assert raced["status"] == "duplicate"
+        assert raced["media_id"] == existing.id
+
+        # Session must still work for the next file in the same batch.
+        next_result = _ingest_image(
+            filename="third.png",
+            content_type="image/png",
+            file_data=get_valid_image_bytes(color="blue"),
+            db=db,
+        )
+        assert next_result["status"] == "uploaded"
+
+    def test_unrelated_integrity_error_is_not_treated_as_duplicate(self, client, db):
+        data = get_valid_image_bytes(color="green")
+        file_hash = hashlib.sha256(data).hexdigest()
+
+        # A row with this exact hash already exists (e.g. inserted by an
+        # unrelated concurrent request), so a naive "does a matching row
+        # exist after the failure" check would misread this as that race.
+        existing = Media(
+            file_hash=file_hash,
+            minio_key=f"images/{file_hash[:2]}/{file_hash}.png",
+            filename="first.png",
+            content_type="image/png",
+            file_size=len(data),
+            status="pending",
+        )
+        db.add(existing)
+        db.commit()
+
+        real_query = db.query
+        seen = False
+
+        def query_once_empty(model):
+            nonlocal seen
+            if not seen:
+                seen = True
+                empty = MagicMock()
+                empty.filter.return_value.first.return_value = None
+                return empty
+            return real_query(model)
+
+        def failing_commit():
+            raise IntegrityError(
+                "INSERT INTO media ...",
+                {},
+                Exception("NOT NULL constraint failed: media.uploader_user_id"),
+            )
+
+        with (
+            patch.object(db, "query", side_effect=query_once_empty),
+            patch.object(db, "commit", side_effect=failing_commit),
+        ):
+            with pytest.raises(IntegrityError):
+                _ingest_image(
+                    filename="unrelated.png",
+                    content_type="image/png",
+                    file_data=data,
+                    db=db,
+                )
+
+        # Session must still work afterward, not just for file_hash races.
+        next_result = _ingest_image(
+            filename="after.png",
+            content_type="image/png",
+            file_data=get_valid_image_bytes(color="yellow"),
+            db=db,
+        )
+        assert next_result["status"] == "uploaded"
+
+
+class TestBatchSessionRecovery:
+    """A failure on one file must not fail the rest of the batch.
+
+    The file_hash race above is the reachable trigger, but any commit failure
+    leaves the shared session inactive -- an unexpected constraint violation, a
+    dropped connection. The generic handlers have to clear it too, or the first
+    unlucky file takes every later one with it.
+    """
+
+    def _zip_of(self, names_and_bytes):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "a", zipfile.ZIP_DEFLATED) as archive:
+            for name, data in names_and_bytes:
+                archive.writestr(name, data)
+        buffer.seek(0)
+        return buffer.read()
+
+    def test_bulk_upload_survives_a_non_hash_commit_failure(self, client):
+        payload = self._zip_of(
+            [
+                ("first.png", get_valid_image_bytes(color="red")),
+                ("second.png", get_valid_image_bytes(color="blue")),
+            ]
+        )
+
+        real_ingest = _ingest_image
+        calls = {"n": 0}
+
+        def poison_first_commit(**kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                db = kwargs["db"]
+                # Land the session in exactly the state a failed flush leaves
+                # it in, without pretending the error came from file_hash.
+                db.add(Media(file_hash=None, minio_key="k", filename="bad"))
+                try:
+                    db.commit()
+                except Exception as exc:
+                    raise RuntimeError("commit failed") from exc
+            return real_ingest(**kwargs)
+
+        with patch(
+            "find_api.routers.upload._ingest_image", side_effect=poison_first_commit
+        ):
+            response = client.post(
+                "/api/upload/bulk",
+                files=[("file", ("images.zip", payload, "application/zip"))],
+            )
+
+        assert response.status_code == 200
+        results = {r["filename"]: r["status"] for r in response.json()["results"]}
+
+        assert results["first.png"] == "failed"
+        # The whole point: the unrelated second file still goes through.
+        assert results["second.png"] == "uploaded"
 
 
 class TestUploadInvalid:

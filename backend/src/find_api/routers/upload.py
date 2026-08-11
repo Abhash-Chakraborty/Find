@@ -12,6 +12,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from PIL import Image
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from find_api.core.config import settings
@@ -68,6 +69,12 @@ async def upload_images(
             raise
         except Exception:
             logger.exception("Failed to upload %s", file.filename)
+            # The session is shared by every file in this request, and a failed
+            # commit leaves it unusable until rolled back. Without this, one bad
+            # file fails the whole remainder of the batch with
+            # PendingRollbackError. Already-committed files are unaffected --
+            # rollback only discards work that never landed.
+            db.rollback()
             results.append(
                 {
                     "filename": file.filename,
@@ -201,6 +208,10 @@ async def upload_bulk_images(
                     )
                 except Exception:
                     logger.exception("Failed to process %s from bulk upload", filename)
+                    # See the note in upload_images: the session is shared
+                    # across the archive, so a failed commit has to be cleared
+                    # or every later member fails too.
+                    db.rollback()
                     results.append(
                         {
                             "filename": filename,
@@ -294,7 +305,18 @@ def _ingest_image(
     media = Media(**media_kwargs)
 
     db.add(media)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if "file_hash" not in str(exc.orig):
+            raise
+        existing = db.query(Media).filter(Media.file_hash == file_hash).first()
+        if existing is None:
+            raise
+        logger.info(f"File {filename} already exists (hash: {file_hash})")
+        return {"filename": filename, "status": "duplicate", "media_id": existing.id}
+
     db.refresh(media)
 
     job = get_task_queue().enqueue(
