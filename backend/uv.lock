@@ -127,16 +127,16 @@ wheels = [
 
 [[package]]
 name = "alembic"
-version = "1.18.5"
+version = "1.19.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mako" },
     { name = "sqlalchemy" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1a/cc/ac0bed8e562e7407fe55c3ba85a4dce86e6dbd8730887bd1e406a6c5c18a/alembic-1.18.5.tar.gz", hash = "sha256:1554982221dd17e9a749b53902407578eb305e453f71999e8c7f0a48389fff8e", size = 2060480, upload-time = "2026-06-25T15:20:54.888Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/16/2b/e4153978368de59918115c9e01d3ebf58a558a7285efa7e960c383c4b59a/alembic-1.19.1.tar.gz", hash = "sha256:e0fca0518118c78acc493e31bcb5402f190057aaf6df8b5b95ce94c4789cf648", size = 2070816, upload-time = "2026-08-08T16:32:01.565Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/78/5fe6dc3a3a5b2f5a2a4faef8bfe336d5fa049a38884ab3172e0098160c01/alembic-1.18.5-py3-none-any.whl", hash = "sha256:06d8ba9d04558022f5395e9317de03d270f3dced49cee01f89fe7a13c26f14bc", size = 264664, upload-time = "2026-06-25T15:20:56.673Z" },
+    { url = "https://files.pythonhosted.org/packages/20/89/e62cc37b69ad357cc8ecd6e7367f5245f523d3cbb338a66197212bdf6749/alembic-1.19.1-py3-none-any.whl", hash = "sha256:b39018cb3d9413a19cbd54cf3c02ad33998641f0538eb77413a488a21c3e14be", size = 265946, upload-time = "2026-08-08T16:32:03.153Z" },
 ]
 
 [[package]]
@@ -702,7 +702,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiofiles", specifier = ">=25.1.0,<26" },
-    { name = "alembic", specifier = ">=1.18.5,<2" },
+    { name = "alembic", specifier = ">=1.19.1,<2" },
     { name = "argon2-cffi", specifier = ">=23.1.0" },
     { name = "cryptography", specifier = ">=50.0.0,<51" },
     { name = "cython", marker = "extra == 'cpu'", specifier = "<4" },
@@ -731,7 +731,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.11,<3" },
     { name = "pydantic", specifier = ">=2.13.4,<3" },
-    { name = "pydantic-settings", specifier = ">=2.14.2,<3" },
+    { name = "pydantic-settings", specifier = ">=2.15.0,<3" },
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "python-multipart", specifier = ">=0.0.32,<0.1" },
     { name = "redis", specifier = "==8.1.0" },
@@ -749,8 +749,8 @@ requires-dist = [
     { name = "torchvision", marker = "extra == 'nvidia'", specifier = "==0.24.1", index = "https://download.pytorch.org/whl/cu128", conflict = { package = "find-backend", extra = "nvidia" } },
     { name = "transformers", marker = "extra == 'cpu'", specifier = ">=5.14.1,<6" },
     { name = "transformers", marker = "extra == 'nvidia'", specifier = ">=5.14.1,<6" },
-    { name = "ultralytics", marker = "extra == 'cpu'", specifier = ">=8.4.112" },
-    { name = "ultralytics", marker = "extra == 'nvidia'", specifier = ">=8.4.112" },
+    { name = "ultralytics", marker = "extra == 'cpu'", specifier = ">=8.4.116" },
+    { name = "ultralytics", marker = "extra == 'nvidia'", specifier = ">=8.4.116" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1,<0.53" },
 ]
 provides-extras = ["mock", "cpu", "nvidia"]
@@ -2131,16 +2131,16 @@ wheels = [
 
 [[package]]
 name = "pydantic-settings"
-version = "2.14.2"
+version = "2.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/b5/8f48e906c3e0205276e8bd8cb7512217a87b2685304d64be27cad5b3019f/pydantic_settings-2.14.2.tar.gz", hash = "sha256:c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f", size = 237700, upload-time = "2026-06-19T13:44:56.324Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/68/ca/31c57507b13119d7d3cfa1576dad2911a4861e3be07b579395f4e9d393f9/pydantic_settings-2.15.0.tar.gz", hash = "sha256:694b793e84f766ba76a90ebdefc01d0a9a045dab0382bee70393da93712ad117", size = 261253, upload-time = "2026-08-07T09:24:57.419Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/77/c1/6e422f34e569cf8e18df68d1939c81c099d2b61e4f7d9621c8a77560799c/pydantic_settings-2.14.2-py3-none-any.whl", hash = "sha256:a20c97b37910b6550d5ea50fbcc2d4187defe58cd57070b73863d069419c9440", size = 61715, upload-time = "2026-06-19T13:44:55.02Z" },
+    { url = "https://files.pythonhosted.org/packages/30/a4/2bffa9f8e804325a09867f0e9d30795c80ea9f8d62560bd1b6ad6220eb2f/pydantic_settings-2.15.0-py3-none-any.whl", hash = "sha256:0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42", size = 69413, upload-time = "2026-08-07T09:24:55.839Z" },
 ]
 
 [[package]]
@@ -3028,7 +3028,7 @@ wheels = [
 
 [[package]]
 name = "ultralytics"
-version = "8.4.112"
+version = "8.4.116"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -3051,14 +3051,14 @@ dependencies = [
     { name = "torchvision", version = "0.24.1+d801a34", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-12-find-backend-cpu') or (sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "ultralytics-thop" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/39/6a/9b1a4976021b33fa989606ace1f18dc463bfee1e3fcdc5c5a5e982cc829d/ultralytics-8.4.112.tar.gz", hash = "sha256:84511b8bff6d7258a37eaa070a1ae6622578498d092f9efd2435894d1871384a", size = 1206177, upload-time = "2026-07-29T17:37:41.188Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/56/7b951cc13938ef3fd6b3faaef79612db706fd8bc445957cb9bb71f1b5222/ultralytics-8.4.116.tar.gz", hash = "sha256:0ae55a5d1ed65764caaf62ebfa22a0b1c9eca3c885479610bf1cddf58ca3efac", size = 1195019, upload-time = "2026-08-07T10:35:30.504Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/da/06/aaca98d9c66322feb4c9e02d7fe923f157a2946b0ebb5b6a98a180b92f11/ultralytics-8.4.112-py3-none-any.whl", hash = "sha256:95bdc765043f43f8ed9ce7927ebb8f82f8b18b2e44fa2442a4bf8958bbaf3fa7", size = 1428929, upload-time = "2026-07-29T17:37:36.701Z" },
+    { url = "https://files.pythonhosted.org/packages/34/b9/c3b75b2af5c6ec369af8eadc68766cc915f9d042b5e5e2e52ca41f318f71/ultralytics-8.4.116-py3-none-any.whl", hash = "sha256:7a4fa31ffb00834dd5483dfd4dc9fb1fe00271acbb4c01090f0fec8527abf71c", size = 1414216, upload-time = "2026-08-07T10:35:26.25Z" },
 ]
 
 [[package]]
 name = "ultralytics-thop"
-version = "2.1.5"
+version = "2.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
@@ -3066,9 +3066,9 @@ dependencies = [
     { name = "torch", version = "2.9.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "extra == 'extra-12-find-backend-nvidia'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/43/57/32d38c8abf22c8867083e25979a6fab223d9a42173987bd621ec45cd8c4e/ultralytics_thop-2.1.5.tar.gz", hash = "sha256:443bceee2fa7ba899614590233194eed24fc52deeaa9d56a61cfff00aae88873", size = 35604, upload-time = "2026-07-29T19:12:28.433Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/45/20/d6b6aaa8ecf7dbdeaf0c05f73bdcd04cf8ce468d936bc48dbcd368e75baf/ultralytics_thop-2.1.6.tar.gz", hash = "sha256:0ec2df8ebd3db35795e1f80cdc8bce6734446dbe989bca1b0c89396353f0f08c", size = 36364, upload-time = "2026-07-30T22:31:28.143Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fa/f9/1ce4cafc5ff57fd6cc01fa00eb18ee152ca4e20c184514cc895d901163ae/ultralytics_thop-2.1.5-py3-none-any.whl", hash = "sha256:1f2bcd498fe799c67e735a14e07c6831d5e430f14754a1ac38dac2c8ce141da3", size = 29681, upload-time = "2026-07-29T19:12:27.299Z" },
+    { url = "https://files.pythonhosted.org/packages/53/98/f1fa3d40d548c8a2a3eec33b7f856063bb6c7d51e16d5198b1f390b2c79d/ultralytics_thop-2.1.6-py3-none-any.whl", hash = "sha256:23f7b8ad124fa3432c1a7de9279102c4fdda699216032a7dff49f87ec3d1a3af", size = 30479, upload-time = "2026-07-30T22:31:26.874Z" },
 ]
 
 [[package]]
