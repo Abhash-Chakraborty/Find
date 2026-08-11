@@ -73,7 +73,7 @@ def test_face_detection_failure_records_only_upload_failed(db):
             return_value={"caption": "test", "objects": [], "ocr_text": ""},
         ),
         patch(
-            "find_api.workers.processors.generate_hybrid_embedding", return_value="[]"
+            "find_api.workers.processors.generate_hybrid_embedding", return_value=None
         ),
         patch("find_api.workers.processors.has_person_object", return_value=True),
         patch(
@@ -111,7 +111,7 @@ def test_successful_job_records_exactly_one_completed(db):
             return_value={"caption": "test", "objects": [], "ocr_text": ""},
         ),
         patch(
-            "find_api.workers.processors.generate_hybrid_embedding", return_value="[]"
+            "find_api.workers.processors.generate_hybrid_embedding", return_value=None
         ),
         patch("find_api.workers.processors.has_person_object", return_value=True),
         patch("find_api.workers.processors.detect_and_store_faces", return_value=0),
@@ -146,7 +146,7 @@ def test_metadata_only_mode_still_records_completed(db):
             return_value={"caption": "test", "objects": [], "ocr_text": ""},
         ),
         patch(
-            "find_api.workers.processors.generate_hybrid_embedding", return_value="[]"
+            "find_api.workers.processors.generate_hybrid_embedding", return_value=None
         ),
     ):
         result = analyze_image(media_id)
