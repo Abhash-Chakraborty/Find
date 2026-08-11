@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image
+from sqlalchemy.exc import IntegrityError
 from find_api.core.config import PILLOW_MAX_IMAGE_PIXELS, Settings
 from find_api.models.media import Media
 from find_api.routers.upload import _ingest_image, _verify_image_content
@@ -143,6 +144,64 @@ class TestUploadRace:
             filename="third.png",
             content_type="image/png",
             file_data=get_valid_image_bytes(color="blue"),
+            db=db,
+        )
+        assert next_result["status"] == "uploaded"
+
+    def test_unrelated_integrity_error_is_not_treated_as_duplicate(self, client, db):
+        data = get_valid_image_bytes(color="green")
+        file_hash = hashlib.sha256(data).hexdigest()
+
+        # A row with this exact hash already exists (e.g. inserted by an
+        # unrelated concurrent request), so a naive "does a matching row
+        # exist after the failure" check would misread this as that race.
+        existing = Media(
+            file_hash=file_hash,
+            minio_key=f"images/{file_hash[:2]}/{file_hash}.png",
+            filename="first.png",
+            content_type="image/png",
+            file_size=len(data),
+            status="pending",
+        )
+        db.add(existing)
+        db.commit()
+
+        real_query = db.query
+        seen = False
+
+        def query_once_empty(model):
+            nonlocal seen
+            if not seen:
+                seen = True
+                empty = MagicMock()
+                empty.filter.return_value.first.return_value = None
+                return empty
+            return real_query(model)
+
+        def failing_commit():
+            raise IntegrityError(
+                "INSERT INTO media ...",
+                {},
+                Exception("NOT NULL constraint failed: media.uploader_user_id"),
+            )
+
+        with (
+            patch.object(db, "query", side_effect=query_once_empty),
+            patch.object(db, "commit", side_effect=failing_commit),
+        ):
+            with pytest.raises(IntegrityError):
+                _ingest_image(
+                    filename="unrelated.png",
+                    content_type="image/png",
+                    file_data=data,
+                    db=db,
+                )
+
+        # Session must still work afterward, not just for file_hash races.
+        next_result = _ingest_image(
+            filename="after.png",
+            content_type="image/png",
+            file_data=get_valid_image_bytes(color="yellow"),
             db=db,
         )
         assert next_result["status"] == "uploaded"

@@ -297,9 +297,10 @@ def _ingest_image(
     db.add(media)
     try:
         db.commit()
-    except IntegrityError:
-        # Another request inserted the same file_hash first.
+    except IntegrityError as exc:
         db.rollback()
+        if "file_hash" not in str(exc.orig):
+            raise
         existing = db.query(Media).filter(Media.file_hash == file_hash).first()
         if existing is None:
             raise
