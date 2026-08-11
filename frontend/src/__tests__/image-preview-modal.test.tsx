@@ -96,6 +96,8 @@ beforeEach(() => {
   apiMocks.toggleLike.mockReset();
   apiMocks.deleteImage.mockReset();
   apiMocks.reprocessImage.mockReset();
+  apiMocks.submitCaptionCorrection.mockReset();
+  apiMocks.submitObjectCorrection.mockReset();
   apiMocks.getImageDetail.mockResolvedValue(detailFor());
   mockClipboard(vi.fn().mockResolvedValue(undefined));
 });
@@ -265,5 +267,65 @@ describe("ImagePreviewModal", () => {
         screen.getByLabelText("Copy caption to clipboard"),
       ).toBeInTheDocument(),
     );
+  });
+
+  it("submits a caption correction for training", async () => {
+    apiMocks.submitCaptionCorrection.mockResolvedValue({ status: "ok" });
+    apiMocks.getImageDetail.mockResolvedValue(
+      detailFor({ metadata: { caption: "A dog" } }),
+    );
+    renderModal();
+    await openDetails();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit caption for training" }),
+    );
+    fireEvent.change(screen.getByLabelText("Edit caption for training"), {
+      target: { value: "A golden retriever on a beach" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save caption" }));
+
+    await waitFor(() =>
+      expect(apiMocks.submitCaptionCorrection).toHaveBeenCalledWith(
+        BASE_MEDIA.id,
+        "A golden retriever on a beach",
+      ),
+    );
+  });
+
+  it("does not submit a correction that was cancelled", async () => {
+    apiMocks.getImageDetail.mockResolvedValue(
+      detailFor({ metadata: { caption: "A dog" } }),
+    );
+    renderModal();
+    await openDetails();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit caption for training" }),
+    );
+    fireEvent.change(screen.getByLabelText("Edit caption for training"), {
+      target: { value: "Discarded text" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // Back to the collapsed button, and nothing sent.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Edit caption for training" }),
+      ).toBeInTheDocument(),
+    );
+    expect(apiMocks.submitCaptionCorrection).not.toHaveBeenCalled();
+
+    // Reopening must not still hold the discarded draft.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit caption for training" }),
+    );
+    expect(
+      (
+        screen.getByLabelText(
+          "Edit caption for training",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("A dog");
   });
 });
