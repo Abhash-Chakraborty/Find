@@ -16,6 +16,8 @@ See issue #397: OCR tests should run in CI without requiring paddleocr installat
 import pytest
 from unittest.mock import MagicMock, patch
 import numpy as np
+import sys
+from types import SimpleNamespace
 
 # Import only pure Python code; do NOT import paddleocr or paddle
 from find_api.ml.ocr import PP_OCR_MODELS, VALID_VARIANTS, OCRExtractor
@@ -434,49 +436,60 @@ class TestConstructorFallback:
         """_construct(disable_onednn=False) should not include enable_mkldnn=False."""
         with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()):
             extractor = OCRExtractor(variant="mobile")
-            
-            with patch("find_api.ml.ocr.PaddleOCR") as mock_paddle:
-                mock_paddle.return_value = MagicMock()
-                try:
-                    extractor._construct(disable_onednn=False)
-                except Exception:
-                    pass
-                
-                # Should call PaddleOCR with enable_mkldnn not set or True
-                call_kwargs = mock_paddle.call_args[1]
-                # enable_mkldnn should not be False
-                if "enable_mkldnn" in call_kwargs:
-                    assert call_kwargs["enable_mkldnn"] is not False
+
+            mock_paddle = MagicMock()
+            mock_paddle.return_value = MagicMock()
+
+            with patch.dict(
+                sys.modules,
+                {"paddleocr": SimpleNamespace(PaddleOCR=mock_paddle)},
+            ):
+                extractor._construct(disable_onednn=False)
+
+            call_kwargs = mock_paddle.call_args[1]
+
+            # enable_mkldnn should not be False
+            if "enable_mkldnn" in call_kwargs:
+                assert call_kwargs["enable_mkldnn"] is not False
 
     def test_construct_with_disable_onednn_true(self):
         """_construct(disable_onednn=True) should set enable_mkldnn=False."""
         with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()):
             extractor = OCRExtractor(variant="mobile")
-            
-            with patch("find_api.ml.ocr.PaddleOCR") as mock_paddle:
-                mock_paddle.return_value = MagicMock()
-                try:
-                    extractor._construct(disable_onednn=True)
-                except Exception:
-                    pass
-                
-                # Should call PaddleOCR with enable_mkldnn=False
-                call_kwargs = mock_paddle.call_args[1]
-                assert call_kwargs.get("enable_mkldnn") is False
+
+            mock_paddle = MagicMock()
+            mock_paddle.return_value = MagicMock()
+
+            with patch.dict(
+                sys.modules,
+                {"paddleocr": SimpleNamespace(PaddleOCR=mock_paddle)},
+            ):
+                extractor._construct(disable_onednn=True)
+
+            call_kwargs = mock_paddle.call_args[1]
+
+            assert call_kwargs.get("enable_mkldnn") is False
 
     def test_construct_returns_model_and_legacy_flag(self):
         """_construct should return a tuple of (model, legacy_api_flag)."""
         with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()):
             extractor = OCRExtractor(variant="mobile")
-            
-            with patch("find_api.ml.ocr.PaddleOCR") as mock_paddle:
-                mock_model = MagicMock()
-                mock_paddle.return_value = mock_model
-                
+
+            mock_paddle = MagicMock()
+            mock_model = MagicMock()
+
+            mock_paddle.return_value = mock_model
+
+            with patch.dict(
+                sys.modules,
+                {"paddleocr": SimpleNamespace(PaddleOCR=mock_paddle)},
+            ):
                 result = extractor._construct()
-                
-                assert isinstance(result, tuple)
-                assert len(result) == 2
-                model, legacy_api = result
-                assert model is mock_model
-                assert isinstance(legacy_api, bool)
+
+            assert isinstance(result, tuple)
+            assert len(result) == 2
+
+            model, legacy_api = result
+
+            assert model is mock_model
+            assert isinstance(legacy_api, bool)
