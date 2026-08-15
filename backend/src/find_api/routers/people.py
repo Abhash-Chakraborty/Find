@@ -3,10 +3,10 @@ People router - API endpoints for person groups and face clusters
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from find_api.core.database import get_db
 from find_api.core.config import settings
@@ -21,6 +21,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Thumbnails shown per person group on the People page.
+SAMPLE_MEDIA_LIMIT = 4
 
 
 # ─── Pydantic schemas (what the API returns) ──────────────────────────────────
@@ -79,29 +82,70 @@ def list_people(
 
     persons = db.query(Person).order_by(Person.created_at.desc()).all()
 
+    def visible_faces():
+        """Faces the caller may see, with the shared-mode scope applied.
+
+        Both aggregates below must filter identically — a count that counts
+        rows the samples exclude would report a person the page cannot show.
+        """
+        query = db.query(
+            Face.person_id.label("person_id"),
+            Face.media_id.label("media_id"),
+            Face.id.label("face_id"),
+        ).join(Media, Media.id == Face.media_id)
+        query = query.filter(Media.is_hidden.is_(False))
+        if scope_user_id is not None:
+            query = query.filter(Media.uploader_user_id == scope_user_id)
+        return query
+
+    # Two aggregate queries, not one row per face. Deriving these in Python
+    # would mean reading every face in the library into memory on every request
+    # — constant queries, but unbounded transfer, which is the same scaling
+    # cliff in a different place.
+    counted = visible_faces().subquery()
+    face_counts: Dict[int, int] = dict(
+        db.query(counted.c.person_id, func.count(counted.c.face_id))
+        .group_by(counted.c.person_id)
+        .all()
+    )
+
+    # Distinct media per person, then the first few of each, ranked in SQL so
+    # the database returns at most SAMPLE_MEDIA_LIMIT rows per person instead
+    # of every match. Ordering by media_id keeps the chosen thumbnail stable
+    # across requests; the previous `.distinct().limit(4)` had no ORDER BY and
+    # so could return a different sample each time.
+    distinct_pairs = (
+        visible_faces()
+        .with_entities(
+            Face.person_id.label("person_id"), Face.media_id.label("media_id")
+        )
+        .distinct()
+        .subquery()
+    )
+    ranked = db.query(
+        distinct_pairs.c.person_id,
+        distinct_pairs.c.media_id,
+        func.row_number()
+        .over(
+            partition_by=distinct_pairs.c.person_id,
+            order_by=distinct_pairs.c.media_id,
+        )
+        .label("rank"),
+    ).subquery()
+
+    sample_media_ids_by_person: Dict[int, List[int]] = {}
+    for person_id, media_id in (
+        db.query(ranked.c.person_id, ranked.c.media_id)
+        .filter(ranked.c.rank <= SAMPLE_MEDIA_LIMIT)
+        .order_by(ranked.c.person_id, ranked.c.media_id)
+        .all()
+    ):
+        sample_media_ids_by_person.setdefault(person_id, []).append(media_id)
+
     result = []
     for person in persons:
-        # Count how many faces belong to this person
-        count_query = (
-            db.query(func.count(Face.id))
-            .join(Media, Media.id == Face.media_id)
-            .filter(Face.person_id == person.id, Media.is_hidden.is_(False))
-        )
-        if scope_user_id is not None:
-            count_query = count_query.filter(Media.uploader_user_id == scope_user_id)
-        face_count = count_query.scalar()
-
-        # Get up to 4 sample media IDs for thumbnail preview
-        sample_query = (
-            db.query(Face.media_id)
-            .join(Media, Media.id == Face.media_id)
-            .filter(Face.person_id == person.id)
-            .filter(Media.is_hidden.is_(False))
-        )
-        if scope_user_id is not None:
-            sample_query = sample_query.filter(Media.uploader_user_id == scope_user_id)
-        sample_faces = sample_query.distinct().limit(4).all()
-        sample_media_ids = [f.media_id for f in sample_faces]
+        face_count = face_counts.get(person.id, 0)
+        sample_media_ids = sample_media_ids_by_person.get(person.id, [])
         # Skip groups with no visible faces. face_count/sample_media_ids are
         # already scoped to the caller in shared mode, so this also hides
         # person groups the user has none of their own media in.
