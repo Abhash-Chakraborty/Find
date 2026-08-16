@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi>=0.141.1,<0.142",
-  "uvicorn[standard]>=0.52.1,<0.53",
+  "uvicorn[standard]>=0.52.3,<0.53",
   "python-multipart>=0.0.32,<0.1",
   "pydantic>=2.13.4,<3",
   "pydantic-settings>=2.15.0,<3",
