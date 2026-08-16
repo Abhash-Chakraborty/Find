@@ -178,7 +178,9 @@ class TestPublishVariantStatus:
 
     def test_publish_variant_status_mobile(self):
         """Publishing status for mobile variant should include 'mobile'."""
-        with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()) as mock_mgr:
+        with patch(
+            "find_api.ml.ocr.get_model_manager", return_value=MagicMock()
+        ) as mock_mgr:
             mock_manager = mock_mgr.return_value
             extractor = OCRExtractor(variant="mobile")
             extractor._publish_variant_status()
@@ -192,7 +194,9 @@ class TestPublishVariantStatus:
 
     def test_publish_variant_status_server(self):
         """Publishing status for server variant should include 'server'."""
-        with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()) as mock_mgr:
+        with patch(
+            "find_api.ml.ocr.get_model_manager", return_value=MagicMock()
+        ) as mock_mgr:
             mock_manager = mock_mgr.return_value
             extractor = OCRExtractor(variant="server")
             extractor._publish_variant_status()
@@ -206,41 +210,47 @@ class TestPublishVariantStatus:
 
     def test_publish_variant_status_includes_model_names(self):
         """Status should include the model names from PP_OCR_MODELS."""
-        with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()) as mock_mgr:
+        with patch(
+            "find_api.ml.ocr.get_model_manager", return_value=MagicMock()
+        ) as mock_mgr:
             mock_manager = mock_mgr.return_value
             extractor = OCRExtractor(variant="mobile")
             extractor._publish_variant_status()
 
             call_args = mock_manager.merge_runtime_status.call_args
             status_dict = call_args[0][1]
-            
+
             # Should include model names from PP_OCR_MODELS
             assert status_dict["text_detection_model_name"] == "PP-OCRv5_mobile_det"
             assert status_dict["text_recognition_model_name"] == "PP-OCRv5_mobile_rec"
 
     def test_publish_variant_status_legacy_api_flag(self):
         """When legacy_api=True, status should include legacy_api and variant_applied=False."""
-        with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()) as mock_mgr:
+        with patch(
+            "find_api.ml.ocr.get_model_manager", return_value=MagicMock()
+        ) as mock_mgr:
             mock_manager = mock_mgr.return_value
             extractor = OCRExtractor(variant="mobile")
             extractor._publish_variant_status(legacy_api=True)
 
             call_args = mock_manager.merge_runtime_status.call_args
             status_dict = call_args[0][1]
-            
+
             assert status_dict["legacy_api"] is True
             assert status_dict["variant_applied"] is False
 
     def test_publish_variant_status_no_legacy_flag_when_false(self):
         """When legacy_api=False (default), status should not include legacy_api flag."""
-        with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()) as mock_mgr:
+        with patch(
+            "find_api.ml.ocr.get_model_manager", return_value=MagicMock()
+        ) as mock_mgr:
             mock_manager = mock_mgr.return_value
             extractor = OCRExtractor(variant="mobile")
             extractor._publish_variant_status(legacy_api=False)
 
             call_args = mock_manager.merge_runtime_status.call_args
             status_dict = call_args[0][1]
-            
+
             assert "legacy_api" not in status_dict
             assert "variant_applied" not in status_dict
 
@@ -248,7 +258,9 @@ class TestPublishVariantStatus:
         """Status must use merge_runtime_status, not set, to avoid clobbering
         other components' status entries.
         """
-        with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()) as mock_mgr:
+        with patch(
+            "find_api.ml.ocr.get_model_manager", return_value=MagicMock()
+        ) as mock_mgr:
             mock_manager = mock_mgr.return_value
             extractor = OCRExtractor(variant="mobile")
             extractor._publish_variant_status()
@@ -350,15 +362,15 @@ class TestOneDnnFallbackLogic:
         """_load_model should probe oneDNN health after construction."""
         with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()):
             extractor = OCRExtractor(variant="mobile")
-            
+
             mock_model = MagicMock()
             mock_model.predict = MagicMock(return_value=[])
-            
+
             with patch.object(extractor, "_construct") as mock_construct:
                 mock_construct.return_value = (mock_model, False)
                 with patch.object(extractor, "_publish_variant_status"):
                     extractor._load_model()
-                    
+
                     # Should have called _construct
                     mock_construct.assert_called()
 
@@ -366,7 +378,7 @@ class TestOneDnnFallbackLogic:
         """When probe detects NotImplementedError, should reconstruct with disable_onednn=True."""
         with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()):
             extractor = OCRExtractor(variant="mobile")
-            
+
             construct_calls = []
 
             def fake_construct(*, disable_onednn=False):
@@ -390,7 +402,7 @@ class TestOneDnnFallbackLogic:
         """When probe succeeds, should not reconstruct."""
         with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()):
             extractor = OCRExtractor(variant="mobile")
-            
+
             construct_calls = []
 
             def fake_construct(*, disable_onednn=False):
@@ -413,7 +425,7 @@ class TestOneDnnFallbackLogic:
         """_load_model should pass legacy_api flag to _publish_variant_status."""
         with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()):
             extractor = OCRExtractor(variant="mobile")
-            
+
             model = MagicMock()
             model.predict = MagicMock(return_value=[])
 
