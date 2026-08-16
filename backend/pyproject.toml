@@ -67,7 +67,7 @@ nvidia = [
 ]
 
 [build-system]
-requires = ["setuptools>=83.0.0"]
+requires = ["setuptools>=84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -124,7 +124,7 @@ torchvision = [
 # setuptools arrives transitively (torch, pip-audit) and resolved to 82.0.1,
 # which is GHSA-affected (<83.0.0). The build-system pin above only governs
 # building this package, not the resolved environment, so constrain it here.
-constraint-dependencies = ["setuptools>=83.0.0"]
+constraint-dependencies = ["setuptools>=84.0.0"]
 # The container images are linux/amd64, but uv only guarantees the lock has
 # wheels for the platform it was locked on. Locking on Windows let the cpu
 # extra pick torchvision 0.24.1+d801a34, a local-version variant that ships a
