@@ -101,6 +101,34 @@ test.describe("offline shell", () => {
     expect(registered).toBe(true);
   });
 
+  test("never stores a search query in the cache key", async ({ page }) => {
+    // /search?q=... carries user input. Keying cache entries by the full URL
+    // would persist a searchable history of queries in Cache Storage, which is
+    // precisely the trace a local-first tool must not leave behind.
+    await page.goto("/timeline");
+    await page.evaluate(() => navigator.serviceWorker.ready);
+
+    await page.goto("/search?q=deeply-private-search-term");
+    await page.evaluate(() => navigator.serviceWorker.ready);
+
+    const keys = await page.evaluate(async () => {
+      const names = await caches.keys();
+      const all: string[] = [];
+      for (const name of names) {
+        const cache = await caches.open(name);
+        for (const request of await cache.keys()) {
+          all.push(request.url);
+        }
+      }
+      return all;
+    });
+
+    expect(keys.join(" ")).not.toContain("deeply-private-search-term");
+    expect(keys.join(" ")).not.toContain("?q=");
+    // The route itself is still cached, just without the query.
+    expect(keys.some((url) => url.endsWith("/search"))).toBe(true);
+  });
+
   test("shows the offline page when a navigation fails", async ({
     page,
     context,

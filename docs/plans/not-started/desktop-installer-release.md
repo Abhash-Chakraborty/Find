@@ -49,6 +49,20 @@ that guarantee, because a fork controls the workflow file on its own branch.
 - **Deployment branch/tag rule** — restrict to `canary`, `main`, and `v*` tags so
   a signed build cannot be produced from an arbitrary branch.
 
+**These two are not automatic, and their absence is silent.** Referencing an
+environment that does not exist does not fail the job — GitHub creates the
+environment on first use, with no reviewers and no branch rule. So a signed run
+started before anyone configures `desktop-release` would face no approval gate
+at all.
+
+What that does *not* undermine is the fork boundary: environment secrets are
+unavailable to `pull_request` runs from forks whether or not the environment has
+protection rules, and the preflight refuses to build without the certificate. So
+the failure mode of an unconfigured environment is "no approval step", not "an
+unsigned artifact ships" or "a fork reaches the key". Configure it before the
+first signed run regardless — the approval gate is the only thing standing
+between a compromised maintainer token and a signed installer.
+
 ---
 
 ## Certificate storage and handling
@@ -128,6 +142,8 @@ verification step, and the draft-release behaviour are unchanged.
 | Thumbprint absent or wrong | `signtool verify` fails | Tauri emits an unsigned bundle rather than erroring, so verification is the only real detector |
 | Certificate expired | `signtool verify` fails | Same detector, before publication |
 | Timestamp server unreachable | Build fails | Signing without a timestamp produces an installer that expires with the certificate |
+| Signature present but untimestamped | `signtool verify /tw` exits 2, treated as failure | Plain `/pa` considers an untimestamped signature valid and exits 0, so without `/tw` this passes verification silently |
+| Tag already published | Upload step aborts | `gh release view` succeeds for published releases, so `--clobber` would otherwise overwrite assets users can already download |
 | Rust/Tauri build breaks | `unsigned-build` fails on the pull request | This is the coverage gap the issue is about |
 
 Nothing in the signed path is best-effort. Every step that could silently

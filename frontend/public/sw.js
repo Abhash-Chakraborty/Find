@@ -90,6 +90,21 @@ self.addEventListener("fetch", (event) => {
 });
 
 /**
+ * Cache key for a navigation: origin + pathname, query string discarded.
+ *
+ * Caching the request as-is would key entries by their full URL, and this app
+ * puts user input in the query string -- /search?q=<whatever they typed>. That
+ * would persist a searchable history of queries in Cache Storage, which is
+ * exactly the kind of trace a local-first tool must not leave behind. The
+ * pathname is all the offline shell needs, and every route's real data comes
+ * from /api/, which is never cached at all.
+ */
+function navigationCacheKey(request) {
+  const url = new URL(request.url);
+  return new Request(`${url.origin}${url.pathname}`, { method: "GET" });
+}
+
+/**
  * Network-first: the app must never be served a stale shell while online,
  * because the shell is what tells the user whether the backend is reachable.
  */
@@ -98,11 +113,11 @@ async function handleNavigation(request) {
     const response = await fetch(request);
     if (response.ok) {
       const cache = await caches.open(SHELL_CACHE);
-      cache.put(request, response.clone());
+      cache.put(navigationCacheKey(request), response.clone());
     }
     return response;
   } catch {
-    const cached = await caches.match(request);
+    const cached = await caches.match(navigationCacheKey(request));
     if (cached) {
       return cached;
     }

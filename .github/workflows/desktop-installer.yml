@@ -223,6 +223,13 @@ jobs:
       # job wearing a release tag. signtool exits non-zero when the Authenticode
       # signature is absent or does not chain to a trusted root, which is also
       # what catches a missing `certificateThumbprint` in tauri.conf.json.
+      #
+      # `/tw` is what makes the timestamp mandatory. Without it, signtool treats
+      # an untimestamped-but-otherwise-valid signature as a pass and exits 0, so
+      # verification would wave through an installer that stops validating the
+      # day the certificate expires -- including copies users already
+      # downloaded. Under `/tw` that case is a warning, which is exit code 2,
+      # and the non-zero check below turns it into a failure.
       - name: Verify Authenticode signature
         shell: pwsh
         run: |
@@ -235,8 +242,10 @@ jobs:
             Select-Object -First 1
           if (-not $signtool) { throw 'signtool.exe was not found on the runner' }
           foreach ($artifact in $artifacts) {
-            & $signtool.FullName verify /pa /v $artifact.FullName
-            if ($LASTEXITCODE -ne 0) { throw "Signature verification failed for $($artifact.Name)" }
+            & $signtool.FullName verify /pa /tw /v $artifact.FullName
+            # Exit 2 is "completed with warnings", which under /tw means the
+            # signature carries no timestamp. That is a failure here.
+            if ($LASTEXITCODE -ne 0) { throw "Signature verification failed for $($artifact.Name) (signtool exit $LASTEXITCODE)" }
           }
 
       - name: Write checksums
@@ -272,7 +281,17 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           tag="v${version}"
-          if ! gh release view "${tag}" >/dev/null 2>&1; then
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            # `gh release view` succeeds for published releases too, so without
+            # this guard the `--clobber` below would replace assets on a release
+            # users can already download -- the opposite of "publication stays
+            # manual".
+            if [ "$(gh release view "${tag}" --json isDraft -q .isDraft)" != "true" ]; then
+              echo "Release ${tag} is already published; refusing to overwrite its assets." >&2
+              echo "Bump the version, or delete that release deliberately." >&2
+              exit 1
+            fi
+          else
             gh release create "${tag}" --draft --title "Find ${version}" \
               --notes "Draft release. Desktop installers attached by the desktop-installer workflow."
           fi

@@ -72,6 +72,18 @@ Capabilities are exactly the existing stages — BYOK adds no new ones:
 | `detect` | Image bytes | Labels + boxes | Whole image leaves |
 | `cluster` | Vectors | Group assignments | No pixels, but face vectors are biometric |
 
+**Vectors need a declared shape, not just a type.** "Float vector" is not a
+contract: Find's pgvector columns are fixed at `EMBEDDING_DIM`, and a provider
+returning a different length either errors deep in persistence or, worse,
+silently corrupts a mixed-dimension index. The manifest must declare
+`embedding_dim` and the model identity behind it, the resolver must refuse a
+provider whose `embedding_dim` disagrees with the configured `EMBEDDING_DIM`,
+and any vector whose length does not match must be rejected before it reaches
+the database. The same applies to `cluster`, which consumes vectors rather than
+producing them. Changing a provider's embedding model is a reindex, exactly as
+it is for local models -- the manifest is what makes that visible instead of
+discovering it from corrupted search results.
+
 Two of these deserve to be called out rather than treated as line items:
 
 - **`embed_text` leaks intent, continuously.** Every query becomes a third-party
@@ -87,6 +99,18 @@ The protocol surface stays deliberately small — a manifest, a capability check
 per-capability invoke, and a health probe. Anything provider-specific (auth
 style, request shape, retries, response mapping) belongs inside the adapter.
 `processors.py` must remain readable without knowing which provider is active.
+
+**`invoke` receives an egress client; it does not get to make its own requests.**
+This is the load-bearing detail of the whole design. If an adapter can import
+`httpx` and open its own connection, then every control in §6 — host allowlist,
+TLS, timeouts, rate limits, redaction, audit — is advisory, enforced only by the
+adapter choosing to cooperate. The boundary has to be structural: the adapter is
+handed a capability-scoped client already bound to this provider's manifest, and
+that client is the only sanctioned path out. Review must reject an adapter that
+imports an HTTP library directly, and the test suite asserts it (see §9). A
+process- or network-level sandbox is stronger still and is the right answer if
+third-party adapter code is ever loaded from outside the repository — at which
+point code review is no longer a control at all.
 
 ---
 
@@ -116,6 +140,9 @@ ocr     = { payload = "image", max_bytes = 4_194_304 }
 requests_per_minute = 60
 timeout_seconds = 30
 max_retries = 2
+max_response_bytes = 1_048_576   # enforced while reading, before buffering
+idempotency = "key"              # key | none -- see retries below
+daily_budget_requests = 5_000    # cumulative ceiling, not just a rate
 
 [provider.disclosure]
 terms_url = "https://example-vision.com/terms"
@@ -134,6 +161,24 @@ Three properties do the work:
 3. **`retention = "trains-on-input"` is surfaced verbatim in the consent UI.** A
    provider that trains on submitted images is a materially different decision
    from one that does not, and the user makes it, not us.
+
+Three of the limits are less obvious than they look:
+
+- **`max_response_bytes` is enforced while reading, not after.** A cap checked
+  after buffering has already spent the memory it was meant to protect. A worker
+  handling a large library has no headroom to absorb a hostile or malfunctioning
+  provider's oversized response.
+- **`max_retries` alone is not retry safety.** A timeout can fire *after* the
+  provider accepted the request, so retrying resubmits the same image and is
+  billed twice. Retry automatically only for failures known to have occurred
+  before transmission (connection refused, DNS failure, TLS handshake). Anything
+  that could have been received needs a provider idempotency key; where the
+  provider offers none (`idempotency = "none"`), that class of failure is
+  surfaced rather than retried. The timeout-after-send case gets its own test.
+- **Rate limits bound throughput, not spend.** A large enough backlog runs at
+  `requests_per_minute` indefinitely and the bill grows with it.
+  `daily_budget_requests` is the cumulative ceiling; exhausting it disables the
+  provider and fails closed rather than continuing.
 
 ---
 
@@ -158,7 +203,13 @@ Rules:
    that provider is void and must be re-granted. Otherwise a manifest edit
    silently broadens what the user agreed to.
 4. **Consent is revocable, and revocation is immediate.** Revoking stops the next
-   job; it does not wait for a restart or a queue drain.
+   job; it does not wait for a restart or a queue drain. "Immediate" has to mean
+   *checked at the egress layer, immediately before each outbound request* --
+   not read once when the job was enqueued. A job that read consent an hour ago
+   and is only now reaching the network must be stopped, and a decision must
+   never be cached on the job or carried in its payload. The same gate applies
+   to health probes, which otherwise keep talking to a provider the user has
+   revoked.
 5. **Consent does not survive a restore.** Backup restores and instance clones do
    not carry consent records, because the person restoring may not be the person
    who granted.
@@ -170,10 +221,19 @@ Rules:
 BYOK keys are third-party billable credentials. Treated as at least as sensitive
 as the vault passphrase.
 
-- **At rest:** encrypted with AES-256-GCM. `core/crypto.py` already provides the
-  primitives used by the vault; the BYOK key set uses its own derived key with
-  its own associated data, so a vault compromise does not hand over provider
-  credentials, and vice versa.
+- **At rest:** encrypted with AES-256-GCM, using the primitives in
+  `core/crypto.py` that the vault already relies on.
+
+  **The isolation claim depends on the root, and the root is unresolved.** A
+  separately *derived* key does not isolate anything if it descends from the same
+  vault master — an attacker holding that master derives both. Independent
+  domain-separation strings buy defence against key reuse, not against a
+  compromised root. So one of these has to be chosen before implementation, not
+  after: an independent root secret with its own unlock path, an OS
+  keychain/KMS-held key that never enters the database, or an explicit narrowing
+  of the threat model to say that a vault compromise is assumed to take the BYOK
+  credentials with it. Shipping the first option's wording while implementing the
+  third is the failure to avoid. See the open question in §11.
 - **Alternative boundary:** a secret-file path or an OS keychain reference, for
   operators who prefer credentials never enter the database. The manifest does
   not care which is used.
@@ -204,15 +264,28 @@ passes.
 - **Host allowlist** from the manifest, checked against the resolved connection
   target. Redirects are not followed — a 3xx from a provider is an error, since
   following one would leave the allowlist behind.
+- **Resolve once, then connect to what was checked.** Validating a hostname and
+  then handing the name back to the HTTP client invites a second, different
+  resolution — the classic DNS-rebinding window. Resolve the host, reject the
+  result if it lands in loopback, private, link-local, or cloud-metadata space,
+  connect to *that address*, and still require full certificate and hostname
+  verification against the declared name. Without the address check, an
+  allowlisted host whose DNS the attacker controls becomes a path to
+  `169.254.169.254` and the instance's own credentials. Both the rebinding and
+  the private-address cases get tests.
 - **TLS required.** No `http://` exception for third-party providers; the
   localhost carve-out in `validate_remote_ml_config` exists because a local
   server is not a network hop, which cannot be true of a vendor.
 - **Timeouts** from the manifest, applied to connect and read separately.
 - **Rate limits** per provider, enforced locally so a runaway job cannot generate
   an unbounded bill.
-- **Redaction before transmission.** EXIF stripped (as `REMOTE_ML_STRIP_EXIF`
-  already does), GPS removed, filenames and paths never sent — a filename alone
-  routinely carries a name, a date, or a location.
+- **Redaction before transmission, and it fails closed.** EXIF stripped (as
+  `REMOTE_ML_STRIP_EXIF` already does), GPS removed, filenames and paths never
+  sent — a filename alone routinely carries a name, a date, or a location. If
+  re-encoding or metadata stripping raises, the original bytes are **not** sent
+  as a fallback: the stage is marked failed. A redaction step that degrades to
+  "send it anyway" is worse than no redaction, because the operator believes
+  location data was removed.
 - **Audit log,** append-only: timestamp, provider, capability, media id, byte
   count, outcome, latency. It records *that* something left and *how much*, never
   the content. Without it, "what did this provider receive?" is unanswerable, and
@@ -256,6 +329,13 @@ forbidden. That is precisely the implicit upload path this boundary prevents.
 | T10 | Provider returns a hostile payload (oversized, malformed, injected) | Response size cap; schema validation before use; provider text never interpolated into a prompt or a shell |
 | T11 | Operator cannot answer "what was sent?" after an incident | Append-only audit log of metadata for every call |
 | T12 | Downgrade to plaintext by a manifest edit | `require_tls` cannot be disabled for a non-local host; enforced at egress |
+| T13 | Adapter bypasses every egress control by opening its own socket | `invoke` is handed a capability-scoped client; direct HTTP imports rejected in review and asserted by test |
+| T14 | DNS rebinding or an allowlisted host resolving to link-local/metadata space | Resolve once, reject private/loopback/link-local/metadata addresses, connect to the checked address, verify certificate and hostname |
+| T15 | Revocation raced by an already-queued job | Consent re-checked at egress immediately before each request, never cached on the job |
+| T16 | Timeout after the provider received the request causes a duplicate billable submission | Auto-retry only for pre-transmission failures; anything else needs a provider idempotency key |
+| T17 | Backlog runs at the rate limit indefinitely and the bill grows without bound | `daily_budget_requests` ceiling; exhaustion disables the provider and fails closed |
+| T18 | Redaction fails and the original, GPS-bearing bytes are sent anyway | Redaction failure marks the stage failed; there is no send-anyway path |
+| T19 | Provider returns a vector of the wrong length and corrupts the index | `embedding_dim` declared in the manifest, matched against `EMBEDDING_DIM`, length checked before persistence |
 
 ---
 
@@ -287,9 +367,30 @@ the ones that would actually catch a regression that matters.
 **Egress**
 - A request to an undeclared host fails at the transport, including when the
   adapter is deliberately written to attempt it.
+- An adapter that imports an HTTP library directly is rejected — asserted by
+  scanning adapter modules, so the "structural, not advisory" claim in §2 is
+  actually enforced rather than merely stated.
+- A host resolving to loopback, private, link-local, or metadata space is
+  refused, and a second resolution cannot change the address connected to
+  (DNS-rebinding case).
 - A 3xx redirect is an error, not a followed hop.
 - `http://` to a non-local host is rejected.
 - Timeout and rate limit are enforced from the manifest, not from adapter code.
+- A response exceeding `max_response_bytes` is aborted while streaming, before
+  the bytes are buffered.
+- The cumulative `daily_budget_requests` ceiling disables the provider and fails
+  closed rather than continuing at the per-minute rate.
+
+**Retry safety**
+- A pre-transmission failure (connection refused, DNS failure) retries.
+- A timeout that could have been received does not silently retry when the
+  provider declares `idempotency = "none"`; with `idempotency = "key"` the retry
+  carries the same key.
+
+**Vector shape**
+- A provider whose manifest `embedding_dim` disagrees with `EMBEDDING_DIM` fails
+  to resolve at all.
+- A vector of unexpected length is rejected before persistence, not written.
 
 **Fail closed**
 - Provider down, unauthorised, and rate-limited each mark the stage failed
@@ -299,6 +400,8 @@ the ones that would actually catch a regression that matters.
 **Redaction**
 - EXIF and GPS absent from the transmitted payload.
 - Filenames and paths absent.
+- A redaction step that raises marks the stage failed and sends nothing — the
+  original bytes must never appear on the wire as a fallback.
 
 **Audit**
 - Every outbound call produces exactly one audit entry.
@@ -326,6 +429,11 @@ adapter ships under this document. The deliverable is the boundary.
    processes any user's media. The simplest defensible answer is admin-only
    configuration plus a visible instance-wide disclosure — but it needs deciding
    before any adapter, not after.
-3. **Where does the encryption key live?** Reusing the vault master key ties BYOK
-   availability to an unlocked vault. A separate key needs its own unlock story.
+3. **Where does the encryption key live?** This is a blocker, not a detail: §5's
+   isolation claim is only true if the BYOK root is independent of the vault
+   master. Reusing the vault master ties BYOK availability to an unlocked vault
+   *and* means one compromise takes both. A separate root needs its own unlock
+   story; an OS keychain or KMS avoids the question but adds a platform
+   dependency. Decide before an adapter, and make §5's wording match whichever is
+   chosen.
 4. **Does the audit log need retention limits?** It grows per processed image.
