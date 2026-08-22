@@ -402,6 +402,30 @@ def revoke_session(
     return {"revoked": session_id, "current": is_current}
 
 
+# --- Instance members ---
+
+
+@router.get("/auth/users")
+def list_users(
+    admin: Optional[User] = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """List the accounts on this instance. Admin only.
+
+    The Instance page needs to show who currently has access, which the join
+    request list cannot answer on its own: the first admin is created by
+    /auth/setup and never appears as a request, and an approved request stays
+    listed as `approved` whether or not that account still exists.
+
+    Returns the same safe projection as every other user-bearing response --
+    `_user_dict` never includes the password hash.
+    """
+    _ensure_admin_available(admin, db)
+
+    users = db.query(User).order_by(User.id.asc()).all()
+    return {"users": [_user_dict(user) for user in users]}
+
+
 # --- Invite tokens ---
 
 

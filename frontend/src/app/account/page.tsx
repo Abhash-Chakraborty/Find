@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, LogOut, Shield, UserRound } from "lucide-react";
+import { KeyRound, LogOut, Shield, UserRound, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
@@ -144,13 +144,23 @@ export default function AccountPage() {
           </p>
           <h1 className="text-3xl font-semibold">Account settings</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => logout.mutate()}
-          className="frost-button px-4 py-2 text-sm font-medium"
-        >
-          <LogOut className="h-4 w-4" /> Sign out
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Only reachable in shared mode -- a single-user install has no
+              instance to manage, so this deliberately is not a nav entry. */}
+          <Link
+            href="/instance"
+            className="frost-button inline-flex items-center gap-2 px-4 py-2 text-sm font-medium"
+          >
+            <Users className="h-4 w-4" /> Instance
+          </Link>
+          <button
+            type="button"
+            onClick={() => logout.mutate()}
+            className="frost-button px-4 py-2 text-sm font-medium"
+          >
+            <LogOut className="h-4 w-4" /> Sign out
+          </button>
+        </div>
       </header>
 
       <div className="grid gap-6">

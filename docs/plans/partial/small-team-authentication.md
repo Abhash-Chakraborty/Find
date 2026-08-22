@@ -1,8 +1,8 @@
 # Small-Team Authentication (Instance Sharing)
 
-**Status:** In progress — backend auth foundation implemented  
-**Last reviewed:** 2026-05-30  
-**Current implementation status:** Backend auth foundation implemented (user model, session tokens, invite flow, join requests, admin approval, upload ownership tracking). Frontend UI, deletion-request workflow, and audit log remain unimplemented.
+**Status:** In progress — backend auth foundation and the Instance page implemented  
+**Last reviewed:** 2026-08-22  
+**Current implementation status:** Backend auth foundation implemented (user model, session tokens, invite flow, join requests, admin approval, upload ownership tracking). The Instance page at `frontend/src/app/instance/page.tsx` covers invite creation, join-request review, and the member list (#263); it is reached from the Account page in shared mode rather than from the sidebar, because a single-user install has no instance to manage. Still unimplemented: adding a user directly from the UI (no backend endpoint), the friendly instance name, the deletion-request workflow, and the audit log.
 
 ## Summary
 
@@ -40,8 +40,8 @@ Join an Instance (user flows)
 
 ## Instance Tab UI State Checklist
 
-Use this checklist when implementing or reviewing the future Instance tab. It documents expected UI
-states only; no frontend implementation exists yet.
+Use this checklist when reviewing the Instance page. The create-invite, join, review, and member-list
+states are implemented; the manual add-user, instance-name, and deletion-request states are not.
 
 ### General states
 

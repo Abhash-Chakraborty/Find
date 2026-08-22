@@ -2,14 +2,18 @@ name: CI
 
 # Trigger matrix (which paths wake which jobs):
 #
-#   Path pattern                    | frontend-check | backend-check | compose-check
-#   --------------------------------|----------------|---------------|--------------
-#   frontend/**                     |      yes       |      no       |      no
-#   backend/**, scripts/**          |      no        |      yes      |      no
-#   .github/workflows/**            |      yes       |      yes      |      yes
-#   compose*.yml                    |      yes       |      yes      |      yes
-#   root/shared non-doc config      |      yes       |      yes      |      no
-#   docs/**, *.md, ISSUE_TEMPLATE   |      no        |      no       |      no
+#   Path pattern                    | frontend-check | backend-check | compose-check | docker-check
+#   --------------------------------|----------------|---------------|---------------|-------------
+#   frontend/**                     |      yes       |      no       |      no       |  only if (*)
+#   backend/**, scripts/**          |      no        |      yes      |      no       |  only if (*)
+#   .github/workflows/**            |      yes       |      yes      |      yes      |  only ci.yml
+#   compose*.yml                    |      yes       |      yes      |      yes      |      no
+#   root/shared non-doc config      |      yes       |      yes      |      no       |      yes
+#   docs/**, *.md, ISSUE_TEMPLATE   |      no        |      no       |      no       |      no
+#
+# (*) docker-check is deliberately narrower than frontend/backend: it wakes only
+#     for the Dockerfiles themselves and the dependency manifests they COPY, not
+#     for every source edit. See the `docker` filter in detect-changes.
 
 on:
   workflow_dispatch:
@@ -100,6 +104,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
       shared: ${{ steps.filter.outputs.shared }}
+      docker: ${{ steps.filter.outputs.docker }}
       uncategorized: ${{ steps.uncategorized.outputs.uncategorized }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -118,6 +123,23 @@ jobs:
             shared:
               - '.github/workflows/**'
               - 'compose*.yml'
+            # Only the image inputs, not all of frontend/** and backend/**.
+            # An image build is expensive, and editing a React component or a
+            # router cannot break a Dockerfile that COPYs the whole tree
+            # anyway. What *can* break it is a change to the Dockerfile, to a
+            # dependency manifest it installs from, or to this file's version
+            # pins -- so those are the triggers.
+            docker:
+              - 'frontend/Dockerfile'
+              - 'frontend/.dockerignore'
+              - 'frontend/package.json'
+              - 'frontend/pnpm-lock.yaml'
+              - 'frontend/pnpm-workspace.yaml'
+              - 'backend/Dockerfile'
+              - 'backend/.dockerignore'
+              - 'backend/pyproject.toml'
+              - 'backend/uv.lock'
+              - '.github/workflows/ci.yml'
 
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
         id: uncategorized
@@ -158,7 +180,10 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: 22
+          # Node 24 is Active LTS. Keep this in lockstep with the `FROM
+          # node:<major>-alpine` line in frontend/Dockerfile -- `docker-check`
+          # asserts the two agree, so changing one alone fails CI.
+          node-version: 24
           cache: "pnpm"
           cache-dependency-path: frontend/pnpm-lock.yaml
 
@@ -291,6 +316,99 @@ jobs:
 
       - name: Validate ${{ matrix.file }}
         run: docker compose --env-file .env.example -f "${{ matrix.file }}" config --quiet
+
+  # Build both Dockerfiles on pull requests.
+  #
+  # Before this job, `publish.yml` was the only workflow that built them and it
+  # runs on release -- so a broken Dockerfile stayed invisible until a release
+  # build, and the version pins in this file drifted from the ones in the
+  # images with nothing comparing them (#396).
+  #
+  # Build only: no push, no registry login, no QEMU/multi-arch. The backend
+  # builds its default `no-ai` profile; `cpu`/`nvidia` pull multi-gigabyte
+  # torch wheels and stay in the release path where they belong.
+  docker-check:
+    name: docker-check
+    needs: detect-changes
+    if: needs.detect-changes.outputs.docker == 'true' || needs.detect-changes.outputs.uncategorized == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # The runtime versions live in two places each, and nothing used to
+      # compare them: `node-version` here vs `FROM node:<major>-alpine` in
+      # frontend/Dockerfile, and `python-version` here vs `ARG PYTHON_VERSION`
+      # / `ARG BASE_IMAGE` in backend/Dockerfile. They agreed by coincidence.
+      # Fail loudly on drift rather than discovering it at release time.
+      - name: Assert CI and Dockerfile runtime pins agree
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Fail if a pin is missing (grep went stale) or ambiguous.
+          assert_single() {
+            local label="$1" values="$2"
+            if [ -z "${values}" ]; then
+              echo "No ${label} pin found -- the grep for it is stale." >&2
+              exit 1
+            fi
+            if [ "$(echo "${values}" | wc -l)" -ne 1 ]; then
+              echo "${label} is pinned to more than one value:" >&2
+              echo "${values}" >&2
+              exit 1
+            fi
+          }
+
+          ci_node="$(grep -oP 'node-version:\s*\K[0-9]+' .github/workflows/ci.yml | sort -u)"
+          dockerfile_node="$(grep -oP '^FROM node:\K[0-9]+' frontend/Dockerfile | sort -u)"
+          assert_single "ci.yml node-version" "${ci_node}"
+          assert_single "frontend/Dockerfile node major" "${dockerfile_node}"
+          if [ "${ci_node}" != "${dockerfile_node}" ]; then
+            echo "Node major drift: ci.yml=${ci_node}, frontend/Dockerfile=${dockerfile_node}." >&2
+            echo "Bump both in the same commit." >&2
+            exit 1
+          fi
+
+          ci_python="$(grep -oP 'python-version:\s*"\K[0-9]+\.[0-9]+' .github/workflows/ci.yml | sort -u)"
+          dockerfile_python="$(grep -oP '^ARG PYTHON_VERSION=\K[0-9]+\.[0-9]+' backend/Dockerfile | sort -u)"
+          dockerfile_base="$(grep -oP '^ARG BASE_IMAGE=python:\K[0-9]+\.[0-9]+' backend/Dockerfile | sort -u)"
+          assert_single "ci.yml python-version" "${ci_python}"
+          assert_single "backend/Dockerfile PYTHON_VERSION" "${dockerfile_python}"
+          assert_single "backend/Dockerfile BASE_IMAGE" "${dockerfile_base}"
+          if [ "${ci_python}" != "${dockerfile_python}" ] || [ "${ci_python}" != "${dockerfile_base}" ]; then
+            echo "Python drift: ci.yml=${ci_python}, PYTHON_VERSION=${dockerfile_python}, BASE_IMAGE=${dockerfile_base}." >&2
+            echo "Bump all three in the same commit." >&2
+            exit 1
+          fi
+
+          echo "Node ${ci_node} and Python ${ci_python} agree across CI and both Dockerfiles."
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+
+      # Default profile (no-ai). The ML profiles are a release-time concern.
+      - name: Build backend image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          cache-from: type=gha,scope=docker-check-backend
+          cache-to: type=gha,mode=max,scope=docker-check-backend
+
+      # `production` is the stage publish.yml ships, and it is the only one that
+      # exercises the full `pnpm build` + standalone-output copy chain.
+      - name: Build frontend image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: production
+          push: false
+          cache-from: type=gha,scope=docker-check-frontend
+          cache-to: type=gha,mode=max,scope=docker-check-frontend
 
   dependency-review:
     if: github.event_name == 'pull_request'
