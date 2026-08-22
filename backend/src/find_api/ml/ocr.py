@@ -37,7 +37,6 @@ PP-OCRv5 languages means selecting language-specific model names (e.g.
 ``korean_PP-OCRv5_mobile_rec``) rather than reintroducing ``lang``.
 """
 
-from paddleocr import PaddleOCR
 from PIL import Image
 import numpy as np
 from typing import List, Dict, Union
@@ -100,6 +99,8 @@ class OCRExtractor:
 
     def _construct(self, *, disable_onednn: bool = False):
         """Build a PaddleOCR pipeline, returning it plus whether 2.x was used."""
+        from paddleocr import PaddleOCR
+
         model_names = PP_OCR_MODELS[self.variant]
         extra = {"enable_mkldnn": False} if disable_onednn else {}
         # PaddleOCR 3.x replaced the older use_angle_cls/use_gpu/show_log arguments
