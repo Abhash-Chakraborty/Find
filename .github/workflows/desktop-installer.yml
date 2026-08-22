@@ -56,8 +56,15 @@ jobs:
   #
   # The flag sits on the step, not the job: job-level continue-on-error still
   # reports the check itself as failed (it only spares the workflow run), which
-  # would leave a red X on every desktop PR. On the step, the job goes green
-  # while the step stays visibly red in the log.
+  # would leave a red X on every desktop PR.
+  #
+  # Note what that costs. A continue-on-error step reports `conclusion:
+  # success` and renders as a warning rather than a failure, so the build going
+  # wrong is NOT loud on its own. The "Report the known static-export break"
+  # step below is what makes it visible: it keys off `steps.build.outcome`,
+  # which preserves the true result, and emits a ::warning annotation onto the
+  # run summary. The listing and upload steps gate on the same value, so a
+  # failed build cannot produce an artifact.
   #
   # REMOVE IT when #465 lands, or the job quietly stops being a gate.
   unsigned-build:
