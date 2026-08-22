@@ -191,6 +191,24 @@ Tauri's gtk-rs 0.18 pin and is not fixable from this repository.
 
 ---
 
+## Known blocker: the static export does not build
+
+`unsigned-build` failed on its first run, and the cause is older than this
+pipeline: `pnpm build:static` aborts because `/albums/[id]`, `/image/[id]`, and
+`/public/shared/[key]` are client components with no `generateStaticParams()`,
+which `output: export` requires. No installer can be produced at all until that
+is resolved.
+
+Two things make it more than a one-line fix: a client component cannot export
+`generateStaticParams`, so each route needs a thin server wrapper; and an empty
+param list is still rejected, so every dynamic route has to pre-render at least
+one page. That forces a decision about what those routes even mean in a static
+bundle, where runtime ids cannot resolve.
+
+Tracked in #465. `unsigned-build` carries `continue-on-error` until it lands, so
+the known break does not gate unrelated desktop pull requests — remove that flag
+as part of the fix.
+
 ## Open questions
 
 - Should `unsigned-build` become a required status check? It is a Windows runner

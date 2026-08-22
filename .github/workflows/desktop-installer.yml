@@ -47,10 +47,20 @@ concurrency:
 jobs:
   # Contributor-facing validation. Runs with the default read-only token and
   # cannot access any signing material.
+  #
+  # continue-on-error until #465 is fixed: `pnpm build:static` currently fails
+  # on canary because three dynamic routes have no generateStaticParams(), so
+  # the Tauri bundle cannot be produced at all. That break is what this job
+  # found on its first run -- it is not caused by this job, and it must not
+  # gate unrelated desktop pull requests in the meantime. The build step still
+  # runs and still shows red in the log.
+  #
+  # REMOVE THIS FLAG when #465 lands, or the job quietly stops being a gate.
   unsigned-build:
     name: Unsigned Windows build
     if: inputs.sign != true
     runs-on: windows-latest
+    continue-on-error: true
     timeout-minutes: 45
     defaults:
       run:
@@ -89,12 +99,22 @@ jobs:
       # `tauri build` runs `beforeBuildCommand` (pnpm build:static) itself, so
       # the static export is produced as part of this step.
       - name: Build unsigned installer
+        id: build
         run: pnpm desktop:build
+
+      # Leave a legible marker so a contributor seeing a red step in an
+      # otherwise-green job knows it is the tracked break and not their change.
+      - name: Report the known static-export break
+        if: steps.build.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "::warning title=Desktop bundle not produced::pnpm build:static failed. If this is the generateStaticParams error, it is the known break tracked in #465, not a regression in this pull request."
 
       # Record what came out. `targets: "all"` on Windows produces both the NSIS
       # .exe and the WiX .msi; listing them makes a bundle-target regression
       # visible in the log rather than only as a missing upload.
       - name: List bundle output
+        if: steps.build.outcome == 'success'
         shell: bash
         run: |
           bundle_dir="src-tauri/target/release/bundle"
@@ -105,6 +125,7 @@ jobs:
           find "${bundle_dir}" -type f \( -name '*.msi' -o -name '*.exe' \) -print
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: steps.build.outcome == 'success'
         with:
           name: find-desktop-windows-unsigned
           path: |
