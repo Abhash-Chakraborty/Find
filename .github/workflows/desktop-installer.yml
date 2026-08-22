@@ -1,0 +1,251 @@
+name: Desktop installer
+
+# Windows installer pipeline for the Tauri desktop shell (issue #48).
+#
+# Two deliberately separate paths:
+#
+#   unsigned-build  - runs for contributors on pull requests. No secrets, no
+#                     environment, no signing. Proves the Tauri bundle still
+#                     builds, and uploads the artifact for manual inspection.
+#   signed-release  - maintainer-only, manual dispatch, gated behind the
+#                     protected `desktop-release` environment, which is where
+#                     the code-signing secrets live. Publishes a DRAFT release.
+#
+# The split is the point: a fork pull request must never be able to reach the
+# signing credentials. Because environment secrets are unavailable to
+# `pull_request` runs from forks, that is enforced by construction rather than
+# by convention.
+#
+# The signed path is inert until a certificate exists -- see
+# docs/plans/not-started/desktop-installer-release.md for provisioning,
+# rotation, verification, and the macOS/Linux extension points.
+
+on:
+  pull_request:
+    branches: ["canary", "main"]
+    paths:
+      - "frontend/src-tauri/**"
+      - "frontend/package.json"
+      - "frontend/pnpm-lock.yaml"
+      - "frontend/next.config.js"
+      - ".github/workflows/desktop-installer.yml"
+  workflow_dispatch:
+    inputs:
+      sign:
+        description: "Sign the installer (requires the desktop-release environment)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Contributor-facing validation. Runs with the default read-only token and
+  # cannot access any signing material.
+  unsigned-build:
+    name: Unsigned Windows build
+    if: inputs.sign != true
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          version: 11.3.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          # Matches frontend-check in ci.yml and frontend/Dockerfile.
+          node-version: 24
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # windows-latest ships a stable Rust toolchain, so no toolchain action is
+      # needed. Cache the registry and target dir instead: a cold Tauri build
+      # spends nearly all of its time compiling dependencies, not our two
+      # source files.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            frontend/src-tauri/target
+          key: tauri-windows-${{ hashFiles('frontend/src-tauri/Cargo.lock') }}
+          restore-keys: tauri-windows-
+
+      - run: pnpm install --frozen-lockfile
+
+      # `tauri build` runs `beforeBuildCommand` (pnpm build:static) itself, so
+      # the static export is produced as part of this step.
+      - name: Build unsigned installer
+        run: pnpm desktop:build
+
+      # Record what came out. `targets: "all"` on Windows produces both the NSIS
+      # .exe and the WiX .msi; listing them makes a bundle-target regression
+      # visible in the log rather than only as a missing upload.
+      - name: List bundle output
+        shell: bash
+        run: |
+          bundle_dir="src-tauri/target/release/bundle"
+          if [ ! -d "${bundle_dir}" ]; then
+            echo "No bundle directory produced at ${bundle_dir}." >&2
+            exit 1
+          fi
+          find "${bundle_dir}" -type f \( -name '*.msi' -o -name '*.exe' \) -print
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: find-desktop-windows-unsigned
+          path: |
+            frontend/src-tauri/target/release/bundle/msi/*.msi
+            frontend/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  # Maintainer-only. `environment:` is what actually gates this: the signing
+  # secrets are scoped to `desktop-release`, which carries required reviewers
+  # and a tag restriction, so this job cannot start from a fork pull request.
+  signed-release:
+    name: Signed Windows release
+    if: github.event_name == 'workflow_dispatch' && inputs.sign == true
+    runs-on: windows-latest
+    timeout-minutes: 60
+    environment: desktop-release
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # Fail fast and legibly when the environment has not been provisioned,
+      # instead of producing a silently unsigned installer that would then be
+      # attached to a release as though it were signed.
+      - name: Preflight - require signing material
+        shell: bash
+        env:
+          CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          missing=0
+          if [ -z "${CERT_BASE64}" ]; then
+            echo "Secret WINDOWS_CERTIFICATE is not set on the desktop-release environment." >&2
+            missing=1
+          fi
+          if [ -z "${CERT_PASSWORD}" ]; then
+            echo "Secret WINDOWS_CERTIFICATE_PASSWORD is not set on the desktop-release environment." >&2
+            missing=1
+          fi
+          if [ "${missing}" -ne 0 ]; then
+            echo "Refusing to build an installer that would be published as signed but is not." >&2
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          version: 11.3.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      # The PFX is imported into the runner's per-job certificate store and the
+      # temporary file is removed immediately. Tauri signs through the store
+      # using the thumbprint in tauri.conf.json, so the key material never
+      # reaches a build argument, a command line, or a log.
+      - name: Import code-signing certificate
+        shell: pwsh
+        env:
+          CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'find-signing.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CERT_BASE64))
+          $securePassword = ConvertTo-SecureString -String $env:CERT_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword | Out-Null
+          Remove-Item $pfxPath -Force
+
+      - name: Build signed installer
+        run: pnpm desktop:build
+
+      # Verification is not optional: an unsigned artifact must never leave this
+      # job wearing a release tag. signtool exits non-zero when the Authenticode
+      # signature is absent or does not chain to a trusted root, which is also
+      # what catches a missing `certificateThumbprint` in tauri.conf.json.
+      - name: Verify Authenticode signature
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = 'src-tauri/target/release/bundle'
+          $artifacts = Get-ChildItem -Path $bundle -Recurse -Include *.msi, *.exe
+          if (-not $artifacts) { throw "No installer artifacts found under $bundle" }
+          $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -like '*x64*' } |
+            Select-Object -First 1
+          if (-not $signtool) { throw 'signtool.exe was not found on the runner' }
+          foreach ($artifact in $artifacts) {
+            & $signtool.FullName verify /pa /v $artifact.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Signature verification failed for $($artifact.Name)" }
+          }
+
+      - name: Write checksums
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = 'src-tauri/target/release/bundle'
+          Get-ChildItem -Path $bundle -Recurse -Include *.msi, *.exe |
+            ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $($_.Name)" } |
+            Set-Content -Encoding utf8 (Join-Path $bundle 'SHA256SUMS.txt')
+          Get-Content (Join-Path $bundle 'SHA256SUMS.txt')
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: find-desktop-windows-signed
+          path: |
+            frontend/src-tauri/target/release/bundle/msi/*.msi
+            frontend/src-tauri/target/release/bundle/nsis/*.exe
+            frontend/src-tauri/target/release/bundle/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      # Draft, never published automatically. A human opens the draft, checks
+      # the artifacts, and presses publish, so a bad build stays discardable
+      # instead of being something users have already downloaded. The tag comes
+      # from frontend/package.json, which `scripts/bump_version.py --check`
+      # already keeps in sync with the backend and the Tauri config.
+      - name: Attach artifacts to a draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          tag="v${version}"
+          if ! gh release view "${tag}" >/dev/null 2>&1; then
+            gh release create "${tag}" --draft --title "Find ${version}" \
+              --notes "Draft release. Desktop installers attached by the desktop-installer workflow."
+          fi
+          gh release upload "${tag}" \
+            src-tauri/target/release/bundle/msi/*.msi \
+            src-tauri/target/release/bundle/nsis/*.exe \
+            src-tauri/target/release/bundle/SHA256SUMS.txt \
+            --clobber
