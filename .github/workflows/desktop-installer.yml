@@ -48,19 +48,22 @@ jobs:
   # Contributor-facing validation. Runs with the default read-only token and
   # cannot access any signing material.
   #
-  # continue-on-error until #465 is fixed: `pnpm build:static` currently fails
-  # on canary because three dynamic routes have no generateStaticParams(), so
-  # the Tauri bundle cannot be produced at all. That break is what this job
-  # found on its first run -- it is not caused by this job, and it must not
-  # gate unrelated desktop pull requests in the meantime. The build step still
-  # runs and still shows red in the log.
+  # The build step carries continue-on-error until #465 is fixed: `pnpm
+  # build:static` currently fails on canary because three dynamic routes have
+  # no generateStaticParams(), so the Tauri bundle cannot be produced at all.
+  # That break is what this job found on its first run -- it is not caused by
+  # this job, and it must not gate unrelated desktop pull requests meanwhile.
   #
-  # REMOVE THIS FLAG when #465 lands, or the job quietly stops being a gate.
+  # The flag sits on the step, not the job: job-level continue-on-error still
+  # reports the check itself as failed (it only spares the workflow run), which
+  # would leave a red X on every desktop PR. On the step, the job goes green
+  # while the step stays visibly red in the log.
+  #
+  # REMOVE IT when #465 lands, or the job quietly stops being a gate.
   unsigned-build:
     name: Unsigned Windows build
     if: inputs.sign != true
     runs-on: windows-latest
-    continue-on-error: true
     timeout-minutes: 45
     defaults:
       run:
@@ -100,6 +103,7 @@ jobs:
       # the static export is produced as part of this step.
       - name: Build unsigned installer
         id: build
+        continue-on-error: true
         run: pnpm desktop:build
 
       # Leave a legible marker so a contributor seeing a red step in an
