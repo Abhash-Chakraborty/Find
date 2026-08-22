@@ -6,9 +6,14 @@ This module tests logic-only aspects of OCRExtractor and OCR configuration:
 - Status publishing and merging
 - oneDNN fallback probe logic
 
+Also covers the PaddleOCR constructor contract (model-name pinning, the 2.x
+TypeError fallback, and the ValueError that must not be masked by it) and the
+ModelManager failure contract, by injecting a stand-in ``paddleocr`` module --
+none of that needs a real Paddle runtime.
+
 These tests run in CI with only the dev dependency group (no ML dependencies).
-The inference/integration tests with real PaddleOCR remain in test_ocr.py and
-test_ocr_variants.py, guarded by pytest.importorskip.
+Only tests that genuinely run inference stay in test_ocr.py and
+test_ocr_variants.py behind pytest.importorskip, where CI skips them.
 
 See issue #397: OCR tests should run in CI without requiring paddleocr installation.
 """
@@ -17,12 +22,36 @@ import pytest
 from unittest.mock import MagicMock, patch
 import numpy as np
 import sys
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 # Import only pure Python code; do NOT import paddleocr or paddle
-from find_api.ml.ocr import PP_OCR_MODELS, VALID_VARIANTS, OCRExtractor
 from find_api.core.config import settings
-from find_api.core.model_manager import get_model_manager
+from find_api.core.model_manager import (
+    ModelManager,
+    ModelUnavailableError,
+    get_model_manager,
+)
+from find_api.ml.ocr import PP_OCR_MODELS, VALID_VARIANTS, OCRExtractor
+
+
+@pytest.fixture(autouse=True)
+def _no_redis_status_publish():
+    """Keep ModelManager's best-effort Redis publish out of these tests.
+
+    ``publish_status()`` opens a real connection to ``settings.REDIS_URL`` on
+    every state change, including both ``reset_for_tests()`` calls in the
+    fixture below. With nothing listening -- the normal case for
+    ``backend-check`` and for a plain local ``pytest`` run -- each call sits in
+    a connect timeout, which is ~4s here and turned this pure-logic module into
+    a multi-minute run. Nothing in this file asserts on the published payload;
+    it is fire-and-forget observability, so stub it out.
+
+    Declared before ``_reset_model_manager`` so it wraps that fixture's own
+    reset calls -- same-scope autouse fixtures run in definition order.
+    """
+    with patch.object(ModelManager, "publish_status", lambda self: None):
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +60,20 @@ def _reset_model_manager():
     get_model_manager().reset_for_tests()
     yield
     get_model_manager().reset_for_tests()
+
+
+@contextmanager
+def fake_paddleocr(paddle_ocr):
+    """Install a stand-in ``paddleocr`` module for the duration of the block.
+
+    ``OCRExtractor._construct`` imports ``PaddleOCR`` from inside the function
+    body, specifically so this module stays importable without the package.
+    That makes ``sys.modules["paddleocr"]`` the seam to patch -- there is no
+    module-level ``find_api.ml.ocr.PaddleOCR`` attribute to monkeypatch any
+    more, and patching one would not affect the function-local import.
+    """
+    with patch.dict(sys.modules, {"paddleocr": SimpleNamespace(PaddleOCR=paddle_ocr)}):
+        yield
 
 
 class TestPPOCRModelsConstant:
@@ -442,27 +485,23 @@ class TestOneDnnFallbackLogic:
 
 
 class TestConstructorFallback:
-    """Test _construct() error handling and fallback logic."""
+    """Test _construct() argument handling and the PaddleOCR 2.x fallback."""
 
     def test_construct_with_disable_onednn_false(self):
-        """_construct(disable_onednn=False) should not include enable_mkldnn=False."""
+        """_construct(disable_onednn=False) must not pass enable_mkldnn at all."""
         with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()):
             extractor = OCRExtractor(variant="mobile")
 
             mock_paddle = MagicMock()
-            mock_paddle.return_value = MagicMock()
 
-            with patch.dict(
-                sys.modules,
-                {"paddleocr": SimpleNamespace(PaddleOCR=mock_paddle)},
-            ):
+            with fake_paddleocr(mock_paddle):
                 extractor._construct(disable_onednn=False)
 
             call_kwargs = mock_paddle.call_args[1]
 
-            # enable_mkldnn should not be False
-            if "enable_mkldnn" in call_kwargs:
-                assert call_kwargs["enable_mkldnn"] is not False
+            # Absent, not merely "not False" -- the default path leaves oneDNN
+            # selection to PaddleOCR rather than pinning it either way.
+            assert "enable_mkldnn" not in call_kwargs
 
     def test_construct_with_disable_onednn_true(self):
         """_construct(disable_onednn=True) should set enable_mkldnn=False."""
@@ -470,12 +509,8 @@ class TestConstructorFallback:
             extractor = OCRExtractor(variant="mobile")
 
             mock_paddle = MagicMock()
-            mock_paddle.return_value = MagicMock()
 
-            with patch.dict(
-                sys.modules,
-                {"paddleocr": SimpleNamespace(PaddleOCR=mock_paddle)},
-            ):
+            with fake_paddleocr(mock_paddle):
                 extractor._construct(disable_onednn=True)
 
             call_kwargs = mock_paddle.call_args[1]
@@ -487,21 +522,155 @@ class TestConstructorFallback:
         with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()):
             extractor = OCRExtractor(variant="mobile")
 
-            mock_paddle = MagicMock()
             mock_model = MagicMock()
+            mock_paddle = MagicMock(return_value=mock_model)
 
-            mock_paddle.return_value = mock_model
-
-            with patch.dict(
-                sys.modules,
-                {"paddleocr": SimpleNamespace(PaddleOCR=mock_paddle)},
-            ):
-                result = extractor._construct()
-
-            assert isinstance(result, tuple)
-            assert len(result) == 2
-
-            model, legacy_api = result
+            with fake_paddleocr(mock_paddle):
+                model, legacy_api = extractor._construct()
 
             assert model is mock_model
-            assert isinstance(legacy_api, bool)
+            assert legacy_api is False
+
+    @pytest.mark.parametrize("variant", ["mobile", "server"])
+    def test_model_names_match_pp_ocrv5_variant(self, variant):
+        """_load_model must pin the variant's PP-OCRv5 det/rec model names.
+
+        Asserting against PP_OCR_MODELS alone would just restate the table
+        back to itself and still pass if _load_model ignored it, so this
+        captures the kwargs PaddleOCR is actually constructed with.
+        """
+        captured = {}
+
+        class _FakePaddleOCR:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def predict(self, _image):
+                return []
+
+        with fake_paddleocr(_FakePaddleOCR):
+            extractor = OCRExtractor(variant=variant)
+            extractor._load_model()
+
+        assert captured["text_detection_model_name"] == f"PP-OCRv5_{variant}_det"
+        assert captured["text_recognition_model_name"] == f"PP-OCRv5_{variant}_rec"
+        # ...and that the table the rest of the code reads agrees.
+        assert captured | PP_OCR_MODELS[extractor.variant] == captured
+
+    def test_type_error_falls_back_to_legacy_signature(self):
+        """A TypeError means the installed PaddleOCR predates the 3.x
+        keyword-only signature, which is the one case a legacy retry is
+        the right answer.
+        """
+        calls = []
+
+        def _fake_paddleocr(**kwargs):
+            calls.append(kwargs)
+            if "text_detection_model_name" in kwargs:
+                raise TypeError("unexpected keyword argument")
+            return object()
+
+        with fake_paddleocr(_fake_paddleocr):
+            OCRExtractor(variant="mobile")._load_model()
+
+        assert len(calls) == 2
+        assert calls[1] == {"use_angle_cls": True, "lang": "en", "use_gpu": False}
+
+    def test_value_error_from_v3_is_not_masked_by_fallback(self):
+        """paddleocr>=3.7 is pinned, so a ValueError is a real model/config/
+        download failure. Retrying the legacy signature would swallow it and
+        load a model that ignores the requested variant.
+        """
+        calls = []
+
+        def _fake_paddleocr(**kwargs):
+            calls.append(kwargs)
+            raise ValueError("No models are available for lang=None")
+
+        with fake_paddleocr(_fake_paddleocr):
+            with pytest.raises(ValueError, match="No models are available"):
+                OCRExtractor(variant="mobile")._load_model()
+
+        assert len(calls) == 1
+
+    def test_missing_paddleocr_surfaces_as_import_error(self):
+        """The import moved into _construct, so absence must still be loud.
+
+        Before the move, importing this module raised ImportError at import
+        time. The failure now has to appear on the first construction attempt
+        instead of being swallowed into a silently degraded pipeline.
+        """
+        with patch("find_api.ml.ocr.get_model_manager", return_value=MagicMock()):
+            extractor = OCRExtractor(variant="mobile")
+
+            with patch.dict(sys.modules, {"paddleocr": None}):
+                with pytest.raises(ImportError):
+                    extractor._construct()
+
+
+class TestModelManagerFailureContract:
+    """A failed OCR model load must fail loudly and predictably, not
+    silently degrade or crash the whole process.
+
+    None of this needs a real PaddleOCR install -- ``_load_model`` is replaced
+    outright -- so it belongs here rather than behind ``importorskip``.
+    """
+
+    @staticmethod
+    def _blank_image():
+        from PIL import Image
+
+        return Image.new("RGB", (32, 32), color="white")
+
+    def test_unavailable_model_raises_model_unavailable_error(self, monkeypatch):
+        """Simulate a load failure (e.g. corrupt cache, network failure on
+        first download) and confirm it surfaces as ModelUnavailableError,
+        matching the contract other ML components in ModelManager rely on.
+        """
+        extractor = OCRExtractor(variant="mobile")
+
+        def _boom():
+            raise RuntimeError("simulated model download failure")
+
+        monkeypatch.setattr(extractor, "_load_model", _boom)
+
+        with pytest.raises(ModelUnavailableError):
+            extractor.extract_text(self._blank_image())
+
+    def test_failed_model_is_recorded_in_status(self, monkeypatch):
+        extractor = OCRExtractor(variant="mobile")
+
+        def _boom():
+            raise RuntimeError("simulated model download failure")
+
+        monkeypatch.setattr(extractor, "_load_model", _boom)
+
+        with pytest.raises(ModelUnavailableError):
+            extractor.extract_text(self._blank_image())
+
+        status = get_model_manager().get_status()
+        assert "paddleocr:mobile" in status["failed_models"]
+
+    def test_changing_variant_allows_retry_after_failure(self, monkeypatch):
+        """A failure on one variant must not block the other variant --
+        they're independent cache entries (config_key differs), so
+        switching should retry cleanly rather than raising the cached
+        failure from a different variant.
+        """
+        mobile = OCRExtractor(variant="mobile")
+
+        def _boom():
+            raise RuntimeError("simulated failure")
+
+        monkeypatch.setattr(mobile, "_load_model", _boom)
+
+        with pytest.raises(ModelUnavailableError):
+            mobile.extract_text(self._blank_image())
+
+        # A fresh server-variant extractor uses a different cache key/model
+        # name, so it must not be affected by the mobile-variant failure.
+        server = OCRExtractor(variant="server")
+        assert server.model_name != mobile.model_name
+        assert (
+            server.model_name not in get_model_manager().get_status()["failed_models"]
+        )
