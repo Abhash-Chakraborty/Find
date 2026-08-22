@@ -22,6 +22,7 @@ Design constraints (tracked by issue #339, the CPU-only runtime profile):
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -36,6 +37,13 @@ from find_api.core.hardware import (
     resolve_execution,
 )
 from find_api.core.model_manager import get_model_manager
+
+logger = logging.getLogger(__name__)
+
+# Placeholder used when a model's configured identifier cannot be resolved.
+# Deliberately constant: the underlying exception text is logged server-side
+# instead of being echoed into the HTTP report.
+UNRESOLVED_IDENTIFIER = "<unresolved>"
 
 # --- Pack identifiers --------------------------------------------------------
 PACK_LIGHT = "light"
@@ -477,8 +485,15 @@ def build_report(include_paths: bool = False) -> dict:
     for spec in MODEL_SPECS:
         try:
             identifier = spec.identifier()
-        except Exception as exc:  # noqa: BLE001
-            identifier = f"<unresolved: {exc}>"
+        except Exception:  # noqa: BLE001
+            # The report is reachable over HTTP, so the exception text stays
+            # server-side: a settings/import failure here can name modules,
+            # env keys, or filesystem paths. Callers only need to know the
+            # identifier could not be resolved.
+            logger.warning(
+                "Could not resolve identifier for model %s", spec.key, exc_info=True
+            )
+            identifier = UNRESOLVED_IDENTIFIER
 
         try:
             cache_info = spec.cache_resolver()
