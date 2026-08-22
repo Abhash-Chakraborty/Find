@@ -314,6 +314,89 @@ export const revokeAccountSession = async (
   await api.delete(`/api/auth/sessions/${sessionId}`);
 };
 
+// --- Instance management (shared deployments, issue #263) ---
+
+export interface InstanceInvite {
+  id: number;
+  is_used: boolean;
+  expires_at: string | null;
+  created_at: string | null;
+}
+
+/**
+ * The raw token is returned by POST /auth/invites once and never stored, so it
+ * has to be surfaced to the admin immediately -- it cannot be re-read later.
+ */
+export interface CreatedInvite {
+  id: number;
+  invite_token: string;
+  expires_at: string;
+}
+
+export interface JoinRequest {
+  id: number;
+  username: string;
+  display_name: string | null;
+  status: "pending" | "approved" | "rejected";
+  created_at: string | null;
+  reviewed_at: string | null;
+}
+
+export const getInstanceUsers = async (): Promise<AccountUser[]> => {
+  const response = await api.get<{ users: AccountUser[] }>("/api/auth/users");
+  return response.data.users;
+};
+
+export const getInstanceInvites = async (): Promise<InstanceInvite[]> => {
+  const response = await api.get<{ invites: InstanceInvite[] }>(
+    "/api/auth/invites",
+  );
+  return response.data.invites;
+};
+
+export const createInstanceInvite = async (params?: {
+  ttl_hours?: number;
+}): Promise<CreatedInvite> => {
+  const response = await api.post<CreatedInvite>(
+    "/api/auth/invites",
+    params ?? {},
+  );
+  return response.data;
+};
+
+export const getJoinRequests = async (): Promise<JoinRequest[]> => {
+  const response = await api.get<{ requests: JoinRequest[] }>(
+    "/api/auth/join-requests",
+  );
+  return response.data.requests;
+};
+
+export const approveJoinRequest = async (
+  requestId: number,
+): Promise<{ user: AccountUser }> => {
+  const response = await api.post<{ user: AccountUser }>(
+    `/api/auth/join-requests/${requestId}/approve`,
+  );
+  return response.data;
+};
+
+export const rejectJoinRequest = async (requestId: number): Promise<void> => {
+  await api.post(`/api/auth/join-requests/${requestId}/reject`);
+};
+
+export const submitJoinRequest = async (params: {
+  invite_token: string;
+  username: string;
+  password: string;
+  display_name?: string;
+}): Promise<{ join_request_id: number }> => {
+  const response = await api.post<{ join_request_id: number }>(
+    "/api/auth/join",
+    params,
+  );
+  return response.data;
+};
+
 export type AccelMode = "auto" | "gpu" | "cpu";
 
 export interface HardwareCapabilities {
