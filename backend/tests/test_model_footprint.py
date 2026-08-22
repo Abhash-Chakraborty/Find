@@ -9,7 +9,9 @@ the test loudly instead of silently succeeding.
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import logging
 import os
 
 import pytest
@@ -446,6 +448,41 @@ class TestBuildReport:
 
         yolo_entry = next(m for m in report["models"] if m["key"] == "yolo")
         assert yolo_entry["cache"]["path"] == str(tmp_path / "yolo26n.pt")
+
+    def test_unresolvable_identifier_does_not_leak_exception_text(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        """A failing identifier resolver must not echo its message to callers.
+
+        ``build_report(include_paths=False)`` is served by the admin
+        ``GET /status/models/footprint`` endpoint, so an exception raised
+        while resolving a configured identifier would put whatever that
+        exception says — module names, env keys, filesystem paths — into an
+        HTTP response body. The detail belongs in the server log only.
+        """
+        self._wire_all_caches(tmp_path, monkeypatch)
+
+        secret = f"cannot import backend module at {tmp_path / 'private' / 'x.py'}"
+
+        def _boom() -> str:
+            raise RuntimeError(secret)
+
+        broken = [
+            dataclasses.replace(spec, identifier=_boom) if spec.key == "yolo" else spec
+            for spec in mf.MODEL_SPECS
+        ]
+        monkeypatch.setattr(mf, "MODEL_SPECS", tuple(broken))
+
+        with caplog.at_level(logging.WARNING, logger=mf.__name__):
+            report = mf.build_report(include_paths=False)
+
+        yolo_entry = next(m for m in report["models"] if m["key"] == "yolo")
+        assert yolo_entry["identifier"] == mf.UNRESOLVED_IDENTIFIER
+        assert secret not in json.dumps(report)
+        assert "RuntimeError" not in json.dumps(report)
+
+        # The detail is still recoverable by the operator, just server-side.
+        assert secret in caplog.text
 
     def test_never_raises_when_everything_is_missing(self, tmp_path, monkeypatch):
         empty = tmp_path / "nothing-here"
