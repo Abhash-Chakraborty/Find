@@ -20,6 +20,7 @@ from find_api.core.dependencies import (
     get_required_user,
     scope_media_query,
 )
+from find_api.core.media_types import content_type_for_file_type
 from find_api.core.queue import get_task_queue
 from find_api.core.storage import get_file_url, delete_file
 from find_api.models.media import Media
@@ -317,19 +318,9 @@ def apply_metadata_filters(
     elif orientation == "square":
         query = query.filter(Media.width == Media.height)
     if file_type:
-        normalized_type = file_type.lower().lstrip(".")
-        mime_type_map = {
-            "jpg": "image/jpeg",
-            "jpeg": "image/jpeg",
-            "png": "image/png",
-            "webp": "image/webp",
-            "gif": "image/gif",
-            "bmp": "image/bmp",
-            "tif": "image/tiff",
-            "tiff": "image/tiff",
-        }
-        expected_content_type = mime_type_map.get(normalized_type, normalized_type)
-        query = query.filter(Media.content_type == expected_content_type)
+        query = query.filter(
+            Media.content_type == content_type_for_file_type(file_type)
+        )
     return query
 
 

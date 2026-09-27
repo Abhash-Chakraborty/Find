@@ -388,12 +388,13 @@ class TestSearchResponseShape:
         assert "width >= :min_width" in search_sql
         assert "height >= :min_height" in search_sql
         assert "width > height" in search_sql
-        assert "content_type ILIKE :file_type_pattern" in search_sql
+        assert "content_type = :content_type" in search_sql
         assert search_params["camera_make_pattern"] == "%Canon%"
         assert search_params["camera_model_pattern"] == "%EOS%"
         assert search_params["min_width"] == 1000
         assert search_params["min_height"] == 700
-        assert search_params["file_type_pattern"] == "%jpg%"
+        # "jpg" has to become image/jpeg; a substring match on "jpg" finds nothing.
+        assert search_params["content_type"] == "image/jpeg"
 
     def test_search_rejects_invalid_metadata_filter_values(self, client):
         invalid_date = _mock_search(

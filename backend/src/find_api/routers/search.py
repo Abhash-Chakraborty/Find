@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_required_user
+from find_api.core.media_types import content_type_for_file_type
 from find_api.models.user import User
 from find_api.ml.search_ranking import (
     bound_similarity,
@@ -117,8 +118,8 @@ def _metadata_filter_sql(
     if file_type:
         value = file_type.strip().lower().lstrip(".")
         if value:
-            clauses.append("AND content_type ILIKE :file_type_pattern")
-            params["file_type_pattern"] = f"%{value}%"
+            clauses.append("AND content_type = :content_type")
+            params["content_type"] = content_type_for_file_type(value)
             add_filter_part("file_type", value)
 
     return "\n        ".join(clauses), params, "&".join(sorted(filter_parts))
