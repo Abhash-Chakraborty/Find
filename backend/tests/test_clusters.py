@@ -144,3 +144,21 @@ def test_hidden_only_cluster_detail_returns_404(client, db):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Cluster not found"
+
+
+def test_clusters_exclude_archived_and_trashed_members(client, db):
+    visible = _seed_media(db, filename="state-visible.jpg")
+    archived = _seed_media(db, filename="state-archived.jpg")
+    trashed = _seed_media(db, filename="state-trashed.jpg")
+    archived.is_archived = True
+    trashed.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    cluster = _seed_cluster(db, member_ids=[visible.id, archived.id, trashed.id])
+
+    listed = client.get("/api/clusters").json()["clusters"][0]
+    detail = client.get(f"/api/cluster/{cluster.id}").json()
+
+    assert listed["member_count"] == 1
+    assert [sample["id"] for sample in listed["samples"]] == [visible.id]
+    assert detail["member_count"] == 1
+    assert [member["id"] for member in detail["members"]] == [visible.id]

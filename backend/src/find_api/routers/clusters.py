@@ -14,6 +14,7 @@ from find_api.core.dependencies import (
     get_required_user,
     scope_media_query,
 )
+from find_api.core.media_scope import browsable_media
 from find_api.core.queue import enqueue_clustering_job
 from find_api.core.storage import get_file_url
 from find_api.routers.gallery import build_thumbnail_url
@@ -63,11 +64,9 @@ def get_clusters(
         if not member_ids:
             continue
 
-        # Visible = not hidden AND (in shared mode) owned by the caller.
+        # Visible = browsable AND (in shared mode) owned by the caller.
         visible_id_rows = scope_media_query(
-            db.query(Media.id).filter(
-                Media.id.in_(member_ids), Media.is_hidden.is_(False)
-            ),
+            db.query(Media.id).filter(Media.id.in_(member_ids), *browsable_media()),
             user,
         ).all()
         visible_id_set = {row.id for row in visible_id_rows}
@@ -133,7 +132,7 @@ def get_cluster_detail(
     # Get all member media
     member_ids = cluster.member_ids or []
     members = scope_media_query(
-        db.query(Media).filter(Media.id.in_(member_ids), Media.is_hidden.is_(False)),
+        db.query(Media).filter(Media.id.in_(member_ids), *browsable_media()),
         user,
     ).all()
 

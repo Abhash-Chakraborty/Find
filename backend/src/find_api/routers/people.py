@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 from find_api.core.database import get_db
 from find_api.core.config import settings
 from find_api.core.dependencies import get_admin_user, get_required_user
+from find_api.core.media_scope import browsable_media
 from find_api.core.queue import get_task_queue
 from find_api.routers.gallery import build_thumbnail_url
 from find_api.models.face import Face
@@ -93,7 +94,7 @@ def list_people(
             Face.media_id.label("media_id"),
             Face.id.label("face_id"),
         ).join(Media, Media.id == Face.media_id)
-        query = query.filter(Media.is_hidden.is_(False))
+        query = query.filter(*browsable_media())
         if scope_user_id is not None:
             query = query.filter(Media.uploader_user_id == scope_user_id)
         return query
@@ -196,7 +197,7 @@ def get_person_images(
             Face.confidence,
         )
         .join(Media, Media.id == Face.media_id)
-        .filter(Face.person_id == person_id, Media.is_hidden.is_(False))
+        .filter(Face.person_id == person_id, *browsable_media())
     )
     if scope_user_id is not None:
         face_query = face_query.filter(Media.uploader_user_id == scope_user_id)

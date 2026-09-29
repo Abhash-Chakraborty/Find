@@ -20,6 +20,7 @@ from find_api.core.dependencies import (
     get_required_user,
     scope_media_query,
 )
+from find_api.core.media_scope import browsable_media
 from find_api.core.media_types import content_type_for_file_type
 from find_api.core.queue import get_task_queue
 from find_api.core.storage import get_file_url, delete_file
@@ -218,10 +219,7 @@ def _browsable_media_query(db: Session):
     (``deleted_at IS NULL``). The dedicated archive/trash views must NOT use
     this helper — they filter on those columns directly.
     """
-    return _public_media_query(db).filter(
-        Media.is_archived.is_(False),
-        Media.deleted_at.is_(None),
-    )
+    return db.query(Media).filter(*browsable_media())
 
 
 def _serialize_media_item(media: Media) -> dict:

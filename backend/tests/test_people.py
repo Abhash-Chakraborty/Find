@@ -199,3 +199,20 @@ def test_people_list_query_count_does_not_grow_with_people(client, db):
         f"query count grew with the number of people: {few} -> {many}; "
         "a per-person query has been reintroduced"
     )
+
+
+def test_people_skip_archived_and_trashed_media(client, db):
+    archived_person, archived_media = _seed_person_group(db, name="Archived")
+    trashed_person, trashed_media = _seed_person_group(db, name="Trashed")
+    visible_person, _visible_media = _seed_person_group(db, name="Shown")
+    archived_media.is_archived = True
+    trashed_media.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+
+    person_ids = [item["id"] for item in client.get("/api/people").json()]
+    archived_images = client.get(f"/api/people/{archived_person.id}/images").json()
+
+    assert visible_person.id in person_ids
+    assert archived_person.id not in person_ids
+    assert trashed_person.id not in person_ids
+    assert archived_images["images"] == []
