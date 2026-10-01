@@ -327,6 +327,38 @@ class TestSharedLinkByteLayerScoping:
             == 200
         )
 
+    def test_unlock_cookie_replaces_password_on_file_routes(self, client, db):
+        album, media = _make_album_with_assets(client, db, ["a.jpg", "b.jpg"])
+        link = _create_link(client, album["id"], password="secret")
+        base = f"/api/public/shared/{link['key']}"
+
+        assert client.get(base, params={"password": "secret"}).status_code == 200
+
+        # <img> tags can't send the password, so thumbnails ride on the cookie,
+        # and an album page no longer costs one bcrypt check per photo.
+        with patch(
+            "find_api.routers.shared_link.verify_password_constant_time"
+        ) as verify:
+            for item in media:
+                assert (
+                    client.get(f"{base}/asset/{item.id}/thumbnail").status_code == 200
+                )
+        verify.assert_not_called()
+
+    def test_unlock_cookie_is_rejected_when_forged_or_stale(self, client, db):
+        album, media = _make_album_with_assets(client, db, ["a.jpg"])
+        link = _create_link(client, album["id"], password="secret")
+        thumb = f"/api/public/shared/{link['key']}/asset/{media[0].id}/thumbnail"
+
+        client.cookies.set(f"find_share_{link['id']}", "9999999999.forged")
+        assert client.get(thumb).status_code == 401
+
+        client.cookies.clear()
+        client.get(f"/api/public/shared/{link['key']}", params={"password": "secret"})
+        assert client.get(thumb).status_code == 200
+        client.patch(f"/api/shared-links/{link['id']}", json={"password": "changed"})
+        assert client.get(thumb).status_code == 401
+
     def test_file_routes_enforce_expiry(self, client, db):
         from datetime import datetime, timedelta, timezone
 
