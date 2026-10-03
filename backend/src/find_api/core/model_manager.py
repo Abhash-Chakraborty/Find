@@ -75,6 +75,7 @@ class ModelManager:
             return
 
         self.models: Dict[str, Any] = {}
+        self.model_config_keys: Dict[str, str | None] = {}
         self.in_flight: Dict[str, int] = {}
         self.last_used: Dict[str, float] = {}
         self._loading: Dict[str, threading.Event] = {}
@@ -161,8 +162,18 @@ class ModelManager:
         while True:
             with self._lock:
                 if name in self.models:
-                    self.last_used[name] = time.time()
-                    return self.models[name]
+                    # A model loaded for another configuration (say CPU after the
+                    # user picked GPU) is reloaded once nothing is using it.
+                    if (
+                        self.model_config_keys.get(name) == config_key
+                        or self.in_flight.get(name, 0) > 0
+                    ):
+                        self.last_used[name] = time.time()
+                        return self.models[name]
+                    logger.info(
+                        "Reloading model %s because its configuration changed", name
+                    )
+                    self._drop_model_locked(name)
 
                 if name in self.unavailable_models:
                     failure = self.unavailable_models[name]
@@ -221,6 +232,7 @@ class ModelManager:
 
                 self._evict_for_capacity_locked(skip={name})
                 self.models[name] = model
+                self.model_config_keys[name] = config_key
                 self.in_flight.setdefault(name, 0)
                 self.last_used[name] = time.time()
                 self.failed_loads.pop(name, None)
@@ -303,6 +315,7 @@ class ModelManager:
         """Reset mutable singleton state for focused tests."""
         with self._lock:
             self.models.clear()
+            self.model_config_keys.clear()
             self.in_flight.clear()
             self.last_used.clear()
             self._loading.clear()
@@ -367,6 +380,7 @@ class ModelManager:
 
     def _drop_model_locked(self, name: str):
         self.models.pop(name, None)
+        self.model_config_keys.pop(name, None)
         self.last_used.pop(name, None)
         self.in_flight.pop(name, None)
 
