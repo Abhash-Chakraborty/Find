@@ -152,6 +152,20 @@ def test_model_in_use_is_not_swapped_mid_lease(manager):
     )
 
 
+def test_clearing_a_model_family_clears_its_variants(manager):
+    def broken_loader():
+        raise RuntimeError("load failed")
+
+    with pytest.raises(ModelUnavailableError):
+        manager.get_model("paddleocr:mobile", broken_loader)
+    with pytest.raises(ModelUnavailableError):
+        manager.get_model("paddleocr-other", broken_loader)
+
+    manager.clear_model_failures(("paddleocr",))
+
+    assert "paddleocr:mobile" not in manager.unavailable_models
+    assert "paddleocr-other" in manager.unavailable_models
+
 
 def test_unavailable_stage_records_safe_metadata_and_continues(monkeypatch):
     monkeypatch.setattr(settings, "ML_MODE", "real")

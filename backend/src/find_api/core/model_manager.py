@@ -420,10 +420,19 @@ class ModelManager:
             self.publish_status()
 
     def clear_model_failures(self, names: list[str] | tuple[str, ...]) -> None:
-        """Allow multiple known-unavailable models to be retried."""
+        """Allow multiple known-unavailable models to be retried.
+
+        A name also covers its variants, so "paddleocr" clears
+        "paddleocr:mobile" and "paddleocr:server".
+        """
         with self._lock:
-            for name in names:
-                self._clear_model_failure_locked(name)
+            failed = set(self.unavailable_models) | set(self.failed_loads)
+            for failed_name in failed:
+                if any(
+                    failed_name == name or failed_name.startswith(f"{name}:")
+                    for name in names
+                ):
+                    self._clear_model_failure_locked(failed_name)
             self.publish_status()
 
     def clear(self) -> None:
