@@ -179,7 +179,8 @@ export default function UploadPage() {
       try {
         const data = await uploadImages(acceptedFiles, setUploadProgress);
         completeUpload(data);
-        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
+        void queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+        void queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
         toast.success(
           `Queued ${data.total} file${data.total === 1 ? "" : "s"} for library processing`,
         );
@@ -216,7 +217,8 @@ export default function UploadPage() {
       try {
         const data = await uploadImagesBulk(archive, setUploadProgress);
         completeUpload(data);
-        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
+        void queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+        void queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
         const uploadedCount = data.results.filter(
           (item) => item.status === "uploaded",
         ).length;

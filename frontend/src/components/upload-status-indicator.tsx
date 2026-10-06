@@ -44,7 +44,6 @@ export function UploadQueueMonitor() {
           result.value.status === "failed";
       }
       if (terminalUpdate) {
-        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
         void queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       }
     };

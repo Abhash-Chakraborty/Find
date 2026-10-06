@@ -365,7 +365,6 @@ export function ImagePreviewModal({
     onSuccess: ({ id, liked }) => {
       setLikedOverride(liked);
       onLikedChange?.(id, liked);
-      queryClient.invalidateQueries({ queryKey: ["gallery"] });
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", id] });
     },
@@ -374,7 +373,6 @@ export function ImagePreviewModal({
   const deleteMutation = useMutation({
     mutationFn: (mediaId: number) => deleteImage(mediaId),
     onSuccess: ({ id }) => {
-      queryClient.invalidateQueries({ queryKey: ["gallery"] });
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["clusters"] });
       queryClient.invalidateQueries({ queryKey: ["people"] });
@@ -387,7 +385,6 @@ export function ImagePreviewModal({
   const reprocessMutation = useMutation({
     mutationFn: (mediaId: number) => reprocessImage(mediaId),
     onSuccess: ({ media_id }) => {
-      queryClient.invalidateQueries({ queryKey: ["gallery"] });
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", media_id] });
       toast.success("Retry queued — analysis will restart shortly.");
