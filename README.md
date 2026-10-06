@@ -1,26 +1,33 @@
-  # Find
+# Find
+
+**Search your own photo library by describing what is in it.** Find is a self-hosted photo app that captions, tags, reads and groups your pictures on your own machine, then lets you search them in plain language. Nothing is sent to a cloud service.
+
+<p align="center">
+  <img src="docs/assets/demo-search.webp" alt="Typing &quot;a bridge at night&quot; into Find's search box returns matching photos from a local library, best match first" width="900">
+</p>
 
 <p align="center">
   <a href="https://gssoc.girlscript.org/"><img src="https://img.shields.io/badge/GSSoC-2026-ff4f8b?style=for-the-badge" alt="GSSoC 2026"></a>
   <a href="https://github.com/Abhash-Chakraborty/Find/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Abhash-Chakraborty/Find/ci.yml?branch=canary&label=CI" alt="CI"></a>
+  <a href="https://github.com/Abhash-Chakraborty/Find/releases/latest"><img src="https://img.shields.io/github/v/release/Abhash-Chakraborty/Find?label=release" alt="Latest release"></a>
   <a href="https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue"><img src="https://img.shields.io/github/issues/Abhash-Chakraborty/Find/good%20first%20issue?label=good%20first%20issue" alt="Good first issue"></a>
   <a href="https://github.com/Abhash-Chakraborty/Find/issues"><img src="https://img.shields.io/github/issues/Abhash-Chakraborty/Find?label=issues" alt="Open issues"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/gssoc-2026-banner-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/gssoc-2026-banner-light.svg">
-    <img alt="Find x GSSoC 2026" src="docs/assets/gssoc-2026-banner-dark.svg">
-  </picture>
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#how-search-works">How search works</a> ·
+  <a href="#hardware-by-setup">Hardware</a> ·
+  <a href="./docs/index.md">Docs</a> ·
+  <a href="./GSSOC_CONTRIBUTOR_GUIDE.md">Contribute</a>
 </p>
 
-Find is a local-first AI image intelligence platform for uploading, indexing, searching, and clustering images on your own machine.
+## Why Find
 
-All image processing, vector generation, and search stay inside your local stack.
+Cloud photo search works by uploading your whole library to someone else. Find gives you the same kind of search (by scene, object, text in the image or face) with every model running inside your own Docker stack. It runs on an NVIDIA GPU, on an ordinary laptop CPU, or with AI switched off entirely. Remote inference is fail-closed: if it is selected, Find refuses to send media anywhere rather than quietly falling back.
 
-See the documentation index in [`docs/index.md`](./docs/index.md), the mobile direction in [`docs/plans/not-started/mobile-strategy.md`](./docs/plans/not-started/mobile-strategy.md), the bulk rename and metadata editing design in [`docs/plans/not-started/bulk-rename-metadata-design.md`](./docs/plans/not-started/bulk-rename-metadata-design.md), and the broader installable local-first roadmap in [`docs/plans/partial/local-first-roadmap.md`](./docs/plans/partial/local-first-roadmap.md).
+The demo above is a real recording of the CPU profile, searching 200 photos from [Unsplash](https://unsplash.com/license) (via [Lorem Picsum](https://picsum.photos)).
 
 ## What it does
 
@@ -35,111 +42,109 @@ See the documentation index in [`docs/index.md`](./docs/index.md), the mobile di
 - Protect hidden images in a password-gated private vault with recovery, configurable auto-lock, timeline browsing, preview, and restore controls. Image bytes remain in private object storage rather than being re-encrypted.
 - Record local feedback for search, captions, objects, and people grouping
 
-## Tech stack
+The [Features Guide](docs/guides/features.md) walks through each screen.
 
-- **Frontend:** Next.js 16, React 19, React Query, Tailwind CSS, Biome
-- **Backend:** FastAPI, SQLAlchemy, PostgreSQL + pgvector, Redis, RQ, MinIO
-- **ML pipeline:** YOLO26 nano, BLIP image captioning, PaddleOCR, SigLIP (`open-clip`), InsightFace, HDBSCAN
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screen-photos.webp" alt="The Photos timeline: a dense grid of indexed photos with the library sidebar"></td>
+    <td width="50%"><img src="docs/assets/screen-search.webp" alt="Search results for a plain-language query, ranked best match first"></td>
+  </tr>
+  <tr>
+    <td align="center">Photos timeline</td>
+    <td align="center">Search</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/screen-clusters.webp" alt="Clusters found automatically: one of them groups three city photos taken at night"></td>
+    <td width="50%"><img src="docs/assets/screen-settings.webp" alt="Settings showing the AI runtime: build profile, mode and CPU/GPU choice"></td>
+  </tr>
+  <tr>
+    <td align="center">Clusters</td>
+    <td align="center">AI runtime settings</td>
+  </tr>
+</table>
 
-## Runtime profiles
+## How search works
 
-| Artifact | Command | Included AI runtime | GPU/CUDA download |
-| --- | --- | --- | --- |
-| No AI | `docker compose -f compose.no-ai.yml up --build` | None; thumbnails, dimensions, EXIF, gallery, albums, vault, and maps remain available | No |
-| Mock | `docker compose -f compose.mock.yml up --build` | Deterministic test metadata/vectors | No |
-| CPU AI | `docker compose -f compose.cpu.yml up --build` | Real local captioning, OCR, detection, embeddings, faces, and clustering with CPU PyTorch/ONNX | No |
-| NVIDIA AI | `docker compose up --build` | Real local AI with CUDA PyTorch/ONNX providers | Yes |
+Every photo goes through the same pipeline once, when it is uploaded. Searching is then a single vector lookup.
 
-The default `compose.yml` is the NVIDIA profile. Explicit profiles extend
-`compose.base.yml`, keeping application and data services centralized while
-each backend image installs only its selected dependency extra. Selecting a
-profile is a build/deployment choice;
-the dashboard can enable/disable installed AI and choose Auto/GPU/CPU, but it
-cannot install missing packages into a running container.
+1. **Ingest.** The API (`/api/upload`, or `/api/upload/bulk` for a ZIP) checks the file, stores the original in MinIO, creates a `media` row in PostgreSQL, and queues an analysis job on Redis (RQ, `high`/`default`/`low` queues).
+2. **Analyse.** A worker picks up the job, reads EXIF and dimensions, makes a thumbnail, then runs the models:
+   - **YOLO26 nano** for objects
+   - **BLIP** for a caption
+   - **PaddleOCR (PP-OCRv5)** for text in the image
+   - **InsightFace** for faces, grouped into people
+   - **SigLIP** (ViT-B-16 via `open-clip`) for embeddings
+3. **Embed.** The stored vector is a weighted average of SigLIP embeddings of the image itself, its caption, its object labels and, when there is any, its OCR text (`generate_hybrid_embedding` in `backend/src/find_api/workers/processors.py`). Every signal lives in the same 768-dimensional space, so a sentence can match a picture.
+4. **Index.** The vector goes into a pgvector column with an HNSW index. Once indexing succeeds, HDBSCAN clustering is queued.
+5. **Query.** A search embeds the text with the same SigLIP model, asks pgvector for the closest vectors by cosine similarity (`1 - (vector <=> query)`), drops anything below a 0.38 similarity threshold, then adds a small boost when query words also appear in the caption, the object labels or the OCR text (`backend/src/find_api/ml/search_ranking.py`). OCR matches count most, so "receipt" or "invoice" find documents.
+
+**Measured, not assumed.** The HNSW index runs with pgvector's default settings. [`docs/research/hnsw-index-fidelity.md`](docs/research/hnsw-index-fidelity.md) checks that against exact search: on clustered synthetic 768-d corpora it returned recall@10 = 1.0 at 1k and 10k vectors, with a 1.52 ms median query at 10k (pgvector 0.8.4, PostgreSQL 16). On a near-uniform worst case, recall drops to 0.59 at 10k, which is why the doc also reports the neighbour margin. `backend/scripts/benchmark_hnsw_recall.py` reproduces every number. Per-stage CPU cost is in the [CPU runtime guide](docs/guides/cpu-runtime-profile.md).
 
 ## Architecture
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/architecture-light.png">
-  <img alt="Architecture" src="docs/assets/architecture-dark.png">
+  <img alt="Find's architecture: Next.js frontend, FastAPI API, PostgreSQL with pgvector, Redis/RQ worker queues, MinIO object storage and the local ML pipeline" src="docs/assets/architecture-dark.png">
 </picture>
 
-## Screenshots
+## Tech stack
 
-### Upload
+- **Frontend:** Next.js 16, React 19, React Query, Tailwind CSS, Biome
+- **Backend:** FastAPI, SQLAlchemy, PostgreSQL + pgvector, Redis, RQ, MinIO
+- **ML pipeline:** YOLO26 nano, BLIP image captioning, PaddleOCR, SigLIP (`open-clip`), InsightFace, HDBSCAN
 
-![Upload](docs/assets/upload.webp)
+## Hardware by setup
 
-### Gallery
+Pick a profile by what your machine has. They share one codebase and one database; only the backend image differs.
 
-![Gallery](docs/assets/gallery.webp)
+| Setup | Command | What runs | Backend image | Memory | Disk |
+| --- | --- | --- | --- | --- | --- |
+| **CPU AI** (start here) | `docker compose -f compose.cpu.yml up --build` | Real captions, OCR, objects, faces, embeddings, clustering | 3.6 GB | 6 GB for Docker minimum, 8 GB+ comfortable | 8 GB minimum, 12 GB+ comfortable |
+| **NVIDIA AI** | `docker compose up --build` | Same models on CUDA | 12 GB | NVIDIA GPU, driver and the NVIDIA Container Toolkit | Image plus about 3.4 GB of model weights |
+| **Mock** | `docker compose -f compose.mock.yml up --build` | Deterministic fake metadata and vectors, for UI/API work | 582 MB | No model memory | No model downloads |
+| **No AI** | `docker compose -f compose.no-ai.yml up --build` | Thumbnails, EXIF, gallery, albums, vault, map. No search | 447 MB | No model memory | No model downloads |
 
-### Search
+- On the CPU profile, RAM is the limit, not cores. All five models loaded at once peak at 3.1 to 3.3 GB in the worker, before PostgreSQL, Redis, MinIO and the web app. On an 8 GB machine, expect swapping unless you run without the frontend container.
+- On a 4-core laptop, one photo takes about 6.5 s on CPU. OCR and captioning are 91% of that. Search itself only embeds the query.
+- Model weights (about 3.4 GB) download on first use and are cached in the `model_cache`, `paddlex_cache` and `insightface_cache` volumes.
+- GPU memory use has not been benchmarked yet. If you measure it, a PR to [`docs/guides/hardware-acceleration.md`](docs/guides/hardware-acceleration.md) is welcome.
 
-![Search](docs/assets/search.webp)
+Figures come from [`docs/guides/cpu-runtime-profile.md`](docs/guides/cpu-runtime-profile.md), measured on 4 cores with 5.8 GB for Docker under WSL2. The GPU image size is indicative.
 
-### Clusters
+Selecting a profile is a build/deployment choice. Explicit profiles extend `compose.base.yml`, keeping application and data services centralized while each backend image installs only its selected dependency extra. The dashboard can enable or disable installed AI and choose Auto/GPU/CPU, but it cannot install missing packages into a running container.
 
-![Clusters](docs/assets/cluster.webp)
+## Quick start
 
-## Delete
-
-![Demo](docs/assets/delete.webp)
-
-## GSSoC'26 contributors
-
-This project is open for **GSSoC'26** contributions.
-
-- New contributors should start with the [GSSoC'26 Contributor Guide](./GSSOC_CONTRIBUTOR_GUIDE.md).
-- For concise repo-aware contributor and coding-agent workflow guidance, start with [AGENTS.md](./AGENTS.md).
-- Start with issues labeled [`good first issue`](https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue)
-- Beginner-friendly work may also use [`level:beginner`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Abeginner%22)
-- For bigger work, check [`level:intermediate`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Aintermediate%22), [`level:advanced`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Aadvanced%22), and [`level:critical`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Acritical%22)
-- Look for priority queue items via [`help wanted`](https://github.com/Abhash-Chakraborty/Find/labels/help%20wanted)
-- Follow the contribution rules in [CONTRIBUTING.md](./CONTRIBUTING.md)
-
-## Install and run
-
-### Option A: full real-ML stack
-
-From repository root, copy the environment template and fill in the values before starting anything:
+Copy the environment template and fill in the values before starting anything:
 
 ```bash
+git clone https://github.com/Abhash-Chakraborty/Find.git
+cd Find
 cp .env.example .env
 # then edit .env — see the comments in .env.example for what each value does
 ```
 
-```bash
-docker compose up --build
-```
-
-Services:
-
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:8000`
-- MinIO API: `http://localhost:9200`
-- MinIO console: `http://localhost:9201`
-
-Notes:
-
-- Current Docker setup is GPU-oriented and expects NVIDIA GPU access.
-- Copy `.env.example` to `.env` before startup. Compose intentionally has no
-  embedded service-password fallback.
-
-For the same real local AI pipeline without CUDA or an NVIDIA runtime, use:
+Then start the profile that fits your machine (see [Hardware by setup](#hardware-by-setup)). The CPU profile works everywhere Docker does:
 
 ```bash
 docker compose -f compose.cpu.yml up --build
 ```
 
-For metadata-only operation with no AI dependencies or model downloads, use:
+Services:
 
-```bash
-docker compose -f compose.no-ai.yml up --build
-```
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000` (interactive API docs at `http://localhost:8000/docs`)
+- MinIO API: `http://localhost:9200`
+- MinIO console: `http://localhost:9201`
 
-### Option B: fast contributor mode (recommended for most work)
+Notes:
+
+- The default `compose.yml` is the NVIDIA profile and expects NVIDIA GPU access.
+- Copy `.env.example` to `.env` before startup. Compose intentionally has no embedded service-password fallback.
+- Release builds are published to GHCR with each [GitHub release](https://github.com/Abhash-Chakraborty/Find/releases): one web image and separate `no-ai`, `mock`, `cpu` and `nvidia` backend images.
+
+### Fast contributor mode (recommended for most work)
 
 For UI, API, upload, gallery, search, clustering, docs, and workflow changes, use the light stack:
 
@@ -156,101 +161,15 @@ Light mode is deterministic but not AI-accurate:
 - Search and clustering exercise the same API/database paths using mock embeddings.
 - Use the full stack before validating real ML quality or performance.
 
-## Mock mode vs full ML mode
+### Metadata only
 
-Find ships two runtime modes that serve different purposes. Choosing the wrong one is the most common source of contributor confusion.
-
-### Mock mode (light stack)
+For metadata-only operation with no AI dependencies or model downloads, use:
 
 ```bash
-docker compose -f compose.mock.yml up --build
+docker compose -f compose.no-ai.yml up --build
 ```
 
-`ML_MODE=mock` is set automatically. The worker skips all model loading and instead records:
-
-| Field             | What you get                                                          |
-| ----------------- | --------------------------------------------------------------------- |
-| Caption           | A fixed placeholder string (e.g. `"mock caption"`)                    |
-| Detected objects  | An empty list or a static stub                                        |
-| OCR text          | An empty string                                                       |
-| Embedding vector  | A zero-filled or seeded deterministic vector of the correct dimension |
-| EXIF / dimensions | **Real values** extracted from the actual image file                  |
-
-Because mock vectors have no semantic content, search results are meaningless — results may appear but their ranking is arbitrary and does not reflect real image similarity.
-
-**Mock mode is the right choice when you are working on:**
-
-- Frontend UI, layout, or styling
-- API routing, request/response shapes, or error handling
-- Upload, job-status polling, gallery, or delete/like flows
-- Clustering pipeline logic (not cluster quality)
-- Documentation, CI, or contributor-tooling changes
-
-### Full ML mode (full stack)
-
-```bash
-docker compose up --build
-```
-
-The worker loads BLIP (captioning), YOLO26 nano (object detection), PaddleOCR (text extraction), and SigLIP via `open-clip` (semantic embeddings). All metadata and vectors reflect real model output.
-
-**Full ML mode is required when you are working on or reporting:**
-
-- Caption quality or wording
-- Search relevance — whether the right images appear for a query
-- Object detection accuracy
-- OCR output correctness
-- Clustering quality (which images group together)
-- Any ML model parameter or pipeline change
-
-> ⚠️ **Do not report caption or search quality issues observed in mock mode.** Mock output is intentionally fake and will not reproduce in production. Always reproduce ML-quality claims in full mode before filing a bug.
-
-### Quick reference
-
-| Task                             | Use light stack? | Use full stack? |
-| -------------------------------- | ---------------- | --------------- |
-| UI fix or new component          | ✅ Yes           | Not needed      |
-| API endpoint change              | ✅ Yes           | Not needed      |
-| Upload / gallery / clusters flow | ✅ Yes           | Not needed      |
-| Docs / CI / tooling              | ✅ Yes           | Not needed      |
-| Caption looks wrong              | ❌ No            | ✅ Required     |
-| Search returns bad results       | ❌ No            | ✅ Required     |
-| OCR missed text                  | ❌ No            | ✅ Required     |
-| ML pipeline performance          | ❌ No            | ✅ Required     |
-
-First run of the full stack downloads BLIP, SigLIP, PaddleOCR, and YOLO weights (several GB). Models are cached in the `model_cache` Docker volume and reused on subsequent runs.
-
-## Controlling AI from the dashboard
-
-The account/settings dashboard persists four instance-wide runtime choices:
-
-- `ai_enabled` turns the installed AI pipeline on or off.
-- `ml_mode` switches between the modes already present in the artifact. CPU and
-  NVIDIA builds can move directly between disabled, mock, and full local AI;
-  lightweight builds never pretend that missing model packages are available.
-- `accel_mode` selects `auto`, `gpu`, or `cpu`; unsupported GPU requests fall
-  back to CPU inside CPU/NVIDIA artifacts.
-- `map_enabled` opts in to retaining GPS coordinates from EXIF for the private map.
-
-Workers read all three values at the start of every job, so new jobs use the
-saved choice without mutating a worker's process environment. Inspect
-`GET /api/config/runtime` to compare the selected build/mode with the last state
-actually applied by a worker. If that endpoint says `restart_required: true`,
-start the CPU or NVIDIA compose artifact; a no-AI/mock image cannot become a
-full image through a toggle.
-
-Maintainers prepare patch, minor, or major semantic versions with one manual
-workflow. The generated version PR lands in `canary`; the reviewed
-`canary`-to-`main` promotion starts a three-hour quiet period before GitHub
-creates the release and publishes immutable web plus separate `no-ai`, `mock`,
-`cpu`, and `nvidia` backend images. Manual publish runs can still build one
-selected profile without unrelated AI dependencies.
-
-`ML_MODE=remote` is intentionally fail-closed for now: no remote inference
-adapter is installed, the runtime reports `unavailable`, and Find never sends
-private media to a remote service or silently falls back to local models.
-
-### Option C: local development without Docker
+### Local development without Docker
 
 #### Prerequisites
 
@@ -294,6 +213,103 @@ cd frontend
 pnpm install
 pnpm dev
 ```
+
+## Mock mode vs full ML mode
+
+Find ships two runtime modes that serve different purposes. Choosing the wrong one is the most common source of contributor confusion.
+
+### Mock mode (light stack)
+
+```bash
+docker compose -f compose.mock.yml up --build
+```
+
+`ML_MODE=mock` is set automatically. The worker skips all model loading and instead records:
+
+| Field             | What you get                                                          |
+| ----------------- | --------------------------------------------------------------------- |
+| Caption           | A fixed placeholder string (e.g. `"mock caption"`)                    |
+| Detected objects  | An empty list or a static stub                                        |
+| OCR text          | An empty string                                                       |
+| Embedding vector  | A zero-filled or seeded deterministic vector of the correct dimension |
+| EXIF / dimensions | **Real values** extracted from the actual image file                  |
+
+Because mock vectors have no semantic content, search results are meaningless — results may appear but their ranking is arbitrary and does not reflect real image similarity.
+
+**Mock mode is the right choice when you are working on:**
+
+- Frontend UI, layout, or styling
+- API routing, request/response shapes, or error handling
+- Upload, job-status polling, gallery, or delete/like flows
+- Clustering pipeline logic (not cluster quality)
+- Documentation, CI, or contributor-tooling changes
+
+### Full ML mode (full stack)
+
+```bash
+docker compose -f compose.cpu.yml up --build   # or: docker compose up --build (NVIDIA)
+```
+
+The worker loads BLIP (captioning), YOLO26 nano (object detection), PaddleOCR (text extraction), InsightFace (faces), and SigLIP via `open-clip` (semantic embeddings). All metadata and vectors reflect real model output.
+
+**Full ML mode is required when you are working on or reporting:**
+
+- Caption quality or wording
+- Search relevance — whether the right images appear for a query
+- Object detection accuracy
+- OCR output correctness
+- Clustering quality (which images group together)
+- Any ML model parameter or pipeline change
+
+> ⚠️ **Do not report caption or search quality issues observed in mock mode.** Mock output is intentionally fake and will not reproduce in production. Always reproduce ML-quality claims in full mode before filing a bug.
+
+### Quick reference
+
+| Task                             | Use light stack? | Use full stack? |
+| -------------------------------- | ---------------- | --------------- |
+| UI fix or new component          | ✅ Yes           | Not needed      |
+| API endpoint change              | ✅ Yes           | Not needed      |
+| Upload / gallery / clusters flow | ✅ Yes           | Not needed      |
+| Docs / CI / tooling              | ✅ Yes           | Not needed      |
+| Caption looks wrong              | ❌ No            | ✅ Required     |
+| Search returns bad results       | ❌ No            | ✅ Required     |
+| OCR missed text                  | ❌ No            | ✅ Required     |
+| ML pipeline performance          | ❌ No            | ✅ Required     |
+
+First run of the full stack downloads BLIP, SigLIP, PaddleOCR, InsightFace, and YOLO weights (about 3.4 GB). Models are cached in Docker volumes and reused on subsequent runs.
+
+## Controlling AI from the dashboard
+
+The account/settings dashboard persists four instance-wide runtime choices:
+
+- `ai_enabled` turns the installed AI pipeline on or off.
+- `ml_mode` switches between the modes already present in the artifact. CPU and
+  NVIDIA builds can move directly between disabled, mock, and full local AI;
+  lightweight builds never pretend that missing model packages are available.
+- `accel_mode` selects `auto`, `gpu`, or `cpu`; unsupported GPU requests fall
+  back to CPU inside CPU/NVIDIA artifacts.
+- `map_enabled` opts in to retaining GPS coordinates from EXIF for the private map.
+
+Workers read all four values at the start of every job, so new jobs use the
+saved choice without mutating a worker's process environment. Inspect
+`GET /api/config/runtime` to compare the selected build/mode with the last state
+actually applied by a worker. If that endpoint says `restart_required: true`,
+start the CPU or NVIDIA compose artifact; a no-AI/mock image cannot become a
+full image through a toggle.
+
+`ML_MODE=remote` is intentionally fail-closed for now: no remote inference
+adapter is installed, the runtime reports `unavailable`, and Find never sends
+private media to a remote service or silently falls back to local models.
+
+## Releases
+
+Maintainers prepare patch, minor, or major semantic versions with one manual
+workflow. The generated version PR lands in `canary`; the reviewed
+`canary`-to-`main` promotion starts a three-hour quiet period before GitHub
+creates the release and publishes immutable web plus separate `no-ai`, `mock`,
+`cpu`, and `nvidia` backend images. Manual publish runs can still build one
+selected profile without unrelated AI dependencies. See the
+[changelog](CHANGELOG.md) for what each release contains.
 
 ## Local quality checks
 
@@ -354,17 +370,17 @@ Repeated clustering attempts without adding or reindexing images are unlikely to
 
 ## Key endpoints
 
-- `POST /api/upload`
-- `POST /api/upload/bulk`
-- `GET /api/status/{job_id}`
-- `GET /api/gallery`
-- `GET /api/image/{media_id}`
-- `POST /api/image/{media_id}/like`
-- `DELETE /api/image/{media_id}`
-- `GET /api/search?q=...`
-- `GET /api/clusters`
-- `GET /api/cluster/{cluster_id}`
-- `POST /api/cluster/run`
+The full, current list is the OpenAPI page the API serves at `http://localhost:8000/docs`. The ones you will meet first:
+
+| Area | Endpoints |
+| --- | --- |
+| Upload | `POST /api/upload`, `POST /api/upload/bulk`, `GET /api/status/{job_id}` |
+| Library | `GET /api/gallery`, `GET /api/timeline/buckets`, `GET /api/image/{media_id}`, `POST /api/image/{media_id}/like`, `POST /api/image/{media_id}/archive`, `POST /api/image/{media_id}/trash`, `POST /api/image/{media_id}/reprocess` |
+| Search | `GET /api/search?q=...` |
+| Clusters and people | `GET /api/clusters`, `GET /api/cluster/{cluster_id}`, `POST /api/cluster/run`, `GET /api/people` |
+| Albums and sharing | `/api/albums`, `/api/shared-links`, `/api/partners` |
+| Private vault | `/api/vault/*` |
+| Runtime | `GET /api/config/runtime`, `GET /api/config/hardware`, `GET /api/status/models` |
 
 ## Configuration notes
 
@@ -416,8 +432,8 @@ docker compose logs --tail=200 api
 
 ### Slow first run
 
-- Model downloads happen on the first startup of the full stack.
-- Cached models are stored in the Docker volume mounted at `model_cache`.
+- Model downloads happen on the first startup of the full stack, and the first photo waits for them.
+- Cached models are stored in the `model_cache`, `paddlex_cache` and `insightface_cache` Docker volumes.
 - Use `docker compose -f compose.mock.yml up --build` when you only need to test contributor changes without real ML inference.
 
 ### Docker disk usage
@@ -443,7 +459,37 @@ docker compose exec api sh -lc "rm -rf /root/.cache/uv"
 docker compose -f compose.mock.yml up --build
 ```
 
-## Contribution quick start
+## Contributors
+
+Find is a community project. It was selected for **GirlScript Summer of Code 2026**, and most of its merged pull requests come from contributors outside the maintainer: features, fixes, tests, accessibility and docs. Thank you to everyone who has opened an issue, reviewed a change or sent a PR.
+
+<a href="https://github.com/Abhash-Chakraborty/Find/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Abhash-Chakraborty/Find&max=100" alt="Avatars of Find's contributors">
+</a>
+
+Created and maintained by [Abhash Chakraborty](https://github.com/Abhash-Chakraborty).
+
+### GSSoC'26 contributors
+
+This project is open for **GSSoC'26** contributions.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/gssoc-2026-banner-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/gssoc-2026-banner-light.svg">
+    <img alt="Find x GSSoC 2026" src="docs/assets/gssoc-2026-banner-dark.svg">
+  </picture>
+</p>
+
+- New contributors should start with the [GSSoC'26 Contributor Guide](./GSSOC_CONTRIBUTOR_GUIDE.md).
+- For concise repo-aware contributor and coding-agent workflow guidance, start with [AGENTS.md](./AGENTS.md).
+- Start with issues labeled [`good first issue`](https://github.com/Abhash-Chakraborty/Find/labels/good%20first%20issue)
+- Beginner-friendly work may also use [`level:beginner`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Abeginner%22)
+- For bigger work, check [`level:intermediate`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Aintermediate%22), [`level:advanced`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Aadvanced%22), and [`level:critical`](https://github.com/Abhash-Chakraborty/Find/issues?q=state%3Aopen%20label%3A%22level%3Acritical%22)
+- Look for priority queue items via [`help wanted`](https://github.com/Abhash-Chakraborty/Find/labels/help%20wanted)
+- Follow the contribution rules in [CONTRIBUTING.md](./CONTRIBUTING.md)
+
+### Contribution quick start
 
 1. Pick an issue and comment to get assigned.
 2. Fork and create a branch from the default `canary` branch.
@@ -451,12 +497,12 @@ docker compose -f compose.mock.yml up --build
 4. Run quality checks from CONTRIBUTING.
 5. Open a PR into `canary` using the project template and link the issue.
 
-## Contribution Workflow
+### Contribution workflow
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/contribution-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/contribution-light.png">
-  <img alt="Contribution Workflow" src="docs/assets/contribution-dark.png">
+  <img alt="Contribution workflow: pick an issue, get assigned, fork, branch from canary, open a PR, review, merge" src="docs/assets/contribution-dark.png">
 </picture>
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for full details.
@@ -467,6 +513,7 @@ Labels: [`good first issue`](https://github.com/Abhash-Chakraborty/Find/labels/g
 - Use [GitHub Issues](https://github.com/Abhash-Chakraborty/Find/issues) for bugs/features/questions.
 - For contributor context, tag maintainers in your issue or PR (`@Abhash-Chakraborty`).
 - Follow [Code of Conduct](./CODE_OF_CONDUCT.md) in all interactions.
+- Roadmap and design notes live in the [documentation index](./docs/index.md), including the [mobile direction](./docs/plans/not-started/mobile-strategy.md), [bulk rename and metadata editing](./docs/plans/not-started/bulk-rename-metadata-design.md), and the [installable local-first roadmap](./docs/plans/partial/local-first-roadmap.md).
 
 ## License
 
