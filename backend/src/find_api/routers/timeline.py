@@ -12,7 +12,7 @@ Both reuse the same browse scoping as the gallery (not hidden, not archived,
 not trashed) via :func:`_browsable_media_query`, plus the per-user IDOR guard.
 
 v1 buckets by ``created_at`` (upload date). EXIF "date taken" and a populated
-``thumbhash`` are deferred (see plan.md PROPOSED notes); ``thumbhash`` is wired
+``thumbhash`` are deferred; ``thumbhash`` is wired
 as a nullable field now so the contract is stable, and the justified grid lays
 out from ``ratio`` (width/height) alone.
 """
