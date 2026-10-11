@@ -80,11 +80,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413
         with:
           version: 11.3.0
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           # Matches frontend-check in ci.yml and frontend/Dockerfile.
           node-version: 24
@@ -135,7 +135,7 @@ jobs:
           fi
           find "${bundle_dir}" -type f \( -name '*.msi' -o -name '*.exe' \) -print
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: steps.build.outcome == 'success'
         with:
           name: find-desktop-windows-unsigned
@@ -187,11 +187,11 @@ jobs:
             exit 1
           fi
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413
         with:
           version: 11.3.0
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24
           cache: "pnpm"
@@ -258,7 +258,7 @@ jobs:
             Set-Content -Encoding utf8 (Join-Path $bundle 'SHA256SUMS.txt')
           Get-Content (Join-Path $bundle 'SHA256SUMS.txt')
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: find-desktop-windows-signed
           path: |
