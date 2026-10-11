@@ -22,7 +22,6 @@ from find_api.core.model_manager import get_model_manager
 from find_api.diagnostics.bundle import ensure_error_log_buffer
 from find_api.routers import (
     auth,
-    cluster,
     clusters,
     config,
     diagnostics,
@@ -151,7 +150,6 @@ app.include_router(partner.router, prefix="/api", tags=["partners"])
 app.include_router(activity.router, prefix="/api", tags=["activity"])
 app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(clusters.router, prefix="/api", tags=["clusters"])
-app.include_router(cluster.router, prefix="/api", tags=["cluster-ops"])
 app.include_router(status.router, prefix="/api", tags=["status"])
 app.include_router(diagnostics.router, prefix="/api", tags=["diagnostics"])
 app.include_router(config.router, prefix="/api", tags=["config"])

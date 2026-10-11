@@ -69,10 +69,6 @@ class SharedLinkUpdate(BaseModel):
     password: Optional[str] = Field(None, max_length=128)
 
 
-class PublicUnlockRequest(BaseModel):
-    password: Optional[str] = None
-
-
 # --- Helpers ---------------------------------------------------------------
 def _scope_links(query: SAQuery, user: Optional[User]) -> SAQuery:
     if user is None or user.role == "admin":
