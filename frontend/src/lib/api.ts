@@ -967,40 +967,6 @@ export const submitSearchRating = async (
   return response.data;
 };
 
-export const submitCaptionRating = async (
-  mediaId: number,
-  rating: number,
-  reason?: string,
-): Promise<GeneralFeedback> => {
-  const response = await api.post<GeneralFeedback>(
-    "/api/feedback/caption-rating",
-    {
-      feedback_type: "caption_rating",
-      media_id: mediaId,
-      rating,
-      rating_reason: reason,
-    },
-  );
-  return response.data;
-};
-
-export const submitObjectRating = async (
-  mediaId: number,
-  rating: number,
-  reason?: string,
-): Promise<GeneralFeedback> => {
-  const response = await api.post<GeneralFeedback>(
-    "/api/feedback/object-rating",
-    {
-      feedback_type: "object_rating",
-      media_id: mediaId,
-      rating,
-      rating_reason: reason,
-    },
-  );
-  return response.data;
-};
-
 export const submitCaptionCorrection = async (
   mediaId: number,
   correctedCaption: string,
@@ -1032,17 +998,6 @@ export const submitObjectCorrection = async (
       rating_reason: reason,
     },
   );
-  return response.data;
-};
-
-export const getFeedbackStats = async () => {
-  const response = await api.get("/api/feedback/stats");
-  return response.data;
-};
-
-export const getPersonFeedback = async (personId?: number) => {
-  const params = personId ? { person_id: personId } : {};
-  const response = await api.get("/api/people/feedback", { params });
   return response.data;
 };
 

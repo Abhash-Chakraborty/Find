@@ -21,9 +21,6 @@
   "dependencies": {
     "@tanstack/react-query": "^5.104.4",
     "axios": "^1.20.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "date-fns": "^4.4.0",
     "lucide-react": "^1.59.0",
     "maplibre-gl": "^6.15.0",
     "next": "^16.4.2",
@@ -31,7 +28,6 @@
     "react-dom": "^19.3.1",
     "react-dropzone": "^20.1.4",
     "sonner": "^2.0.8",
-    "tailwind-merge": "^3.7.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
