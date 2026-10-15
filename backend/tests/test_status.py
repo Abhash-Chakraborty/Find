@@ -207,7 +207,7 @@ def test_model_footprint_endpoint_returns_report_without_paths(client, tmp_path)
 
     assert {m["key"] for m in body["models"]} == {
         "siglip",
-        "florence-2",
+        "captioner",
         "yolo",
         "insightface",
         "paddleocr",

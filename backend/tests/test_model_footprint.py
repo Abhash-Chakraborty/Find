@@ -119,13 +119,19 @@ class TestHFHubCacheResolution:
             monkeypatch,
             [
                 _FakeCachedRepo(
-                    "microsoft/Florence-2-base", 2048, 1, 1_700_000_000.0, "/cache/f"
+                    "Salesforce/blip-image-captioning-base",
+                    2048,
+                    1,
+                    1_700_000_000.0,
+                    "/cache/f",
                 )
             ],
         )
-        monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
+        monkeypatch.setattr(
+            settings, "BLIP_MODEL", "Salesforce/blip-image-captioning-base"
+        )
 
-        info = mf.resolve_florence_cache()
+        info = mf.resolve_caption_cache()
 
         assert info.exists is True
         assert info.bytes_on_disk == 2048
@@ -138,30 +144,46 @@ class TestHFHubCacheResolution:
             monkeypatch,
             [
                 _FakeCachedRepo(
-                    "MICROSOFT/Florence-2-BASE", 64, 1, 1_700_000_000.0, "/cache/f"
+                    "SALESFORCE/BLIP-IMAGE-CAPTIONING-BASE",
+                    64,
+                    1,
+                    1_700_000_000.0,
+                    "/cache/f",
                 )
             ],
         )
-        monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
+        monkeypatch.setattr(
+            settings, "BLIP_MODEL", "Salesforce/blip-image-captioning-base"
+        )
 
-        assert mf.resolve_florence_cache().exists is True
+        assert mf.resolve_caption_cache().exists is True
 
     def test_multiple_matching_repos_are_summed_and_noted(self, monkeypatch):
         _install_fake_hf_hub(
             monkeypatch,
             [
                 _FakeCachedRepo(
-                    "microsoft/Florence-2-base", 100, 2, 1_700_000_000.0, "/cache/a"
+                    "Salesforce/blip-image-captioning-base",
+                    100,
+                    2,
+                    1_700_000_000.0,
+                    "/cache/a",
                 ),
                 _FakeCachedRepo(
-                    "microsoft/Florence-2-base-ft", 40, 3, 1_800_000_000.0, "/cache/b"
+                    "Salesforce/blip-image-captioning-base-ft",
+                    40,
+                    3,
+                    1_800_000_000.0,
+                    "/cache/b",
                 ),
                 _FakeCachedRepo("someone/unrelated", 999, 9, 1.0, "/cache/c"),
             ],
         )
-        monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
+        monkeypatch.setattr(
+            settings, "BLIP_MODEL", "Salesforce/blip-image-captioning-base"
+        )
 
-        info = mf.resolve_florence_cache()
+        info = mf.resolve_caption_cache()
 
         assert info.bytes_on_disk == 140
         assert info.file_count == 5
@@ -174,9 +196,11 @@ class TestHFHubCacheResolution:
             monkeypatch,
             [_FakeCachedRepo("someone/unrelated-model", 10, 1, 1.0, "/cache/u")],
         )
-        monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
+        monkeypatch.setattr(
+            settings, "BLIP_MODEL", "Salesforce/blip-image-captioning-base"
+        )
 
-        info = mf.resolve_florence_cache()
+        info = mf.resolve_caption_cache()
 
         assert info.exists is False
         assert info.bytes_on_disk == 0
@@ -206,16 +230,18 @@ class TestHFHubCacheResolution:
         """
         pytest.importorskip("huggingface_hub")
         hf_home, symlink_used = _make_hf_cache(
-            tmp_path, "microsoft/Florence-2-base", b"0" * 2048
+            tmp_path, "Salesforce/blip-image-captioning-base", b"0" * 2048
         )
         if not symlink_used:
             pytest.skip(_NO_SYMLINK_REASON)
         monkeypatch.setenv("HF_HOME", hf_home)
         monkeypatch.delenv("HF_HUB_CACHE", raising=False)
         monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
-        monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
+        monkeypatch.setattr(
+            settings, "BLIP_MODEL", "Salesforce/blip-image-captioning-base"
+        )
 
-        info = mf.resolve_florence_cache()
+        info = mf.resolve_caption_cache()
 
         assert info.exists is True
         assert info.bytes_on_disk == 2048
@@ -353,18 +379,24 @@ class TestPaddleOCRCache:
 class TestBuildReport:
     def _wire_all_caches(self, tmp_path, monkeypatch):
         """Point every model at a small, fully cached, temporary footprint."""
-        # Florence resolves through huggingface_hub, which is not installed in
+        # BLIP resolves through huggingface_hub, which is not installed in
         # the dev/CI environment, so stub it rather than building a real Hub
         # cache — that also drops the symlink privilege requirement.
         _install_fake_hf_hub(
             monkeypatch,
             [
                 _FakeCachedRepo(
-                    "microsoft/Florence-2-base", 100, 1, 1_700_000_000.0, "/cache/f"
+                    "Salesforce/blip-image-captioning-base",
+                    100,
+                    1,
+                    1_700_000_000.0,
+                    "/cache/f",
                 )
             ],
         )
-        monkeypatch.setattr(settings, "BLIP_MODEL", "microsoft/Florence-2-base")
+        monkeypatch.setattr(
+            settings, "BLIP_MODEL", "Salesforce/blip-image-captioning-base"
+        )
 
         clip_cache = tmp_path / "open_clip_cache"
         clip_cache.mkdir()
@@ -414,7 +446,7 @@ class TestBuildReport:
 
         assert {m["key"] for m in report["models"]} == {
             "siglip",
-            "florence-2",
+            "captioner",
             "yolo",
             "insightface",
             "paddleocr",
@@ -426,6 +458,21 @@ class TestBuildReport:
             assert "last_used" in entry
             assert "cache" in entry
             assert "bytes_on_disk" in entry["cache"]
+
+    def test_loaded_matches_manager_names_and_variants(self, tmp_path, monkeypatch):
+        self._wire_all_caches(tmp_path, monkeypatch)
+        # The worker registers captions as "captioner" and OCR per variant.
+        monkeypatch.setattr(
+            mf,
+            "_aggregate_manager_status",
+            lambda: {"captioner", "paddleocr:mobile"},
+        )
+
+        loaded = {m["key"]: m["loaded"] for m in mf.build_report()["models"]}
+
+        assert loaded["captioner"] is True
+        assert loaded["paddleocr"] is True
+        assert loaded["siglip"] is False
 
     def test_include_paths_false_never_leaks_filesystem_paths(
         self, tmp_path, monkeypatch

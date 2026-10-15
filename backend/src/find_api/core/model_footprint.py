@@ -230,8 +230,8 @@ def resolve_siglip_cache() -> CacheInfo:
     )
 
 
-def resolve_florence_cache() -> CacheInfo:
-    repo_id = settings.BLIP_MODEL  # e.g. "microsoft/Florence-2-base"
+def resolve_caption_cache() -> CacheInfo:
+    repo_id = settings.BLIP_MODEL  # e.g. "Salesforce/blip-image-captioning-base"
     short_name = repo_id.split("/")[-1] if repo_id else ""
     return _hf_hub_cache_matches(repo_id, short_name) or CacheInfo(
         resolver="none",
@@ -383,12 +383,12 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         device_resolver=current_torch_device,
     ),
     ModelSpec(
-        key="florence-2",
-        label="Florence-2 captioning",
+        key="captioner",
+        label="BLIP captioning",
         kind="transformers",
         packs=(PACK_FULL,),
         identifier=lambda: settings.BLIP_MODEL,
-        cache_resolver=resolve_florence_cache,
+        cache_resolver=resolve_caption_cache,
         device_resolver=current_torch_device,
     ),
     ModelSpec(
@@ -465,6 +465,15 @@ def _aggregate_manager_status() -> set[str]:
     return loaded
 
 
+def _is_variant_of(name: str, key: str) -> bool:
+    """True when a ModelManager name belongs to a footprint key.
+
+    OCR registers as "paddleocr:mobile" or "paddleocr:server", so a key also
+    matches its ":variant" names.
+    """
+    return name == key or name.startswith(f"{key}:")
+
+
 def build_report(include_paths: bool = False) -> dict:
     """Build the full model footprint report.
 
@@ -505,7 +514,14 @@ def build_report(include_paths: bool = False) -> dict:
         except Exception:  # noqa: BLE001
             device = "unknown"
 
-        last_used_epoch = manager.last_used.get(spec.key)
+        last_used_epoch = max(
+            (
+                ts
+                for name, ts in manager.last_used.items()
+                if _is_variant_of(name, spec.key)
+            ),
+            default=None,
+        )
 
         notes: list[str] = []
         if last_used_epoch is None:
@@ -521,7 +537,7 @@ def build_report(include_paths: bool = False) -> dict:
                 "kind": spec.kind,
                 "packs": list(spec.packs),
                 "identifier": identifier,
-                "loaded": spec.key in loaded_keys,
+                "loaded": any(_is_variant_of(name, spec.key) for name in loaded_keys),
                 "device": device,
                 "last_used": _iso(last_used_epoch),
                 "cache": cache_info.to_dict(include_paths),
