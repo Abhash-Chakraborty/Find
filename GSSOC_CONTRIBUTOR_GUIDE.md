@@ -20,7 +20,7 @@ Main stack:
 
 - Frontend: Next.js 16, React 19, React Query, Tailwind CSS, Biome.
 - Backend: FastAPI, SQLAlchemy, PostgreSQL + pgvector, Redis, RQ, MinIO.
-- Full ML pipeline: YOLOv10, Florence-2, PaddleOCR, SigLIP through `open-clip`, HDBSCAN.
+- Full ML pipeline: YOLO26n, BLIP, PaddleOCR, SigLIP through `open-clip`, InsightFace, HDBSCAN.
 
 Important paths:
 
@@ -58,7 +58,7 @@ What light mode gives you:
 - PostgreSQL + pgvector, Redis, MinIO, FastAPI, worker, and web services.
 - Upload, job status polling, gallery, search, and clustering paths.
 - `ML_MODE=mock`, deterministic mock metadata, and schema-compatible vectors.
-- No CUDA image, GPU requirement, model cache mount, Florence-2, SigLIP, PaddleOCR, YOLO, or CUDA PyTorch downloads.
+- No CUDA image, GPU requirement, model cache mount, BLIP, SigLIP, PaddleOCR, YOLO, or CUDA PyTorch downloads.
 
 Use light mode for:
 

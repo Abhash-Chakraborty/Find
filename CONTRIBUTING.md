@@ -39,7 +39,7 @@ For most UI, API, docs, and workflow contributions, start with the light stack:
 docker compose -f compose.mock.yml up --build
 ```
 
-This uses `ML_MODE=mock`, skips GPU access, and avoids downloading Florence-2, SigLIP, PaddleOCR, YOLO, and CUDA PyTorch assets. Upload, worker processing, gallery, search, and clustering still run end-to-end with deterministic mock metadata and vectors.
+This uses `ML_MODE=mock`, skips GPU access, and avoids downloading BLIP, SigLIP, PaddleOCR, YOLO, and CUDA PyTorch assets. Upload, worker processing, gallery, search, and clustering still run end-to-end with deterministic mock metadata and vectors.
 
 Use the full stack only when your change needs real ML inference:
 

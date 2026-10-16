@@ -13,7 +13,7 @@ without running this first.
 ## What it reports, per model
 
 - **Identifier** — the exact model/checkpoint configured via settings
-  (e.g. `microsoft/Florence-2-base`, `yolo26n.pt`).
+  (e.g. `Salesforce/blip-image-captioning-base`, `yolo26n.pt`).
 - **Cache footprint** — whether it's on disk, total bytes, file count, and
   when it was last modified.
 - **Loaded state** — whether it's currently loaded in this process (or any
@@ -58,7 +58,7 @@ Find's models fall into three groups, used to reason about install size:
 | Pack | Contents | Status |
 |---|---|---|
 | **light** | SigLIP embedding model only (text/image search — the core feature) | Implemented; measured by this report |
-| **full** | SigLIP + Florence-2 captioning + YOLO object detection + InsightFace + PaddleOCR | Implemented; measured by this report |
+| **full** | SigLIP + BLIP captioning + YOLO object detection + InsightFace + PaddleOCR | Implemented; measured by this report |
 | **proposed_cpu** | CPU-optimized ONNX replacements: CLIP ViT-B-32 (ONNX), InsightFace `buffalo_s` (ONNX), PP-OCRv5 mobile (ONNX) | **Not implemented.** Tracked by [#339](https://github.com/Abhash-Chakraborty/Find/issues/339). The report lists these models by name with `status: "not_implemented"` and no size, since there's nothing on disk yet to measure. |
 
 The report's `packs` section gives you `cached_count` / `total_count` and
@@ -76,12 +76,12 @@ models/versions change:
 | Model | Pack | Approx. size |
 |---|---|---|
 | SigLIP (`ViT-B-16-SigLIP`/`webli`) | light, full | ~0.4–0.8 GB depending on precision |
-| Florence-2-base | full | ~0.46 GB (safetensors) |
+| BLIP base (`Salesforce/blip-image-captioning-base`) | full | ~0.99 GB (`pytorch_model.bin`) |
 | YOLO (`yolo26n.pt`, nano) | full | a few MB |
 | InsightFace `antelopev2` | full | ~0.4 GB |
 | PaddleOCR (en, det+rec+cls) | full | tens of MB |
 
-Rough full-pack total: **on the order of 1.5–2 GB**. This is exactly the
+Rough full-pack total: **about 2 GB**. This is exactly the
 kind of number the installer work in #45 needs pinned down precisely — use
 `model_footprint_report.py` against a real, fully-loaded cache rather than
 this table when it matters.
