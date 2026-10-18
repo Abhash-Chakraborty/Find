@@ -5,9 +5,9 @@ Revises: 20260714_vault_credentials
 Create Date: 2026-07-15
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "20260715activitylog"

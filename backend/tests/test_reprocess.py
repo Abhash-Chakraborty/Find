@@ -8,15 +8,17 @@ Run with (from backend/ directory):
 
 import datetime
 from typing import Optional
-import pytest
 from unittest.mock import MagicMock, patch
-from fastapi.testclient import TestClient
+
+import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.pool import StaticPool
+
 import find_api.routers.gallery as gallery_module
 from find_api.core.database import get_db
-from sqlalchemy import create_engine, String, Integer, Boolean, DateTime, Text, JSON
-from sqlalchemy.orm import sessionmaker, DeclarativeBase, Mapped, mapped_column
-from sqlalchemy.pool import StaticPool
 
 # ---------------------------------------------------------------------------
 # Minimal in-memory SQLite replica of the Media model (no pgvector needed)

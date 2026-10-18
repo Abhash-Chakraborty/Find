@@ -44,6 +44,7 @@ def client_with_key(monkeypatch):
     monkeypatch.setattr(ml_mod, "settings", mock_settings)
 
     from fastapi import FastAPI
+
     from find_api.routers.ml import router
 
     app = FastAPI()
@@ -74,6 +75,7 @@ def client_no_key(monkeypatch):
     monkeypatch.setattr(ml_mod, "settings", mock_settings)
 
     from fastapi import FastAPI
+
     from find_api.routers.ml import router
 
     app = FastAPI()

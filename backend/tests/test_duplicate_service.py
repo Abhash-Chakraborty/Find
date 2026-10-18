@@ -10,8 +10,8 @@ import pytest
 
 from find_api.models.media import Media
 from find_api.services.duplicate_service import (
-    flag_as_duplicate,
     find_near_duplicate,
+    flag_as_duplicate,
 )
 
 

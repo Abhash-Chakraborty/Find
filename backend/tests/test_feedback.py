@@ -5,10 +5,10 @@ Tests for feedback system (person corrections and general ratings)
 import pytest
 from sqlalchemy.orm import Session
 
-from find_api.models.person import Person
 from find_api.models.face import Face
-from find_api.models.media import Media
 from find_api.models.feedback import GeneralFeedback
+from find_api.models.media import Media
+from find_api.models.person import Person
 
 
 @pytest.fixture

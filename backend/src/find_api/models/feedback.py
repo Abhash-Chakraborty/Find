@@ -3,8 +3,10 @@ Feedback models for user corrections and ratings
 """
 
 from enum import Enum
-from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey
+
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.sql import func
+
 from find_api.core.database import Base
 
 

@@ -101,7 +101,7 @@ target-version = "py312"
 # This is ruff's own stable default — pyflakes plus the pycodestyle errors that
 # catch real mistakes rather than formatting noise — so it is exactly the
 # baseline the backend was already green on under 0.1.14.
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

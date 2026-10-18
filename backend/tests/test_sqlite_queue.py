@@ -17,7 +17,6 @@ import pytest
 
 from find_api.core.sqlite_queue import SqliteQueue, _resolve_job_type
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import os
 import tempfile
-import time
 import threading
+import time
 from pathlib import Path
 from typing import Dict, Iterator
 
 import argon2
 from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 active_vault_sessions: Dict[str, tuple[bytes, float]] = {}
 _sessions_lock = threading.Lock()

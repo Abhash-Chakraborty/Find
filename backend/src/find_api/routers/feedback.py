@@ -1,6 +1,6 @@
-from typing import Any, List, Optional
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_admin_user, get_required_user
-from find_api.models.feedback import PersonFeedback, GeneralFeedback
-from find_api.models.person import Person
-from find_api.models.face import Face
-from find_api.models.media import Media
-from find_api.models.user import User
 from find_api.core.queue import enqueue_feedback_ranking_job
+from find_api.models.face import Face
+from find_api.models.feedback import GeneralFeedback, PersonFeedback
+from find_api.models.media import Media
+from find_api.models.person import Person
+from find_api.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["feedback"])

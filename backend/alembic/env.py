@@ -3,8 +3,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy import create_engine, pool
+
+from alembic import context
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 

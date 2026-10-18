@@ -1,8 +1,8 @@
 """Test PaddleOCR integration and version compatibility."""
 
-from PIL import Image, ImageDraw
 import numpy as np
 import pytest
+from PIL import Image, ImageDraw
 
 # Skip entire module if optional ML dependencies aren't installed
 pytest.importorskip("paddleocr")

@@ -11,7 +11,7 @@ CASCADE) so the log outlives the user/media it references, keeping the
 history readable after a delete.
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, JSON, String
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.sql import func
 
 from find_api.core.database import Base

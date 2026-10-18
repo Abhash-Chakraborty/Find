@@ -81,8 +81,8 @@ def check_ocr_extractor(OCRExtractor, Image, np):
 
 if __name__ == "__main__":
     # Defer heavy imports to avoid issues during pytest collection
-    from PIL import Image
     import numpy as np
+    from PIL import Image
 
     # Add src to path
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))

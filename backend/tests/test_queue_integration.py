@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import os
 import tempfile
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from find_api.core.config import settings
 

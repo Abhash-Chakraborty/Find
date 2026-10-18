@@ -2,23 +2,24 @@
 People router - API endpoints for person groups and face clusters
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, ConfigDict
+import logging
 from typing import Dict, List, Optional
 
-from find_api.core.database import get_db
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from find_api.core.config import settings
+from find_api.core.database import get_db
 from find_api.core.dependencies import get_admin_user, get_required_user
 from find_api.core.media_scope import browsable_media
 from find_api.core.queue import get_task_queue
-from find_api.routers.gallery import build_thumbnail_url
 from find_api.models.face import Face
 from find_api.models.media import Media
 from find_api.models.person import Person
 from find_api.models.user import User
-import logging
+from find_api.routers.gallery import build_thumbnail_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

@@ -76,8 +76,8 @@ def char_error_rate(ground_truth: str, predicted: str) -> float:
 
 def score_variant(variant: str) -> dict:
     """Evaluate the OCR accuracy for a given model variant across all image categories."""
-    from find_api.ml.ocr import OCRExtractor
     from find_api.core.model_manager import get_model_manager
+    from find_api.ml.ocr import OCRExtractor
 
     get_model_manager().reset_for_tests()
     extractor = OCRExtractor(variant=variant)

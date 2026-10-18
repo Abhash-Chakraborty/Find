@@ -29,6 +29,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont
 
 # Add src to path so this runs standalone like manual_ocr_check.py does

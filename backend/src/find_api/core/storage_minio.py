@@ -5,12 +5,13 @@ Implements StorageBackend interface for MinIO object storage
 
 import asyncio
 import json
+import logging
 from datetime import timedelta
-from urllib.parse import urlparse, urlunparse
 from io import BytesIO
+from urllib.parse import urlparse, urlunparse
+
 from minio import Minio
 from minio.error import S3Error
-import logging
 
 from find_api.core.config import settings
 from find_api.core.storage_abstract import StorageBackend, StorageException

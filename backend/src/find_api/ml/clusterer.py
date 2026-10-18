@@ -2,9 +2,10 @@
 Clustering using HDBSCAN
 """
 
-import numpy as np
-from typing import Tuple, Dict
 import logging
+from typing import Dict, Tuple
+
+import numpy as np
 
 from find_api.core.config import settings
 from find_api.core.runtime_profile import current_accel_mode

@@ -2,12 +2,13 @@
 CLIP embedding generation using SigLIP
 """
 
-import torch
-import open_clip
-from PIL import Image
-import numpy as np
-from typing import Union, List
 import logging
+from typing import List, Union
+
+import numpy as np
+import open_clip
+import torch
+from PIL import Image
 
 from find_api.core.config import settings
 from find_api.core.hardware import current_torch_device

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 import secrets
 import tempfile
-from io import BytesIO
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
@@ -16,17 +16,18 @@ from fastapi import APIRouter, Body, Cookie, Depends, Header, HTTPException, Req
 from fastapi.responses import Response, StreamingResponse
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+from find_api.core.auth import get_current_user, hash_password, verify_password
 from find_api.core.crypto import (
     VAULT_STORAGE_DIR,
     build_vault_aad,
     create_key_verifier,
-    delete_session_key,
     decrypt_file_stream,
+    delete_session_key,
     derive_master_key,
     encrypt_file,
     get_session_key,
@@ -34,7 +35,6 @@ from find_api.core.crypto import (
     verify_master_key,
 )
 from find_api.core.database import get_db
-from find_api.core.auth import get_current_user, hash_password, verify_password
 from find_api.core.dependencies import SESSION_COOKIE_NAME, get_required_user
 from find_api.core.storage import (
     delete_file,

@@ -8,16 +8,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock, call, patch
 
+import pytest
 from cryptography.exceptions import InvalidTag
 from PIL import Image
-import pytest
 from sqlalchemy import text
 
 from find_api.core import crypto
 from find_api.core.crypto import SESSION_TTL_SECONDS
 from find_api.main import app
-from find_api.routers import vault as vault_router
 from find_api.models.media import Media
+from find_api.routers import vault as vault_router
 
 
 def get_valid_image_bytes():

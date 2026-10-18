@@ -27,7 +27,7 @@ def _ensure_registrations() -> None:
     global _JOB_REGISTRATIONS
     if _JOB_REGISTRATIONS:
         return
-    from find_api.workers.jobs import analyze_image, cluster_images, cluster_faces
+    from find_api.workers.jobs import analyze_image, cluster_faces, cluster_images
 
     register_job(
         f"{analyze_image.__module__}:{analyze_image.__qualname__}", analyze_image

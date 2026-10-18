@@ -2,10 +2,12 @@
 Database configuration and session management
 """
 
+import logging
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
+
 from find_api.core.config import settings
-import logging
 
 logger = logging.getLogger(__name__)
 

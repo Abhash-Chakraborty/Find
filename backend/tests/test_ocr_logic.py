@@ -18,12 +18,13 @@ test_ocr_variants.py behind pytest.importorskip, where CI skips them.
 See issue #397: OCR tests should run in CI without requiring paddleocr installation.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
-import numpy as np
 import sys
 from contextlib import contextmanager
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
 
 # Import only pure Python code; do NOT import paddleocr or paddle
 from find_api.core.config import settings

@@ -26,13 +26,13 @@ for p in _patches:
     p.start()
 
 from fastapi.testclient import TestClient  # noqa: E402
+
 from find_api.core.database import Base, get_db  # noqa: E402
 from find_api.core.dependencies import (  # noqa: E402
     get_admin_user,
     get_required_user,
 )
 from find_api.main import app  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # In-memory SQLite engine with StaticPool.

@@ -2,11 +2,12 @@
 Object detection using Ultralytics YOLO
 """
 
-from ultralytics import YOLO
-from PIL import Image
-import numpy as np
-from typing import List, Dict, Union
 import logging
+from typing import Dict, List, Union
+
+import numpy as np
+from PIL import Image
+from ultralytics import YOLO
 
 from find_api.core.config import settings
 from find_api.core.hardware import current_torch_device

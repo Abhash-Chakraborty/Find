@@ -6,6 +6,7 @@ remote ML server that other Find instances (ML_MODE=remote) can offload
 work to.
 """
 
+import io
 import json
 import logging
 from typing import Any, Dict
@@ -13,7 +14,6 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image
-import io
 
 from find_api.core.config import settings
 

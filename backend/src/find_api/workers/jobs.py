@@ -2,20 +2,22 @@
 Background worker jobs for image processing
 """
 
-from PIL import Image
 import io
 import logging
 from datetime import datetime, timezone
-from rq import get_current_job
 
+from PIL import Image
+from rq import get_current_job
+from sqlalchemy import func
+
+from find_api.core.config import settings
 from find_api.core.database import SessionLocal
+from find_api.core.model_manager import get_model_manager
 from find_api.core.queue import (
     clear_clustering_job_state,
     clear_feedback_ranking_job_state,
     enqueue_clustering_job,
 )
-from find_api.core.storage import get_file, upload_thumbnail
-from find_api.core.model_manager import get_model_manager
 from find_api.core.runtime_profile import (
     RuntimeUnavailableError,
     bind_runtime,
@@ -23,15 +25,13 @@ from find_api.core.runtime_profile import (
     reset_runtime,
     resolve_runtime,
 )
-from find_api.core.config import settings
+from find_api.core.storage import get_file, upload_thumbnail
+from find_api.models.feedback import GeneralFeedback
 from find_api.models.media import Media
 from find_api.services.activity_log import record_activity
 from find_api.services.query_cache import invalidate_query_cache
-from find_api.utils.exif import extract_exif_data, extract_gps_coordinates
 from find_api.utils.errors import sanitize_error
-
-from sqlalchemy import func
-from find_api.models.feedback import GeneralFeedback
+from find_api.utils.exif import extract_exif_data, extract_gps_coordinates
 
 logger = logging.getLogger(__name__)
 

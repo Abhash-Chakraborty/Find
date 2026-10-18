@@ -16,6 +16,7 @@ We deliberately do NOT replicate the reference's plaintext password storage.
 import hashlib
 import hmac
 import logging
+import secrets
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -23,7 +24,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Query as SAQuery, Session
+from sqlalchemy.orm import Query as SAQuery
+from sqlalchemy.orm import Session
 
 from find_api.core.auth import (
     hash_password,
@@ -39,8 +41,6 @@ from find_api.models.media import Media
 from find_api.models.shared_link import SharedLink
 from find_api.models.user import User
 from find_api.routers.gallery import _browsable_media_query
-
-import secrets
 
 logger = logging.getLogger(__name__)
 

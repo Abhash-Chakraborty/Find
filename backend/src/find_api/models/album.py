@@ -8,15 +8,16 @@ intentionally out of scope here (Stage 4.3+); this is CRUD + membership only.
 
 from sqlalchemy import (
     Column,
+    DateTime,
+    ForeignKey,
+    Index,
     Integer,
     String,
     Text,
-    DateTime,
-    ForeignKey,
     UniqueConstraint,
-    Index,
 )
 from sqlalchemy.sql import func
+
 from find_api.core.database import Base
 
 

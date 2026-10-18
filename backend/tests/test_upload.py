@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PIL import Image
 from sqlalchemy.exc import IntegrityError
+
 from find_api.core.config import PILLOW_MAX_IMAGE_PIXELS, Settings
 from find_api.models.media import Media
 from find_api.routers.upload import _ingest_image, _verify_image_content

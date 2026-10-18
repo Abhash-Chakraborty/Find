@@ -24,6 +24,8 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+)
+from sqlalchemy import (
     text as sa_text,
 )
 from sqlalchemy.sql import func

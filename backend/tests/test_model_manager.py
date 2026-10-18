@@ -1,8 +1,8 @@
 """Tests for process-local ML model caching and failed-load handling."""
 
-from datetime import datetime, timezone
 import sys
 import types
+from datetime import datetime, timezone
 
 import pytest
 from PIL import Image

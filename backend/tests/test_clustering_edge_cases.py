@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+
 from find_api.core.config import settings
 from find_api.workers.jobs import cluster_images
 

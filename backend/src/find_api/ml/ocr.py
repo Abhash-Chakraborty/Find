@@ -37,10 +37,11 @@ PP-OCRv5 languages means selecting language-specific model names (e.g.
 ``korean_PP-OCRv5_mobile_rec``) rather than reintroducing ``lang``.
 """
 
-from PIL import Image
-import numpy as np
-from typing import List, Dict, Union
 import logging
+from typing import Dict, List, Union
+
+import numpy as np
+from PIL import Image
 
 from find_api.core.config import settings
 from find_api.core.model_manager import get_model_manager

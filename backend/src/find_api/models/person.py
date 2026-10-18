@@ -2,8 +2,9 @@
 Person model for storing person groups (face clusters)
 """
 
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.sql import func
+
 from find_api.core.database import Base
 
 

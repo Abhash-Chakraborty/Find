@@ -2,9 +2,10 @@
 Face model for storing detected faces and their embeddings
 """
 
-from sqlalchemy import Column, Integer, Float, JSON, DateTime, ForeignKey
-from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer
+from sqlalchemy.sql import func
+
 from find_api.core.database import Base
 
 FACE_EMBEDDING_DIM = 512

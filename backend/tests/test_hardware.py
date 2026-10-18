@@ -9,9 +9,9 @@ import sys
 from types import SimpleNamespace
 
 from find_api.core.hardware import (
+    COREML_EP,
     CPU_EP,
     CUDA_EP,
-    COREML_EP,
     DIRECTML_EP,
     ROCM_EP,
     CapabilityReport,

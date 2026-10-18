@@ -10,7 +10,6 @@ from PIL import Image
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 PILLOW_MAX_IMAGE_PIXELS = Image.MAX_IMAGE_PIXELS or 89_478_485
 
 # Hosts where plaintext HTTP to the remote ML server never leaves the machine

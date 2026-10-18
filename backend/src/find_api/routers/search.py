@@ -4,7 +4,7 @@ Search endpoint for semantic image search
 
 import json
 import time
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,7 +15,13 @@ from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_required_user
 from find_api.core.media_types import content_type_for_file_type
-from find_api.models.user import User
+from find_api.core.runtime_profile import (
+    bind_runtime,
+    load_runtime_preferences,
+    reset_runtime,
+    resolve_runtime,
+)
+from find_api.core.storage import get_file_url
 from find_api.ml.search_ranking import (
     bound_similarity,
     compute_textual_boost,
@@ -23,16 +29,9 @@ from find_api.ml.search_ranking import (
     rerank_results,
     tokenize,
 )
-from find_api.core.storage import get_file_url
+from find_api.models.user import User
 from find_api.routers.gallery import build_thumbnail_url, parse_metadata_date
 from find_api.services.query_cache import get_cached_query, set_cached_query
-from find_api.core.runtime_profile import (
-    bind_runtime,
-    load_runtime_preferences,
-    reset_runtime,
-    resolve_runtime,
-)
-from typing import Optional
 
 router = APIRouter()
 

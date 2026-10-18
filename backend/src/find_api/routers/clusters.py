@@ -17,10 +17,10 @@ from find_api.core.dependencies import (
 from find_api.core.media_scope import browsable_media
 from find_api.core.queue import enqueue_clustering_job
 from find_api.core.storage import get_file_url
-from find_api.routers.gallery import build_thumbnail_url
 from find_api.models.cluster import Cluster
 from find_api.models.media import Media
 from find_api.models.user import User
+from find_api.routers.gallery import build_thumbnail_url
 
 router = APIRouter()
 

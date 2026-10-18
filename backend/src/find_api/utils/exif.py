@@ -2,10 +2,11 @@
 Extract EXIF data from images
 """
 
-from PIL import Image
-from PIL.ExifTags import TAGS, GPSTAGS
-from typing import Dict, Any, Optional
 import logging
+from typing import Any, Dict, Optional
+
+from PIL import Image
+from PIL.ExifTags import GPSTAGS, TAGS
 
 logger = logging.getLogger(__name__)
 

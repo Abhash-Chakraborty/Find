@@ -14,7 +14,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import asc, desc, func
-from sqlalchemy.orm import Query as SAQuery, Session
+from sqlalchemy.orm import Query as SAQuery
+from sqlalchemy.orm import Session
 
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_required_user, scope_media_query

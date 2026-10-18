@@ -1,11 +1,12 @@
 """Local image captioning using the native BLIP model implementation."""
 
-import torch
-from transformers import BlipForConditionalGeneration, BlipProcessor
-from PIL import Image
-import numpy as np
-from typing import Union
 import logging
+from typing import Union
+
+import numpy as np
+import torch
+from PIL import Image
+from transformers import BlipForConditionalGeneration, BlipProcessor
 
 from find_api.core.config import settings
 from find_api.core.hardware import current_torch_device

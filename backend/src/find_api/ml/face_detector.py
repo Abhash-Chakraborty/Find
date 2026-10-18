@@ -1,9 +1,9 @@
 import logging
+from typing import Dict, List, Union
 
 import cv2
 import numpy as np
 from PIL import Image
-from typing import Dict, List, Union
 
 from find_api.core.hardware import (
     detect_capabilities,
