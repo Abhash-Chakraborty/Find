@@ -18,8 +18,7 @@ import hmac
 import logging
 import secrets
 import time
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -53,32 +52,30 @@ SHARE_COOKIE_TTL_SECONDS = 12 * 60 * 60
 # --- Schemas ---------------------------------------------------------------
 class SharedLinkCreate(BaseModel):
     album_id: int
-    password: Optional[str] = Field(None, min_length=1, max_length=128)
-    description: Optional[str] = Field(None, max_length=500)
-    expires_at: Optional[datetime] = None
+    password: str | None = Field(None, min_length=1, max_length=128)
+    description: str | None = Field(None, max_length=500)
+    expires_at: datetime | None = None
     allow_download: bool = True
     show_exif: bool = False
 
 
 class SharedLinkUpdate(BaseModel):
-    description: Optional[str] = Field(None, max_length=500)
-    expires_at: Optional[datetime] = None
-    allow_download: Optional[bool] = None
-    show_exif: Optional[bool] = None
+    description: str | None = Field(None, max_length=500)
+    expires_at: datetime | None = None
+    allow_download: bool | None = None
+    show_exif: bool | None = None
     # "" clears the password; a non-empty value sets a new one; None leaves it.
-    password: Optional[str] = Field(None, max_length=128)
+    password: str | None = Field(None, max_length=128)
 
 
 # --- Helpers ---------------------------------------------------------------
-def _scope_links(query: SAQuery, user: Optional[User]) -> SAQuery:
+def _scope_links(query: SAQuery, user: User | None) -> SAQuery:
     if user is None or user.role == "admin":
         return query
     return query.filter(SharedLink.owner_user_id == user.id)
 
 
-def _load_owned_link_or_404(
-    db: Session, link_id: int, user: Optional[User]
-) -> SharedLink:
+def _load_owned_link_or_404(db: Session, link_id: int, user: User | None) -> SharedLink:
     link = (
         _scope_links(db.query(SharedLink), user)
         .filter(SharedLink.id == link_id)
@@ -94,11 +91,11 @@ def _is_expired(link: SharedLink) -> bool:
         return False
     expires = link.expires_at
     if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) >= expires
+        expires = expires.replace(tzinfo=UTC)
+    return datetime.now(UTC) >= expires
 
 
-def _serialize_link(link: SharedLink, *, include_key: Optional[str] = None) -> dict:
+def _serialize_link(link: SharedLink, *, include_key: str | None = None) -> dict:
     data = {
         "id": link.id,
         "album_id": link.album_id,
@@ -121,7 +118,7 @@ def _serialize_link(link: SharedLink, *, include_key: Optional[str] = None) -> d
 def create_shared_link(
     request: SharedLinkCreate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     # The album must exist and be owned by the caller (IDOR guard).
     album_q = db.query(Album).filter(Album.id == request.album_id)
@@ -152,7 +149,7 @@ def create_shared_link(
 @router.get("/shared-links")
 def list_shared_links(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     links = (
         _scope_links(db.query(SharedLink), user)
@@ -170,7 +167,7 @@ def update_shared_link(
     link_id: int,
     request: SharedLinkUpdate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     link = _load_owned_link_or_404(db, link_id, user)
 
@@ -197,7 +194,7 @@ def update_shared_link(
 def delete_shared_link(
     link_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     link = _load_owned_link_or_404(db, link_id, user)
     db.delete(link)
@@ -231,7 +228,7 @@ def _share_cookie_value(link: SharedLink, expires: int) -> str:
     """
     mac = hmac.new(
         link.password_hash.encode("utf-8"),
-        f"{link.id}:{expires}".encode("utf-8"),
+        f"{link.id}:{expires}".encode(),
         hashlib.sha256,
     ).hexdigest()
     return f"{expires}.{mac}"
@@ -247,9 +244,7 @@ def _has_share_cookie(link: SharedLink, request: Request) -> bool:
     return hmac.compare_digest(raw, _share_cookie_value(link, int(expires_text)))
 
 
-def _check_password(
-    link: SharedLink, supplied: Optional[str], request: Request
-) -> bool:
+def _check_password(link: SharedLink, supplied: str | None, request: Request) -> bool:
     """Enforce the link password (constant-time). 401 when required/incorrect.
 
     A valid unlock cookie stands in for the password, so an album page does
@@ -319,9 +314,7 @@ def _shared_album_media_or_404(db: Session, link: SharedLink, media_id: int) -> 
     return media
 
 
-def _serve_object_bytes(
-    object_key: Optional[str], content_type: Optional[str]
-) -> Response:
+def _serve_object_bytes(object_key: str | None, content_type: str | None) -> Response:
     if not object_key:
         raise HTTPException(404, "Asset not found")
     try:
@@ -341,8 +334,8 @@ def get_public_shared_link(
     key: str,
     request: Request,
     response: Response,
-    password: Optional[str] = Query(None),
-    x_share_password: Optional[str] = Header(None),
+    password: str | None = Query(None),
+    x_share_password: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
     """Return link metadata + the linked album's browsable assets.
@@ -385,8 +378,8 @@ def get_public_shared_thumbnail(
     key: str,
     media_id: int,
     request: Request,
-    password: Optional[str] = Query(None),
-    x_share_password: Optional[str] = Header(None),
+    password: str | None = Query(None),
+    x_share_password: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
     """Serve a thumbnail for an asset in the link's album. Always permitted
@@ -409,8 +402,8 @@ def get_public_shared_original(
     key: str,
     media_id: int,
     request: Request,
-    password: Optional[str] = Query(None),
-    x_share_password: Optional[str] = Header(None),
+    password: str | None = Query(None),
+    x_share_password: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
     """Serve the full-resolution original — ONLY when the link allows download."""

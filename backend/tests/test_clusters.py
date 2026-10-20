@@ -1,7 +1,7 @@
 """Tests for cluster API thumbnail URL fields."""
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from find_api.models.cluster import Cluster
 from find_api.models.media import Media
@@ -19,7 +19,7 @@ def _seed_media(db, *, filename: str, is_hidden: bool = False) -> Media:
         height=600,
         is_hidden=is_hidden,
         vault_state="hidden_encrypted" if is_hidden else "visible",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()
@@ -34,7 +34,7 @@ def _seed_cluster(db, *, member_ids: list[int]) -> Cluster:
         member_count=len(member_ids),
         label="Test cluster",
         description="Cluster used in tests",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(cluster)
     db.commit()
@@ -151,7 +151,7 @@ def test_clusters_exclude_archived_and_trashed_members(client, db):
     archived = _seed_media(db, filename="state-archived.jpg")
     trashed = _seed_media(db, filename="state-trashed.jpg")
     archived.is_archived = True
-    trashed.deleted_at = datetime.now(timezone.utc)
+    trashed.deleted_at = datetime.now(UTC)
     db.commit()
     cluster = _seed_cluster(db, member_ids=[visible.id, archived.id, trashed.id])
 

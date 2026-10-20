@@ -8,7 +8,7 @@ measuring the drift instead of the variant.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from statistics import fmean
 
 import pytest
@@ -44,7 +44,7 @@ from find_api.ml.search_ranking import (
     tokenize,
 )
 
-NOW = datetime(2026, 8, 4, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 4, tzinfo=UTC)
 
 
 def make_candidate(media_id, similarity, **kwargs) -> Candidate:

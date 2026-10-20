@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class CapabilityReport:
     def has_gpu(self) -> bool:
         return any(ep in self.available_providers for ep in _GPU_EP_PREFERENCE)
 
-    def best_gpu_provider(self) -> Optional[str]:
+    def best_gpu_provider(self) -> str | None:
         for ep in _GPU_EP_PREFERENCE:
             if ep in self.available_providers:
                 return ep
@@ -75,7 +75,7 @@ class ExecutionPlan:
     # True when a GPU was requested/preferred but we fell back to CPU.
     fell_back_to_cpu: bool
     # Human-readable, non-blocking notice (or None).
-    notice: Optional[str] = None
+    notice: str | None = None
 
     @property
     def using_gpu(self) -> bool:

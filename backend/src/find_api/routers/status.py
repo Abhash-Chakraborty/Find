@@ -3,7 +3,7 @@ Status endpoint for checking job progress
 """
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 @router.get("/status/models/footprint")
-def get_model_footprint(_admin: Optional[User] = Depends(get_admin_user)):
+def get_model_footprint(_admin: User | None = Depends(get_admin_user)):
     """
     Report what each ML model downloads and loads: configured identifier,
     on-disk cache size, loaded/unloaded state, execution device, and
@@ -34,7 +34,7 @@ def get_model_footprint(_admin: Optional[User] = Depends(get_admin_user)):
 
 
 @router.get("/status/models")
-def get_loaded_models(_admin: Optional[User] = Depends(get_admin_user)):
+def get_loaded_models(_admin: User | None = Depends(get_admin_user)):
     """
     Get currently loaded ML models across API/worker processes.
 
@@ -82,7 +82,7 @@ def get_loaded_models(_admin: Optional[User] = Depends(get_admin_user)):
 @router.get("/status/{job_id}")
 def get_job_status(
     job_id: str,
-    _user: Optional[User] = Depends(get_required_user),
+    _user: User | None = Depends(get_required_user),
 ):
     """
     Check status of a processing job

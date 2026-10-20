@@ -28,10 +28,10 @@ production turns every delta in the results table into a fiction.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from statistics import fmean, pstdev
-from typing import Callable, Sequence
 
 from find_api.evaluation.dataset import EvalQuery
 from find_api.ml.search_ranking import TEXT_QUERY_TERMS, tokenize
@@ -158,7 +158,7 @@ def metadata_boost(
     if variant.recency_weight and candidate.created_at is not None:
         created = candidate.created_at
         if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
+            created = created.replace(tzinfo=UTC)
         age_days = max((now - created).total_seconds() / 86400.0, 0.0)
         # Exponential decay, so a fresh item gets the full weight and the bonus
         # tends to zero rather than going negative for old media. A linear decay
@@ -241,7 +241,7 @@ def rank(
     if k < 1:
         raise ValueError("k must be at least 1")
 
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     query_tokens = tokenize(query_text)
 
     threshold = resolve_threshold(variant, candidates)

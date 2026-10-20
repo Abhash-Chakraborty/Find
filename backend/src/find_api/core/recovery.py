@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -41,9 +41,7 @@ def reconcile_abandoned_analysis_jobs(db: Session, **kwargs: Any) -> int:
 
     Works with both Redis/RQ and SQLite queue backends.
     """
-    timeout_at = datetime.now(timezone.utc) - timedelta(
-        seconds=settings.WORKER_TIMEOUT * 2
-    )
+    timeout_at = datetime.now(UTC) - timedelta(seconds=settings.WORKER_TIMEOUT * 2)
 
     active_media = (
         db.query(Media).filter(Media.status.in_(["pending", "processing"])).all()
@@ -111,5 +109,5 @@ def _mark_failed(media: Media, message: str) -> None:
 
 def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)

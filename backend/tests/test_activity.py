@@ -7,7 +7,7 @@ multi-user scoping tests.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -34,7 +34,7 @@ def _seed_media(db, *, filename: str = "photo.jpg", uploader_user_id=None) -> Me
         width=800,
         height=600,
         uploader_user_id=uploader_user_id,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()
@@ -118,7 +118,7 @@ class TestVaultEvents:
         # without going through hide itself (out of scope for this hook).
         media.is_hidden = True
         media.vault_state = "hidden"
-        media.hidden_at = datetime.now(timezone.utc)
+        media.hidden_at = datetime.now(UTC)
         db.commit()
 
         resp = client.post(
@@ -226,7 +226,7 @@ class TestClearAndPurge:
         assert db.query(Activity).count() == 0
 
     def test_purge_deletes_only_rows_past_retention(self, client, db):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         db.add_all(
             [
                 Activity(
@@ -247,7 +247,7 @@ class TestClearAndPurge:
         monkeypatch.setattr(settings, "ACTIVITY_RETENTION_DAYS", 0)
         record_activity(db, "media", "trashed")
         db.query(Activity).update(
-            {Activity.created_at: datetime(2000, 1, 1, tzinfo=timezone.utc)},
+            {Activity.created_at: datetime(2000, 1, 1, tzinfo=UTC)},
             synchronize_session=False,
         )
         db.commit()

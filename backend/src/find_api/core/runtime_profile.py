@@ -72,7 +72,7 @@ _active_map_enabled: ContextVar[bool | None] = ContextVar(
 class RuntimeUnavailableError(RuntimeError):
     """Raised when requested inference is not present in this artifact."""
 
-    def __init__(self, resolution: "RuntimeResolution"):
+    def __init__(self, resolution: RuntimeResolution):
         self.resolution = resolution
         super().__init__(
             resolution.unavailable_reason

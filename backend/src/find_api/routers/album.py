@@ -9,7 +9,6 @@ Sharing roles and the activity feed are out of scope here (later stages).
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -35,13 +34,13 @@ router = APIRouter()
 # --- Schemas ---------------------------------------------------------------
 class AlbumCreate(BaseModel):
     name: str = Field("Untitled Album", min_length=1, max_length=255)
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class AlbumUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    cover_media_id: Optional[int] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = None
+    cover_media_id: int | None = None
 
 
 class AlbumAssetsRequest(BaseModel):
@@ -55,21 +54,21 @@ class AlbumOrderRequest(BaseModel):
 
 
 # --- Scoping helpers -------------------------------------------------------
-def _scope_albums(query: SAQuery, user: Optional[User]) -> SAQuery:
+def _scope_albums(query: SAQuery, user: User | None) -> SAQuery:
     """Restrict an album query to those the user may see (IDOR guard)."""
     if user is None or user.role == "admin":
         return query
     return query.filter(Album.owner_user_id == user.id)
 
 
-def _load_album_or_404(db: Session, album_id: int, user: Optional[User]) -> Album:
+def _load_album_or_404(db: Session, album_id: int, user: User | None) -> Album:
     album = _scope_albums(db.query(Album), user).filter(Album.id == album_id).first()
     if not album:
         raise HTTPException(404, "Album not found")
     return album
 
 
-def _album_asset_count(db: Session, album_id: int, user: Optional[User]) -> int:
+def _album_asset_count(db: Session, album_id: int, user: User | None) -> int:
     # Count only members that actually appear in the album listing — i.e.
     # browsable (not hidden/archived/trashed) and owned by the caller — so the
     # card count never disagrees with what the detail view shows.
@@ -81,7 +80,7 @@ def _album_asset_count(db: Session, album_id: int, user: Optional[User]) -> int:
     )
 
 
-def _serialize_album(db: Session, album: Album, user: Optional[User]) -> dict:
+def _serialize_album(db: Session, album: Album, user: User | None) -> dict:
     return {
         "id": album.id,
         "name": album.name,
@@ -102,7 +101,7 @@ def _serialize_album(db: Session, album: Album, user: Optional[User]) -> dict:
 @router.get("/albums")
 def list_albums(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     albums = (
         _scope_albums(db.query(Album), user)
@@ -119,7 +118,7 @@ def list_albums(
 def create_album(
     request: AlbumCreate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     album = Album(
         name=request.name,
@@ -136,7 +135,7 @@ def create_album(
 def get_album(
     album_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     album = _load_album_or_404(db, album_id, user)
     return _serialize_album(db, album, user)
@@ -147,7 +146,7 @@ def update_album(
     album_id: int,
     request: AlbumUpdate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     album = _load_album_or_404(db, album_id, user)
 
@@ -178,7 +177,7 @@ def update_album(
 def delete_album(
     album_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     album = _load_album_or_404(db, album_id, user)
     # Delete membership rows explicitly so behavior is identical on SQLite
@@ -196,7 +195,7 @@ def delete_album(
 def list_album_assets(
     album_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     _load_album_or_404(db, album_id, user)
 
@@ -221,7 +220,7 @@ def add_album_assets(
     album_id: int,
     request: AlbumAssetsRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     _load_album_or_404(db, album_id, user)
 
@@ -277,7 +276,7 @@ def remove_album_assets(
     album_id: int,
     request: AlbumAssetsRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     album = _load_album_or_404(db, album_id, user)
 
@@ -310,7 +309,7 @@ def reorder_album(
     album_id: int,
     request: AlbumOrderRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Set manual ordering from an ordered list of media ids.
 

@@ -4,7 +4,7 @@ import hashlib
 import io
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock, call, patch
 
@@ -46,7 +46,7 @@ def seed_media(
         status="indexed",
         width=1,
         height=1,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()

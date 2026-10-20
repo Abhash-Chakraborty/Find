@@ -24,7 +24,7 @@ before touching storage, e.g. the download-disallowed 403 gate).
 """
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -48,7 +48,7 @@ def _seed(db, filename, *, liked=False):
         is_archived=False,
         deleted_at=None,
         vault_state="visible",
-        created_at=datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
+        created_at=datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC),
     )
     db.add(media)
     db.commit()

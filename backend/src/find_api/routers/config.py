@@ -2,7 +2,7 @@
 Configuration endpoints
 """
 
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -132,11 +132,11 @@ class SettingsResponse(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
-    accel_mode: Optional[Literal["auto", "gpu", "cpu"]] = None
-    ai_enabled: Optional[bool] = None
-    map_enabled: Optional[bool] = None
-    ml_mode: Optional[Literal["disabled", "full", "mock", "remote"]] = None
-    trash_retention_days: Optional[int] = None
+    accel_mode: Literal["auto", "gpu", "cpu"] | None = None
+    ai_enabled: bool | None = None
+    map_enabled: bool | None = None
+    ml_mode: Literal["disabled", "full", "mock", "remote"] | None = None
+    trash_retention_days: int | None = None
 
 
 def _settings_response(db: Session) -> SettingsResponse:
@@ -162,7 +162,7 @@ def _upsert_setting(db: Session, key: str, value: str) -> None:
 @router.get("/settings", response_model=SettingsResponse)
 def get_settings(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Return the persisted, runtime-adjustable settings.
 
@@ -176,7 +176,7 @@ def get_settings(
 def update_settings(
     request: SettingsUpdate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_admin_user),
+    user: User | None = Depends(get_admin_user),
 ):
     """Persist runtime-adjustable settings.
 

@@ -6,7 +6,7 @@ to exactly the linked album, and originals are gated on allow_download.
 """
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -31,7 +31,7 @@ def _seed_media(db, *, filename, is_archived=False, deleted_at=None):
         is_archived=is_archived,
         deleted_at=deleted_at,
         vault_state="visible",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()
@@ -114,7 +114,7 @@ class TestSharedLinkPublicAccess:
         trashed = _seed_media(db, filename="trash.jpg")
         db.add(AlbumAsset(album_id=album["id"], media_id=trashed.id, position=1))
         db.commit()
-        trashed.deleted_at = datetime.now(timezone.utc)
+        trashed.deleted_at = datetime.now(UTC)
         db.commit()
 
         link = _create_link(client, album["id"])
@@ -142,7 +142,7 @@ class TestSharedLinkPublicAccess:
 
     def test_expired_link_returns_404(self, client, db):
         album, _ = _make_album_with_assets(client, db, ["a.jpg"])
-        past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         link = _create_link(client, album["id"], expires_at=past)
 
         assert client.get(f"/api/public/shared/{link['key']}").status_code == 404
@@ -360,10 +360,10 @@ class TestSharedLinkByteLayerScoping:
         assert client.get(thumb).status_code == 401
 
     def test_file_routes_enforce_expiry(self, client, db):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         album, media = _make_album_with_assets(client, db, ["a.jpg"])
-        past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         link = _create_link(client, album["id"], expires_at=past)
 
         assert (

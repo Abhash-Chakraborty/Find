@@ -18,8 +18,8 @@ out from ``ratio`` (width/height) alone.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Literal, Optional
+from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import asc, desc, func
@@ -38,7 +38,7 @@ router = APIRouter()
 TimelineOrder = Literal["newest", "oldest"]
 
 
-def _compute_ratio(width: Optional[int], height: Optional[int]) -> Optional[float]:
+def _compute_ratio(width: int | None, height: int | None) -> float | None:
     """Aspect ratio (w/h) used by the justified layout, or None if unknown."""
     if not width or not height:
         return None
@@ -56,20 +56,20 @@ def _parse_bucket(time_bucket: str) -> tuple[datetime, datetime]:
             422, "timeBucket must be 'YYYY-MM' or 'YYYY-MM-DD'."
         ) from exc
 
-    start = datetime(parsed.year, parsed.month, 1, tzinfo=timezone.utc)
+    start = datetime(parsed.year, parsed.month, 1, tzinfo=UTC)
     if parsed.month == 12:
-        end = datetime(parsed.year + 1, 1, 1, tzinfo=timezone.utc)
+        end = datetime(parsed.year + 1, 1, 1, tzinfo=UTC)
     else:
-        end = datetime(parsed.year, parsed.month + 1, 1, tzinfo=timezone.utc)
+        end = datetime(parsed.year, parsed.month + 1, 1, tzinfo=UTC)
     return start, end
 
 
 @router.get("/timeline/buckets")
 def get_timeline_buckets(
     order: TimelineOrder = Query("newest"),
-    liked: Optional[bool] = None,
+    liked: bool | None = None,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Return month buckets with a count each, ordered newest- or oldest-first.
 
@@ -111,9 +111,9 @@ def get_timeline_buckets(
 def get_timeline_bucket(
     timeBucket: str = Query(..., description="Month key 'YYYY-MM' or 'YYYY-MM-DD'"),
     order: TimelineOrder = Query("newest"),
-    liked: Optional[bool] = None,
+    liked: bool | None = None,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Return all assets in one month bucket as columnar parallel arrays.
 

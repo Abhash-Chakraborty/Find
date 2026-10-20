@@ -4,7 +4,7 @@ Search endpoint for semantic image search
 
 import json
 import time
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -183,7 +183,7 @@ def search_images(
     ),
     debug: bool = Query(False, description="Include retrieval diagnostics in response"),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Semantic search for images using natural language with pagination support.

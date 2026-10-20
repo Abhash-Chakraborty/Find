@@ -8,7 +8,7 @@ EXIF is stripped before transmission when REMOTE_ML_STRIP_EXIF=true.
 
 import io
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 from PIL import Image
@@ -48,7 +48,7 @@ def _image_to_bytes(image: Image.Image, *, strip_exif: bool) -> bytes:
     return buf.getvalue()
 
 
-def _auth_headers() -> Dict[str, str]:
+def _auth_headers() -> dict[str, str]:
     """Return the Authorization header used on every authenticated request."""
     return {"Authorization": f"Bearer {settings.REMOTE_ML_API_KEY}"}
 
@@ -78,7 +78,7 @@ def _raise_for_auth(response: httpx.Response) -> None:
 # --- Public API ---
 
 
-def check_health() -> Dict[str, Any]:
+def check_health() -> dict[str, Any]:
     url = f"{_base_url()}/api/ml/health"
     try:
         with httpx.Client(timeout=10.0) as client:
@@ -94,8 +94,8 @@ def check_health() -> Dict[str, Any]:
 
 
 def remote_analyze(
-    image: Image.Image, features: List[str] | None = None
-) -> Dict[str, Any]:
+    image: Image.Image, features: list[str] | None = None
+) -> dict[str, Any]:
     """Run detection/captioning/OCR remotely.
 
     ``features`` names the stages the caller wants. It is sent to the server so
@@ -128,7 +128,7 @@ def remote_analyze(
         raise RemoteMLError(f"remote_analyze connection error: {exc}") from exc
 
 
-def remote_embed(image: Image.Image, metadata: Dict[str, Any]) -> List[float]:
+def remote_embed(image: Image.Image, metadata: dict[str, Any]) -> list[float]:
     url = f"{_base_url()}/api/ml/embed"
     image_bytes = _image_to_bytes(image, strip_exif=settings.REMOTE_ML_STRIP_EXIF)
 
@@ -156,7 +156,7 @@ def remote_embed(image: Image.Image, metadata: Dict[str, Any]) -> List[float]:
         raise RemoteMLError(f"remote_embed connection error: {exc}") from exc
 
 
-def remote_embed_text(text: str) -> List[float]:
+def remote_embed_text(text: str) -> list[float]:
     """Embed a search query remotely.
 
     Semantic search embeds the query string with the same CLIP model that
@@ -186,7 +186,7 @@ def remote_embed_text(text: str) -> List[float]:
         raise RemoteMLError(f"remote_embed_text connection error: {exc}") from exc
 
 
-def remote_cluster(embeddings: List[List[float]]) -> Dict[str, Any]:
+def remote_cluster(embeddings: list[list[float]]) -> dict[str, Any]:
     url = f"{_base_url()}/api/ml/cluster"
 
     try:

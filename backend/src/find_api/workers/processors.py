@@ -4,7 +4,7 @@ Image processing utilities for worker jobs
 
 import logging
 from collections.abc import Callable
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -52,7 +52,7 @@ class RemoteFeatureDisabled(Exception):
     """Raised when a remote stage is switched off in REMOTE_ML_FEATURES."""
 
 
-def _remote_analyze_image(image: Image.Image) -> Dict[str, Any]:
+def _remote_analyze_image(image: Image.Image) -> dict[str, Any]:
     """Send the image to the remote Find ML server for the analyze stage.
 
     The enabled feature list is carried through to the server, which runs only
@@ -96,7 +96,7 @@ def _remote_analyze_image(image: Image.Image) -> Dict[str, Any]:
     return result
 
 
-def _remote_embed_image(image: Image.Image, metadata: Dict[str, Any]) -> List[float]:
+def _remote_embed_image(image: Image.Image, metadata: dict[str, Any]) -> list[float]:
     """Send the image to the remote Find ML server for the embed stage."""
     from find_api.ml.remote_client import _feature_enabled, remote_embed
 
@@ -141,7 +141,7 @@ def _safe_normalize_embedding(
     return np.zeros_like(clean_vector, dtype=np.float32)
 
 
-def _record_stage_error(metadata: Dict[str, Any], stage: str, error: Exception) -> None:
+def _record_stage_error(metadata: dict[str, Any], stage: str, error: Exception) -> None:
     """Store a safe, user-facing stage failure without stack traces."""
     if isinstance(error, ModelUnavailableError):
         message = str(error)
@@ -159,7 +159,7 @@ def extract_image_metadata(
     image: Image.Image,
     on_stage: Callable[[str], None] | None = None,
     stages: set[str] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run all ML models to extract metadata from image
 
@@ -201,7 +201,7 @@ def extract_image_metadata(
         raise RuntimeError(f"AI metadata extraction is unavailable in mode '{mode}'.")
 
     # ---- Full / local mode ----
-    metadata: Dict[str, Any] = {
+    metadata: dict[str, Any] = {
         "stage_status": {
             "object_detection": {"status": "pending", "error": None},
             "captioning": {"status": "pending", "error": None},
@@ -298,8 +298,8 @@ def extract_image_metadata(
 
 
 def generate_hybrid_embedding(
-    image: Image.Image, metadata: Dict[str, Any]
-) -> List[float]:
+    image: Image.Image, metadata: dict[str, Any]
+) -> list[float]:
     """
     Generate hybrid embedding from image, caption, detected objects, and OCR text.
 
@@ -421,7 +421,7 @@ def generate_hybrid_embedding(
         raise
 
 
-def has_person_object(metadata: Dict[str, Any]) -> bool:
+def has_person_object(metadata: dict[str, Any]) -> bool:
     """Return true when object detection found a person-like object."""
     for obj in metadata.get("objects") or []:
         if not isinstance(obj, dict):

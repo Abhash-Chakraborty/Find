@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -18,7 +16,7 @@ from find_api.services.duplicate_service import (
 router = APIRouter(tags=["duplicates"])
 
 
-def _scope_user_id(user: Optional[User]) -> Optional[int]:
+def _scope_user_id(user: User | None) -> int | None:
     """Id a regular user is restricted to, or None for local mode/admin."""
     if user is None or user.role == "admin":
         return None
@@ -30,7 +28,7 @@ def get_duplicates(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Return paginated near-duplicate image pairs."""
     return list_duplicate_pairs(
@@ -42,7 +40,7 @@ def get_duplicates(
 def keep_both(
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Clear duplicate_of flag — user wants to keep both images."""
     if not clear_duplicate_flag(

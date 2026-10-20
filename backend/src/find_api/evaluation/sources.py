@@ -12,8 +12,9 @@ them, so `find_api.evaluation` stays importable in a bare test environment.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from datetime import datetime
-from typing import Any, Callable, Sequence
+from typing import Any
 
 from find_api.evaluation.variants import Candidate
 

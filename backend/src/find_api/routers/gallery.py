@@ -4,8 +4,8 @@ Gallery endpoint for browsing images
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Literal, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -94,10 +94,10 @@ def normalize_metadata(value):
 
 
 def parse_date_range(
-    preset: Optional[DateRangePreset] = None,
-    custom_start: Optional[str] = None,
-    custom_end: Optional[str] = None,
-) -> tuple[Optional[datetime], Optional[datetime]]:
+    preset: DateRangePreset | None = None,
+    custom_start: str | None = None,
+    custom_end: str | None = None,
+) -> tuple[datetime | None, datetime | None]:
     """
     Parse date range parameters and return (start_date, end_date) in UTC.
 
@@ -112,7 +112,7 @@ def parse_date_range(
     if not preset:
         return None, None
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if preset == "last_30_days":
         start = now - timedelta(days=30)
@@ -130,7 +130,7 @@ def parse_date_range(
         try:
             if custom_start:
                 start_date = datetime.strptime(custom_start, "%Y-%m-%d").replace(
-                    tzinfo=timezone.utc
+                    tzinfo=UTC
                 )
         except (ValueError, TypeError) as exc:
             logger.warning("Invalid custom_start date: %s", custom_start)
@@ -147,7 +147,7 @@ def parse_date_range(
                     minute=59,
                     second=59,
                     microsecond=999999,
-                    tzinfo=timezone.utc,
+                    tzinfo=UTC,
                 )
         except (ValueError, TypeError) as exc:
             logger.warning("Invalid custom_end date: %s", custom_end)
@@ -194,7 +194,7 @@ def parse_metadata_date(value: str | None, field_name: str) -> datetime | None:
         raise HTTPException(422, f"{field_name} must be a valid ISO date") from exc
 
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
     if field_name == "date_to" and is_date_only:
         parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
     return parsed
@@ -324,9 +324,9 @@ def apply_metadata_filters(
 
 @router.get("/gallery/counts", response_model=GalleryCountsResponse)
 def get_gallery_counts(
-    liked: Optional[bool] = None,
+    liked: bool | None = None,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     query = scope_media_query(_browsable_media_query(db), user)
     if liked is not None:
@@ -344,58 +344,58 @@ def get_gallery_counts(
 def get_gallery(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    status: Optional[GalleryStatus] = Query(
+    status: GalleryStatus | None = Query(
         None,
         description="Filter by processing status",
     ),
-    liked: Optional[bool] = None,
+    liked: bool | None = None,
     sort_order: SortOrder = Query(
         "newest",
         description="Sort by upload date: 'newest' (default) or 'oldest'",
     ),
-    date_range: Optional[DateRangePreset] = Query(
+    date_range: DateRangePreset | None = Query(
         None,
         description="Date range preset: 'last_30_days', 'last_60_days', 'last_90_days', or 'custom'",
     ),
-    date_start: Optional[str] = Query(
+    date_start: str | None = Query(
         None,
         description="Custom range start date (YYYY-MM-DD) when date_range='custom'",
     ),
-    date_end: Optional[str] = Query(
+    date_end: str | None = Query(
         None,
         description="Custom range end date (YYYY-MM-DD) when date_range='custom'",
     ),
-    camera_make: Optional[str] = Query(
+    camera_make: str | None = Query(
         None,
         max_length=255,
         description="Filter by EXIF camera make",
     ),
-    camera_model: Optional[str] = Query(
+    camera_model: str | None = Query(
         None,
         max_length=255,
         description="Filter by EXIF camera model",
     ),
-    min_width: Optional[int] = Query(None, ge=1, description="Minimum image width"),
-    min_height: Optional[int] = Query(None, ge=1, description="Minimum image height"),
-    file_type: Optional[str] = Query(
+    min_width: int | None = Query(None, ge=1, description="Minimum image width"),
+    min_height: int | None = Query(None, ge=1, description="Minimum image height"),
+    file_type: str | None = Query(
         None,
         max_length=20,
         description="Filter by image file type",
     ),
-    date_from: Optional[str] = Query(
+    date_from: str | None = Query(
         None,
         description="Filter to media uploaded on or after this ISO date",
     ),
-    date_to: Optional[str] = Query(
+    date_to: str | None = Query(
         None,
         description="Filter to media uploaded on or before this ISO date",
     ),
-    orientation: Optional[OrientationFilter] = Query(
+    orientation: OrientationFilter | None = Query(
         None,
         description="Filter by image orientation",
     ),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Get paginated list of images with optional date filtering and sorting.
@@ -481,7 +481,7 @@ def get_gallery(
 def get_image_detail(
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Get detailed information about a specific image
@@ -550,7 +550,7 @@ def get_image_detail(
 def get_image_thumbnail(
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Get a redirect to the image file for use as a thumbnail.
@@ -574,7 +574,7 @@ def get_image_thumbnail(
 def get_image_original(
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Return a scoped redirect to the original image object.
 
@@ -596,7 +596,7 @@ def get_image_original(
 def backfill_missing_thumbnails(
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Enqueue thumbnail-only jobs for existing images that do not have thumbnails.
@@ -653,7 +653,7 @@ def backfill_missing_thumbnails(
 def toggle_like(
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     media = _load_public_media_or_404(db, media_id)
     if not can_access_media(media, user):
@@ -672,7 +672,7 @@ def set_archive(
     media_id: int,
     request: ArchiveRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Archive or unarchive an asset.
 
@@ -710,7 +710,7 @@ def set_archive(
 def trash_image(
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Soft-delete (trash) an asset.
 
@@ -723,7 +723,7 @@ def trash_image(
         raise HTTPException(404, "Image not found")
 
     if media.deleted_at is None:
-        media.deleted_at = datetime.now(timezone.utc)
+        media.deleted_at = datetime.now(UTC)
         db.commit()
         invalidate_query_cache()
         db.refresh(media)
@@ -741,7 +741,7 @@ def trash_image(
 def restore_image(
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Restore a trashed asset back to the timeline."""
     media = _load_public_media_or_404(db, media_id)
@@ -766,7 +766,7 @@ def get_archive(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """List archived assets (archived and not trashed), newest first."""
     query = scope_media_query(
@@ -788,7 +788,7 @@ def get_trash(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """List trashed assets (``deleted_at`` set), most recently trashed first."""
     # Retention is enforced whenever Trash is opened, so the dashboard setting
@@ -815,7 +815,7 @@ def get_trash(
 @router.post("/trash/empty", response_model=BulkDeleteResponse)
 def empty_trash(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Permanently delete every trashed asset (files + rows).
 
@@ -865,7 +865,7 @@ def empty_trash(
 @router.post("/trash/purge", response_model=BulkDeleteResponse)
 def purge_expired_trash(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Permanently delete trashed assets older than the retention window.
 
@@ -895,7 +895,7 @@ def purge_expired_trash(
             "failed_count": 0,
         }
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    cutoff = datetime.now(UTC) - timedelta(days=retention_days)
     media_rows = scope_media_query(
         _public_media_query(db).filter(
             Media.deleted_at.isnot(None),
@@ -942,7 +942,7 @@ def purge_expired_trash(
 def reprocess_image(
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Reset a media record to pending and re-enqueue analysis.
@@ -1037,7 +1037,7 @@ def _delete_media_files(media: Media) -> None:
 def delete_image(
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     media = _load_public_media_or_404(db, media_id)
     if not can_access_media(media, user):
@@ -1063,7 +1063,7 @@ def delete_image(
 def bulk_delete_images(
     request: BulkDeleteRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     requested_ids = list(dict.fromkeys(request.media_ids))
     media_rows = scope_media_query(

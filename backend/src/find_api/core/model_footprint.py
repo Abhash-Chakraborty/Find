@@ -25,10 +25,10 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, Optional
 
 from find_api.core.config import settings
 from find_api.core.hardware import (
@@ -57,12 +57,12 @@ class CacheInfo:
     """Best-effort description of a model's on-disk footprint."""
 
     resolver: str
-    path: Optional[str]
+    path: str | None
     exists: bool
     bytes_on_disk: int
     file_count: int
-    last_modified: Optional[float]  # epoch seconds
-    note: Optional[str] = None
+    last_modified: float | None  # epoch seconds
+    note: str | None = None
 
     def to_dict(self, include_path: bool) -> dict:
         payload = {
@@ -89,11 +89,11 @@ _EMPTY_CACHE = CacheInfo(
 )
 
 
-def _dir_size(path: Path) -> tuple[int, int, Optional[float]]:
+def _dir_size(path: Path) -> tuple[int, int, float | None]:
     """Sum file sizes/mtimes under ``path``. Never raises."""
     total = 0
     count = 0
-    latest: Optional[float] = None
+    latest: float | None = None
     try:
         for root, _dirs, files in os.walk(path):
             for fname in files:
@@ -127,7 +127,7 @@ def _current_hf_hub_cache_dir() -> str:
     return os.path.join(hf_home, "hub")
 
 
-def _hf_hub_cache_matches(*needles: str) -> Optional[CacheInfo]:
+def _hf_hub_cache_matches(*needles: str) -> CacheInfo | None:
     """Best-effort lookup of a Hugging Face Hub cached repo matching any needle.
 
     Reads the local Hub cache *index* only (``scan_cache_dir``); this never
@@ -172,7 +172,7 @@ def _hf_hub_cache_matches(*needles: str) -> Optional[CacheInfo]:
     )
 
 
-def _open_clip_legacy_cache(*needles: str) -> Optional[CacheInfo]:
+def _open_clip_legacy_cache(*needles: str) -> CacheInfo | None:
     """Fallback for open_clip checkpoints stored outside the HF Hub cache."""
     cache_dir = os.getenv("OPEN_CLIP_CACHE_DIR") or os.path.expanduser("~/.cache/clip")
     root = Path(cache_dir)
@@ -192,7 +192,7 @@ def _open_clip_legacy_cache(*needles: str) -> Optional[CacheInfo]:
         return None
 
     total = 0
-    latest: Optional[float] = None
+    latest: float | None = None
     for p in matched_files:
         try:
             st = p.stat()
@@ -431,10 +431,10 @@ PROPOSED_CPU_MODELS: tuple[dict, ...] = (
 
 
 # --- Report assembly -----------------------------------------------------------
-def _iso(epoch: Optional[float]) -> Optional[str]:
+def _iso(epoch: float | None) -> str | None:
     if epoch is None:
         return None
-    return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
+    return datetime.fromtimestamp(epoch, tz=UTC).isoformat()
 
 
 def _aggregate_manager_status() -> set[str]:

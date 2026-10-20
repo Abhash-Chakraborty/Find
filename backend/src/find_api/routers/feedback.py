@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api", tags=["feedback"])
 # ─── Helpers ───────────────────────────────────────────────────────────────
 
 
-def _scope_user_id(user: Optional[User]) -> Optional[int]:
+def _scope_user_id(user: User | None) -> int | None:
     """Return the id a regular user is restricted to, or None (unrestricted).
 
     Local mode (user is None) and admins are unrestricted.
@@ -32,7 +32,7 @@ def _scope_user_id(user: Optional[User]) -> Optional[int]:
     return user.id
 
 
-def _load_owned_media_or_404(db: Session, media_id: int, user: Optional[User]) -> Media:
+def _load_owned_media_or_404(db: Session, media_id: int, user: User | None) -> Media:
     """Fetch media the caller may act on, else 404.
 
     Returns 404 (not 403) for media owned by others so the endpoint does
@@ -47,7 +47,7 @@ def _load_owned_media_or_404(db: Session, media_id: int, user: Optional[User]) -
     return media
 
 
-def _require_person_access(db: Session, person_id: int, user: Optional[User]) -> Person:
+def _require_person_access(db: Session, person_id: int, user: User | None) -> Person:
     """Fetch a person the caller may act on, else 404.
 
     A regular user may only act on a person who appears in media they
@@ -72,7 +72,7 @@ def _require_person_access(db: Session, person_id: int, user: Optional[User]) ->
     return person
 
 
-def _validate_rating(rating: Optional[int]) -> None:
+def _validate_rating(rating: int | None) -> None:
     if rating is None:
         raise HTTPException(status_code=400, detail="rating is required")
     if rating < 1 or rating > 5:
@@ -86,9 +86,9 @@ class PersonFeedbackRequest(BaseModel):
     """Request body for person cluster feedback"""
 
     feedback_type: str  # "split", "merge", "wrong_person", "correct"
-    face_ids: List[int]
-    target_person_id: Optional[int] = None
-    user_reason: Optional[str] = None
+    face_ids: list[int]
+    target_person_id: int | None = None
+    user_reason: str | None = None
 
 
 class PersonFeedbackResponse(BaseModel):
@@ -97,8 +97,8 @@ class PersonFeedbackResponse(BaseModel):
     id: int
     feedback_type: str
     source_person_id: int
-    target_person_id: Optional[int]
-    face_ids: List[int]
+    target_person_id: int | None
+    face_ids: list[int]
     status: str
     created_at: datetime
 
@@ -109,12 +109,12 @@ class GeneralFeedbackRequest(BaseModel):
     """Request body for general feedback and correction data."""
 
     feedback_type: str
-    media_id: Optional[int] = None
-    person_id: Optional[int] = None
-    rating: Optional[int] = None  # 1-5
-    rating_reason: Optional[str] = None
-    corrected_caption: Optional[str] = None
-    corrected_objects: Optional[List[str]] = None
+    media_id: int | None = None
+    person_id: int | None = None
+    rating: int | None = None  # 1-5
+    rating_reason: str | None = None
+    corrected_caption: str | None = None
+    corrected_objects: list[str] | None = None
 
 
 class GeneralFeedbackResponse(BaseModel):
@@ -122,11 +122,11 @@ class GeneralFeedbackResponse(BaseModel):
 
     id: int
     feedback_type: str
-    media_id: Optional[int]
-    person_id: Optional[int]
-    rating: Optional[int]
-    rating_reason: Optional[str]
-    extra_metadata: Optional[dict[str, Any]]
+    media_id: int | None
+    person_id: int | None
+    rating: int | None
+    rating_reason: str | None
+    extra_metadata: dict[str, Any] | None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -142,7 +142,7 @@ def submit_split_feedback(
     person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Mark faces to be split into a separate person group.
@@ -221,7 +221,7 @@ def submit_merge_feedback(
     target_person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Merge two person groups into one.
@@ -276,7 +276,7 @@ def submit_wrong_person_feedback(
     person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Mark specific face(s) as belonging to a different person.
@@ -347,7 +347,7 @@ def submit_correct_feedback(
     person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Mark person cluster as correctly grouped (positive feedback).
@@ -389,7 +389,7 @@ def submit_correct_feedback(
 def rate_search_result(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Rate the relevance of a search result (1-5 stars).
@@ -436,7 +436,7 @@ def rate_search_result(
 @router.delete("/feedback/search-preferences")
 def reset_search_preferences(
     db: Session = Depends(get_db),
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """
     Reset local search ranking preferences without deleting media or likes.
@@ -474,7 +474,7 @@ def reset_search_preferences(
 def rate_caption(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Rate the accuracy of an image caption (1-5 stars).
@@ -514,7 +514,7 @@ def rate_caption(
 def rate_object_detection(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Rate the accuracy of object detection (1-5 stars).
@@ -554,7 +554,7 @@ def rate_object_detection(
 def submit_caption_correction(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Store user-edited caption text for future local personalization/training.
@@ -599,7 +599,7 @@ def submit_caption_correction(
 def submit_object_correction(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Store user-corrected object labels for future local personalization/training.
@@ -655,7 +655,7 @@ def submit_object_correction(
 @router.get("/feedback/stats")
 def get_feedback_stats(
     db: Session = Depends(get_db),
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """
     Get aggregate feedback statistics for analytics.
@@ -717,12 +717,12 @@ def get_feedback_stats(
         raise HTTPException(status_code=500, detail="Failed to get statistics")
 
 
-@router.get("/people/feedback", response_model=List[PersonFeedbackResponse])
+@router.get("/people/feedback", response_model=list[PersonFeedbackResponse])
 def list_person_feedback(
-    person_id: Optional[int] = None,
-    feedback_type: Optional[str] = None,
+    person_id: int | None = None,
+    feedback_type: str | None = None,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     List all person feedback entries, optionally filtered by person or type.

@@ -2,7 +2,7 @@
 
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from PIL import Image
@@ -180,7 +180,7 @@ def test_unavailable_stage_records_safe_metadata_and_continues(monkeypatch):
                 name="yolo",
                 error_type="RuntimeError",
                 reason="RuntimeError: simulated detector load failure",
-                failed_at=datetime.now(timezone.utc),
+                failed_at=datetime.now(UTC),
             )
             raise ModelUnavailableError("yolo", failure)
 

@@ -20,7 +20,7 @@ Conventions, stated explicitly because they change the numbers:
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 
 def _dedupe(ranking: Sequence[str]) -> list[str]:

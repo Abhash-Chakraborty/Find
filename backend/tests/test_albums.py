@@ -1,7 +1,7 @@
 """Integration tests for album endpoints (Phase 4.2)."""
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from find_api.models.album import Album, AlbumAsset
 from find_api.models.media import Media
@@ -29,7 +29,7 @@ def _seed_media(
         is_archived=is_archived,
         deleted_at=deleted_at,
         vault_state="hidden_encrypted" if is_hidden else "visible",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()

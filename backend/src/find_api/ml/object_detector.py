@@ -3,7 +3,6 @@ Object detection using Ultralytics YOLO
 """
 
 import logging
-from typing import Dict, List, Union
 
 import numpy as np
 from PIL import Image
@@ -35,8 +34,8 @@ class ObjectDetector:
         return model
 
     def detect(
-        self, image: Union[Image.Image, np.ndarray], conf_threshold: float = 0.25
-    ) -> List[Dict]:
+        self, image: Image.Image | np.ndarray, conf_threshold: float = 0.25
+    ) -> list[dict]:
         """
         Detect objects in image
         """

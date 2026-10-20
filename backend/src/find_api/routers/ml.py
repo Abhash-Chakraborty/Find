@@ -9,7 +9,7 @@ work to.
 import io
 import json
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -88,7 +88,7 @@ def _load_image(upload: UploadFile) -> Image.Image:
 
 
 @router.get("/health")
-def health() -> Dict[str, Any]:
+def health() -> dict[str, Any]:
     """Unauthenticated liveness check."""
     return {
         "status": "ok",
@@ -101,7 +101,7 @@ def health() -> Dict[str, Any]:
 def analyze(
     image: UploadFile = File(...),
     features: str = Form(default=""),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run object detection, captioning, and OCR on the uploaded image.
 
     ``features`` is the client's enabled stage list. Only those stages run, so
@@ -155,12 +155,12 @@ def analyze(
 def embed(
     image: UploadFile = File(...),
     metadata: str = Form(default="{}"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate a hybrid CLIP embedding from the image and optional metadata."""
     pil_image = _load_image(image)
 
     try:
-        meta_dict: Dict[str, Any] = json.loads(metadata)
+        meta_dict: dict[str, Any] = json.loads(metadata)
     except json.JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -186,7 +186,7 @@ def embed(
 
 
 @router.post("/embed_text", dependencies=[Depends(_require_auth)])
-def embed_text(body: Dict[str, Any]) -> Dict[str, Any]:
+def embed_text(body: dict[str, Any]) -> dict[str, Any]:
     """Embed a search query with the same CLIP model used for image vectors."""
     text = body.get("text")
     if not isinstance(text, str) or not text.strip():
@@ -215,7 +215,7 @@ def embed_text(body: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.post("/cluster", dependencies=[Depends(_require_auth)])
-def cluster(body: Dict[str, Any]) -> Dict[str, Any]:
+def cluster(body: dict[str, Any]) -> dict[str, Any]:
     """Run HDBSCAN clustering on a list of embedding vectors."""
     from find_api.ml.clusterer import (
         InvalidEmbeddingMatrix,

@@ -1,7 +1,7 @@
 """Tests for GET /api/status/{job_id} — job status response shape."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 
@@ -25,7 +25,7 @@ class TestJobStatus:
     def test_queued_job(self, client):
         fake_job = self._make_fake_job(
             get_status=lambda: "queued",
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
             started_at=None,
             ended_at=None,
             completed_at=None,
@@ -50,9 +50,9 @@ class TestJobStatus:
     def test_finished_job_includes_result(self, client):
         fake_job = self._make_fake_job(
             get_status=lambda: "finished",
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            started_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
-            ended_at=datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            started_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+            ended_at=datetime(2026, 1, 1, 0, 0, 5, tzinfo=UTC),
             completed_at=None,
             is_finished=True,
             is_failed=False,
@@ -72,9 +72,9 @@ class TestJobStatus:
     def test_failed_job_includes_error(self, client):
         fake_job = self._make_fake_job(
             get_status=lambda: "failed",
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            started_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
-            ended_at=datetime(2026, 1, 1, 0, 0, 3, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            started_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+            ended_at=datetime(2026, 1, 1, 0, 0, 3, tzinfo=UTC),
             completed_at=None,
             is_finished=False,
             is_failed=True,

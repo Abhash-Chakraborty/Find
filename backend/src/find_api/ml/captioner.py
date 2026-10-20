@@ -1,7 +1,6 @@
 """Local image captioning using the native BLIP model implementation."""
 
 import logging
-from typing import Union
 
 import numpy as np
 import torch
@@ -51,7 +50,7 @@ class ImageCaptioner:
 
     def generate_caption(
         self,
-        image: Union[Image.Image, np.ndarray],
+        image: Image.Image | np.ndarray,
         max_length: int = 256,
         num_beams: int = 3,
     ) -> str:

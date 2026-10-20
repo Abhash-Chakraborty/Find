@@ -14,8 +14,9 @@ off ``category`` without a second lookup.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 from find_api.evaluation.dataset import EvalDataset, EvalQuery
 from find_api.evaluation.metrics import (

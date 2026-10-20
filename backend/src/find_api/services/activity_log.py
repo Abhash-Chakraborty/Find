@@ -7,8 +7,7 @@ image bytes, embeddings, OCR text, captions, secrets, or raw session tokens.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -23,9 +22,9 @@ def record_activity(
     category: str,
     action: str,
     *,
-    user_id: Optional[int] = None,
-    media_id: Optional[int] = None,
-    payload: Optional[dict] = None,
+    user_id: int | None = None,
+    media_id: int | None = None,
+    payload: dict | None = None,
 ) -> None:
     """Append one activity row in its own transaction. Never raises."""
     try:
@@ -44,7 +43,7 @@ def record_activity(
         logger.warning("Failed to record activity %s.%s: %s", category, action, exc)
 
 
-def _scoped(db: Session, user, *, before: Optional[datetime] = None):
+def _scoped(db: Session, user, *, before: datetime | None = None):
     """Base query for the rows *user* is allowed to see."""
     query = db.query(Activity)
     if before is not None:
@@ -58,9 +57,9 @@ def list_activity(
     *,
     skip: int = 0,
     limit: int = 50,
-    category: Optional[str] = None,
-    action: Optional[str] = None,
-    media_id: Optional[int] = None,
+    category: str | None = None,
+    action: str | None = None,
+    media_id: int | None = None,
 ) -> tuple[list[Activity], int]:
     """Return one owner-scoped page of activity (newest first) and the total."""
     query = _scoped(db, user)
@@ -92,7 +91,7 @@ def purge_expired_activity(db: Session, user, retention_days: int) -> int:
     """Delete rows older than the retention window. 0 disables (no-op)."""
     if retention_days <= 0:
         return 0
-    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    cutoff = datetime.now(UTC) - timedelta(days=retention_days)
     deleted = _scoped(db, user, before=cutoff).delete(synchronize_session=False)
     db.commit()
     return deleted

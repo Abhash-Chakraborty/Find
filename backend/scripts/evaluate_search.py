@@ -51,8 +51,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 

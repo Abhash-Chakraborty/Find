@@ -3,7 +3,6 @@ CLIP embedding generation using SigLIP
 """
 
 import logging
-from typing import List, Union
 
 import numpy as np
 import open_clip
@@ -53,7 +52,7 @@ class CLIPEmbedder:
             f"accel={current_accel_mode()}"
         )
 
-    def embed_image(self, image: Union[Image.Image, np.ndarray]) -> np.ndarray:
+    def embed_image(self, image: Image.Image | np.ndarray) -> np.ndarray:
         """
         Generate embedding for a single image
         """
@@ -90,7 +89,7 @@ class CLIPEmbedder:
             logger.error(f"Failed to generate image embedding: {e}")
             raise
 
-    def embed_text(self, text: Union[str, List[str]]) -> np.ndarray:
+    def embed_text(self, text: str | list[str]) -> np.ndarray:
         """
         Generate embedding for text query
         """

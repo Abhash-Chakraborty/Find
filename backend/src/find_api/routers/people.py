@@ -3,7 +3,6 @@ People router - API endpoints for person groups and face clusters
 """
 
 import logging
-from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -35,11 +34,11 @@ class PersonResponse(BaseModel):
     """What we send back when listing people"""
 
     id: int
-    name: Optional[str]
+    name: str | None
     face_count: int
     # Sample image IDs to show thumbnails in the UI
-    sample_media_ids: List[int]
-    thumbnail_url: Optional[str] = None
+    sample_media_ids: list[int]
+    thumbnail_url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -63,17 +62,17 @@ class PersonImageResponse(BaseModel):
 
     media_id: int
     filename: str
-    thumbnail_url: Optional[str] = None
-    faces: List[PersonImageFace]
+    thumbnail_url: str | None = None
+    faces: list[PersonImageFace]
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 
-@router.get("/people", response_model=List[PersonResponse])
+@router.get("/people", response_model=list[PersonResponse])
 def list_people(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Get all person groups with face counts and sample images.
@@ -105,7 +104,7 @@ def list_people(
     # — constant queries, but unbounded transfer, which is the same scaling
     # cliff in a different place.
     counted = visible_faces().subquery()
-    face_counts: Dict[int, int] = dict(
+    face_counts: dict[int, int] = dict(
         db.query(counted.c.person_id, func.count(counted.c.face_id))
         .group_by(counted.c.person_id)
         .all()
@@ -135,7 +134,7 @@ def list_people(
         .label("rank"),
     ).subquery()
 
-    sample_media_ids_by_person: Dict[int, List[int]] = {}
+    sample_media_ids_by_person: dict[int, list[int]] = {}
     for person_id, media_id in (
         db.query(ranked.c.person_id, ranked.c.media_id)
         .filter(ranked.c.rank <= SAMPLE_MEDIA_LIMIT)
@@ -175,7 +174,7 @@ def list_people(
 def get_person_images(
     person_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Get all images that contain a specific person.
@@ -238,7 +237,7 @@ def update_person_name(
     person_id: int,
     body: PersonUpdate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Let the user name a person group e.g. 'Alice' or 'Dad'.
@@ -281,7 +280,7 @@ def update_person_name(
 
 @router.post("/people/cluster")
 def trigger_face_clustering(
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """
     Manually trigger face clustering job.

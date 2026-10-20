@@ -9,10 +9,11 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterator, List
+from datetime import UTC, datetime
+from typing import Any
 
 from find_api.core.config import settings
 
@@ -66,7 +67,7 @@ class ModelManager:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(ModelManager, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
@@ -74,14 +75,14 @@ class ModelManager:
         if self._initialized:
             return
 
-        self.models: Dict[str, Any] = {}
-        self.model_config_keys: Dict[str, str | None] = {}
-        self.in_flight: Dict[str, int] = {}
-        self.last_used: Dict[str, float] = {}
-        self._loading: Dict[str, threading.Event] = {}
-        self.failed_loads: Dict[str, Dict[str, Any]] = {}
-        self.unavailable_models: Dict[str, ModelLoadFailure] = {}
-        self.runtime_status: Dict[str, Any] | None = None
+        self.models: dict[str, Any] = {}
+        self.model_config_keys: dict[str, str | None] = {}
+        self.in_flight: dict[str, int] = {}
+        self.last_used: dict[str, float] = {}
+        self._loading: dict[str, threading.Event] = {}
+        self.failed_loads: dict[str, dict[str, Any]] = {}
+        self.unavailable_models: dict[str, ModelLoadFailure] = {}
+        self.runtime_status: dict[str, Any] | None = None
         self._lock = threading.RLock()
         self.gpu_lock = asyncio.Lock()
         self._cleanup_thread = None
@@ -203,7 +204,7 @@ class ModelManager:
         try:
             model = loader()
         except Exception as exc:
-            failed_at = datetime.now(timezone.utc)
+            failed_at = datetime.now(UTC)
             failure = ModelLoadFailure(
                 name=name,
                 error_type=exc.__class__.__name__,
@@ -306,7 +307,7 @@ class ModelManager:
             except Exception as e:
                 logger.warning(f"Failed to clear CUDA cache: {e}")
 
-    def get_loaded_models(self) -> List[str]:
+    def get_loaded_models(self) -> list[str]:
         """Get list of currently loaded model names"""
         with self._lock:
             return list(self.models.keys())
@@ -325,7 +326,7 @@ class ModelManager:
             self.max_loaded_models = settings.ML_MAX_LOADED_MODELS
             self.publish_status()
 
-    def set_runtime_status(self, status: Dict[str, Any]) -> None:
+    def set_runtime_status(self, status: dict[str, Any]) -> None:
         """Publish the runtime snapshot most recently applied by this process."""
         with self._lock:
             self.runtime_status = status.copy()
@@ -347,7 +348,7 @@ class ModelManager:
             self.runtime_status = merged
             self.publish_status()
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Return current process model-manager status."""
         with self._lock:
             status = {

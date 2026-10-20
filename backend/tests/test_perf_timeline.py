@@ -18,7 +18,7 @@ headroom so this is a regression tripwire, not a benchmark.
 
 import hashlib
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -43,7 +43,7 @@ def _seed_library(db, n: int, months: int) -> None:
         m = ((month - 1) % 12) + 1
         # Vary day so ordering within a month is meaningful.
         day = (i % 27) + 1
-        created = datetime(year, m, day, 12, 0, 0, tzinfo=timezone.utc)
+        created = datetime(year, m, day, 12, 0, 0, tzinfo=UTC)
         rows.append(
             Media(
                 file_hash=hashlib.sha256(f"perf-{i}".encode()).hexdigest(),

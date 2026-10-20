@@ -4,7 +4,7 @@ Background worker jobs for image processing
 
 import io
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from PIL import Image
 from rq import get_current_job
@@ -267,7 +267,7 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
 
         media.metadata_json = metadata
         media.status = "indexed"
-        media.processed_at = datetime.now(timezone.utc)
+        media.processed_at = datetime.now(UTC)
 
         db.commit()
         invalidate_query_cache()

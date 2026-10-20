@@ -8,7 +8,6 @@ explicitly request and download the payload.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -30,7 +29,7 @@ _GENERIC_FAILURE = {"error": "Failed to generate diagnostics bundle"}
 
 @router.get("/admin/diagnostics/bundle")
 def export_diagnostics_bundle(
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """Return a privacy-safe local diagnostics bundle as JSON.
 

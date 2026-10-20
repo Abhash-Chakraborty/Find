@@ -7,7 +7,6 @@ import io
 import logging
 import mimetypes
 import zipfile
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -31,9 +30,9 @@ router = APIRouter()
 
 @router.post("/upload")
 async def upload_images(
-    files: List[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """
     Upload one or more images for processing
@@ -90,7 +89,7 @@ async def upload_images(
 async def upload_bulk_images(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """
     Upload images in bulk via ZIP archive
@@ -254,10 +253,10 @@ def _verify_image_content(filename: str, file_data: bytes) -> None:
 def _ingest_image(
     *,
     filename: str,
-    content_type: Optional[str],
+    content_type: str | None,
     file_data: bytes,
     db: Session,
-    uploader_user_id: Optional[int] = None,
+    uploader_user_id: int | None = None,
 ) -> dict:
     """Create or reuse a media record from raw image bytes"""
     detected_type = content_type or mimetypes.guess_type(filename)[0] or ""
@@ -335,7 +334,7 @@ def _ingest_image(
     }
 
 
-def _get_extension(filename: str, content_type: Optional[str]) -> str:
+def _get_extension(filename: str, content_type: str | None) -> str:
     """Determine appropriate file extension for storage"""
     if "." in filename:
         return "." + filename.split(".")[-1]

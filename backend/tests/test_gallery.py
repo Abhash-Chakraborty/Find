@@ -1,7 +1,7 @@
 """Tests for gallery endpoints — list/detail/delete and related behavior."""
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from find_api.models.cluster import Cluster
@@ -40,7 +40,7 @@ def _seed(
         is_archived=is_archived,
         deleted_at=deleted_at,
         vault_state="hidden_encrypted" if is_hidden else "visible",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()
@@ -55,7 +55,7 @@ def _seed_cluster(db, *, member_ids: list[int]) -> Cluster:
         member_count=len(member_ids),
         label="Test cluster",
         description="Cluster used in tests",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(cluster)
     db.commit()
@@ -490,7 +490,7 @@ class TestGalleryDateFiltering:
         """Gallery sorts by newest first by default."""
         from datetime import timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         old = _seed(db, filename="old.jpg", status="indexed")
         old.created_at = now - timedelta(days=10)
         db.commit()
@@ -508,7 +508,7 @@ class TestGalleryDateFiltering:
         """Gallery can sort by oldest first."""
         from datetime import timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         old = _seed(db, filename="old.jpg", status="indexed")
         old.created_at = now - timedelta(days=10)
         db.commit()
@@ -526,7 +526,7 @@ class TestGalleryDateFiltering:
         """Filter shows only images from last 30 days."""
         from datetime import timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Create images at different times
         within_30 = _seed(db, filename="recent.jpg", status="indexed")
@@ -545,7 +545,7 @@ class TestGalleryDateFiltering:
         """Filter shows only images from last 60 days."""
         from datetime import timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         within_60 = _seed(db, filename="recent.jpg", status="indexed")
         within_60.created_at = now - timedelta(days=30)
@@ -563,7 +563,7 @@ class TestGalleryDateFiltering:
         """Filter shows only images from last 90 days."""
         from datetime import timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         within_90 = _seed(db, filename="recent.jpg", status="indexed")
         within_90.created_at = now - timedelta(days=45)
@@ -581,15 +581,15 @@ class TestGalleryDateFiltering:
         """Filter by custom date range using ISO 8601 dates."""
         # Seed images with specific dates
         before = _seed(db, filename="before.jpg", status="indexed")
-        before.created_at = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        before.created_at = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
         db.commit()
 
         within = _seed(db, filename="within.jpg", status="indexed")
-        within.created_at = datetime(2025, 5, 15, 12, 0, 0, tzinfo=timezone.utc)
+        within.created_at = datetime(2025, 5, 15, 12, 0, 0, tzinfo=UTC)
         db.commit()
 
         after = _seed(db, filename="after.jpg", status="indexed")
-        after.created_at = datetime(2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+        after.created_at = datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC)
         db.commit()
 
         body = client.get(
@@ -608,7 +608,7 @@ class TestGalleryDateFiltering:
         """Custom date range with only start date."""
         from datetime import timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         before = _seed(db, filename="before.jpg", status="indexed")
         before.created_at = now - timedelta(days=30)
@@ -633,7 +633,7 @@ class TestGalleryDateFiltering:
         """Custom date range with only end date."""
         from datetime import timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         before = _seed(db, filename="before.jpg", status="indexed")
         before.created_at = now - timedelta(days=30)
@@ -658,7 +658,7 @@ class TestGalleryDateFiltering:
         """Date filters work together with status filters."""
         from datetime import timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Create indexed image within last 30 days
         indexed_recent = _seed(db, filename="indexed_recent.jpg", status="indexed")
@@ -690,7 +690,7 @@ class TestGalleryDateFiltering:
         """Date filters work together with liked filters."""
         from datetime import timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         liked_recent = _seed(
             db, filename="liked_recent.jpg", status="indexed", liked=True
@@ -811,8 +811,8 @@ class TestGalleryMetadataFilters:
     def test_gallery_filters_by_date_range(self, client, db):
         older = _seed(db, filename="older.jpg", status="indexed")
         newer = _seed(db, filename="newer.jpg", status="indexed")
-        older.created_at = datetime(2026, 1, 10, tzinfo=timezone.utc)
-        newer.created_at = datetime(2026, 2, 10, tzinfo=timezone.utc)
+        older.created_at = datetime(2026, 1, 10, tzinfo=UTC)
+        newer.created_at = datetime(2026, 2, 10, tzinfo=UTC)
         db.commit()
 
         response = client.get(
@@ -829,9 +829,9 @@ class TestGalleryMetadataFilters:
         early = _seed(db, filename="early.jpg", status="indexed")
         late = _seed(db, filename="late.jpg", status="indexed")
         next_day = _seed(db, filename="next-day.jpg", status="indexed")
-        early.created_at = datetime(2026, 2, 28, 0, 5, tzinfo=timezone.utc)
-        late.created_at = datetime(2026, 2, 28, 23, 55, tzinfo=timezone.utc)
-        next_day.created_at = datetime(2026, 3, 1, 0, 1, tzinfo=timezone.utc)
+        early.created_at = datetime(2026, 2, 28, 0, 5, tzinfo=UTC)
+        late.created_at = datetime(2026, 2, 28, 23, 55, tzinfo=UTC)
+        next_day.created_at = datetime(2026, 3, 1, 0, 1, tzinfo=UTC)
         db.commit()
 
         response = client.get("/api/gallery", params={"date_to": "2026-02-28"})
@@ -943,7 +943,7 @@ class TestAssetStateScoping:
             db,
             filename="trashed.jpg",
             status="indexed",
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
 
         body = client.get("/api/gallery").json()
@@ -959,7 +959,7 @@ class TestAssetStateScoping:
             db,
             filename="trash.jpg",
             status="indexed",
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
 
         body = client.get("/api/gallery/counts").json()
@@ -1037,7 +1037,7 @@ class TestArchiveTrashRestore:
             db,
             filename="trash.jpg",
             status="indexed",
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
 
         response = client.post(f"/api/image/{media.id}/archive", json={})
@@ -1070,7 +1070,7 @@ class TestArchiveTrashRestore:
             db,
             filename="t.jpg",
             status="indexed",
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
         assert client.get("/api/gallery").json()["total"] == 0
 
@@ -1096,7 +1096,7 @@ class TestArchiveTrashRestore:
             db,
             filename="trash.jpg",
             status="indexed",
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
 
         body = client.get("/api/archive").json()
@@ -1112,7 +1112,7 @@ class TestArchiveTrashRestore:
             db,
             filename="trash.jpg",
             status="indexed",
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
 
         body = client.get("/api/trash").json()
@@ -1133,7 +1133,7 @@ class TestArchiveTrashRestore:
             db,
             filename="still-visible.jpg",
             status="indexed",
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
         with patch(
             "find_api.routers.gallery.purge_expired_trash",
@@ -1151,7 +1151,7 @@ class TestArchiveTrashRestore:
             db,
             filename="gone.jpg",
             status="indexed",
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
         keep_id, trashed_id, trashed_key = keep.id, trashed.id, trashed.minio_key
 
@@ -1179,7 +1179,7 @@ class TestArchiveTrashRestore:
     def test_purge_deletes_only_items_past_retention(self, client, db):
         from datetime import timedelta
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Default TRASH_RETENTION_DAYS is 30.
         old = _seed(
             db,
@@ -1213,7 +1213,7 @@ class TestArchiveTrashRestore:
             db,
             filename="old.jpg",
             status="indexed",
-            deleted_at=datetime.now(timezone.utc) - timedelta(days=40),
+            deleted_at=datetime.now(UTC) - timedelta(days=40),
         )
 
         with patch("find_api.routers.gallery.delete_file"):
@@ -1228,7 +1228,7 @@ class TestArchiveTrashRestore:
             db,
             filename="old.jpg",
             status="indexed",
-            deleted_at=datetime.now(timezone.utc) - timedelta(days=99),
+            deleted_at=datetime.now(UTC) - timedelta(days=99),
         )
 
         with patch("find_api.routers.gallery.settings") as mock_settings:

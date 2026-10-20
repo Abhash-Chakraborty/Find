@@ -1,7 +1,7 @@
 """Tests for people API thumbnail URL fields."""
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from find_api.models.face import Face
 from find_api.models.media import Media
@@ -27,7 +27,7 @@ def _seed_person_group(
         height=600,
         is_hidden=is_hidden,
         vault_state="hidden_encrypted" if is_hidden else "visible",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()
@@ -79,7 +79,7 @@ def test_people_images_omit_hidden_media_faces(client, db):
     person, _visible_media = _seed_person_group(db, name="Mixed")
 
     hidden_media = Media(
-        file_hash=hashlib.sha256("mixed-hidden".encode()).hexdigest(),
+        file_hash=hashlib.sha256(b"mixed-hidden").hexdigest(),
         minio_key="images/test/mixed-hidden.jpg",
         filename="mixed-hidden.jpg",
         content_type="image/jpeg",
@@ -89,7 +89,7 @@ def test_people_images_omit_hidden_media_faces(client, db):
         height=600,
         is_hidden=True,
         vault_state="hidden_encrypted",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(hidden_media)
     db.commit()
@@ -118,7 +118,7 @@ def test_people_list_counts_and_samples_are_not_mixed_between_people(client, db)
     # face_count should total all faces (3), sample_media_ids only the
     # 2 distinct media.
     media_2 = Media(
-        file_hash=hashlib.sha256("a-second".encode()).hexdigest(),
+        file_hash=hashlib.sha256(b"a-second").hexdigest(),
         minio_key="images/test/a-second.jpg",
         filename="a-second.jpg",
         content_type="image/jpeg",
@@ -128,7 +128,7 @@ def test_people_list_counts_and_samples_are_not_mixed_between_people(client, db)
         height=600,
         is_hidden=False,
         vault_state="visible",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media_2)
     db.commit()
@@ -206,7 +206,7 @@ def test_people_skip_archived_and_trashed_media(client, db):
     trashed_person, trashed_media = _seed_person_group(db, name="Trashed")
     visible_person, _visible_media = _seed_person_group(db, name="Shown")
     archived_media.is_archived = True
-    trashed_media.deleted_at = datetime.now(timezone.utc)
+    trashed_media.deleted_at = datetime.now(UTC)
     db.commit()
 
     person_ids = [item["id"] for item in client.get("/api/people").json()]

@@ -38,7 +38,6 @@ PP-OCRv5 languages means selecting language-specific model names (e.g.
 """
 
 import logging
-from typing import Dict, List, Union
 
 import numpy as np
 from PIL import Image
@@ -90,7 +89,7 @@ class OCRExtractor:
         )
 
     @staticmethod
-    def _normalize_variant(variant: Union[str, None]) -> str:
+    def _normalize_variant(variant: str | None) -> str:
         resolved = settings.OCR_VARIANT if variant is None else variant
         if resolved not in VALID_VARIANTS:
             raise ValueError(
@@ -211,12 +210,12 @@ class OCRExtractor:
             )
         return ocr.ocr(image, cls=True)
 
-    def _extract_text_parts(self, result) -> List[str]:
+    def _extract_text_parts(self, result) -> list[str]:
         """Normalize PaddleOCR 2.x/3.x output into plain text lines."""
         if not result:
             return []
 
-        text_parts: List[str] = []
+        text_parts: list[str] = []
         for page in result:
             if isinstance(page, dict) and "rec_texts" in page:
                 text_parts.extend(str(text) for text in page.get("rec_texts", []))
@@ -234,7 +233,7 @@ class OCRExtractor:
 
         return [text for text in text_parts if text]
 
-    def _extract_blocks(self, result) -> List[Dict]:
+    def _extract_blocks(self, result) -> list[dict]:
         """Normalize PaddleOCR 2.x/3.x output into text blocks with boxes."""
         if not result:
             return []
@@ -273,7 +272,7 @@ class OCRExtractor:
 
         return blocks
 
-    def _make_block(self, text, confidence, box) -> Dict:
+    def _make_block(self, text, confidence, box) -> dict:
         """Create a stable OCR block shape from a polygon or rectangle."""
         coords = np.array(box, dtype=float)
         if coords.ndim == 1 and coords.size >= 4:
@@ -296,7 +295,7 @@ class OCRExtractor:
             },
         }
 
-    def extract_text(self, image: Union[Image.Image, np.ndarray]) -> str:
+    def extract_text(self, image: Image.Image | np.ndarray) -> str:
         """
         Extract all text from image as a single string
         """
@@ -317,9 +316,7 @@ class OCRExtractor:
             logger.error(f"Failed to extract text: {e}")
             raise
 
-    def extract_text_with_boxes(
-        self, image: Union[Image.Image, np.ndarray]
-    ) -> List[Dict]:
+    def extract_text_with_boxes(self, image: Image.Image | np.ndarray) -> list[dict]:
         """
         Extract text with bounding boxes
         """
@@ -339,8 +336,8 @@ class OCRExtractor:
             raise
 
     def extract_text_and_boxes(
-        self, image: Union[Image.Image, np.ndarray]
-    ) -> tuple[str, List[Dict]]:
+        self, image: Image.Image | np.ndarray
+    ) -> tuple[str, list[dict]]:
         """Extract joined text and text blocks from a single OCR pass.
 
         Equivalent to calling extract_text() and extract_text_with_boxes()

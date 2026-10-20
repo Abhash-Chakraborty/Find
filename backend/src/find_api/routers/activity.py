@@ -4,8 +4,6 @@ Rows are written elsewhere (see services/activity_log.py) at the point of
 each state change; this router only reads and prunes them.
 """
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -43,11 +41,11 @@ def _serialize_activity(entry: Activity) -> dict:
 def list_activity(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    category: Optional[str] = Query(None, description="e.g. 'upload', 'vault'"),
-    action: Optional[str] = Query(None, description="e.g. 'completed', 'failed'"),
-    media_id: Optional[int] = Query(None, description="Filter to one asset's history"),
+    category: str | None = Query(None, description="e.g. 'upload', 'vault'"),
+    action: str | None = Query(None, description="e.g. 'completed', 'failed'"),
+    media_id: int | None = Query(None, description="Filter to one asset's history"),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """List activity log entries, newest first."""
     rows, total = activity_log.list_activity(
@@ -67,7 +65,7 @@ def list_activity(
 @router.post("/activity/clear", response_model=ActivityPurgeResponse)
 def clear_activity(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Delete every activity row the current user can see."""
     deleted = activity_log.clear_activity(db, user)
@@ -77,7 +75,7 @@ def clear_activity(
 @router.post("/activity/purge", response_model=ActivityPurgeResponse)
 def purge_expired_activity(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Delete activity rows older than the retention window.
 

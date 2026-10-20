@@ -3,7 +3,6 @@ Clustering using HDBSCAN
 """
 
 import logging
-from typing import Dict, Tuple
 
 import numpy as np
 
@@ -34,7 +33,7 @@ class ImageClusterer:
 
     def cluster(
         self, embeddings: np.ndarray, metric: str = "euclidean"
-    ) -> Tuple[np.ndarray, Dict]:
+    ) -> tuple[np.ndarray, dict]:
         """
         Cluster embeddings using HDBSCAN
         """
@@ -152,7 +151,7 @@ class ImageClusterer:
 
     def compute_centroids(
         self, embeddings: np.ndarray, labels: np.ndarray
-    ) -> Dict[int, np.ndarray]:
+    ) -> dict[int, np.ndarray]:
         """
         Compute centroid vectors for each cluster
         """
@@ -189,7 +188,7 @@ class ImageClusterer:
     def assign_to_cluster(
         self,
         embedding: np.ndarray,
-        centroids: Dict[int, np.ndarray],
+        centroids: dict[int, np.ndarray],
         threshold: float = 0.7,
     ) -> int:
         """

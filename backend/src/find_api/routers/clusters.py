@@ -1,7 +1,5 @@
 """Clusters endpoints for retrieving cluster information."""
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc
@@ -48,7 +46,7 @@ def _cluster_payload(cluster: Cluster, *, members: list | None = None):
 @router.get("/clusters")
 def get_clusters(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Get all clusters with member information
@@ -113,7 +111,7 @@ def get_clusters(
 def get_cluster_detail(
     cluster_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Get detailed information about a specific cluster
@@ -172,7 +170,7 @@ def update_cluster(
     cluster_id: int,
     payload: ClusterUpdateRequest,
     db: Session = Depends(get_db),
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """Update editable cluster metadata.
 
@@ -195,7 +193,7 @@ def update_cluster(
 @router.post("/cluster/run")
 def trigger_clustering(
     db: Session = Depends(get_db),
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """
     Manually trigger clustering job

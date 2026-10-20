@@ -3,7 +3,7 @@ Application configuration using Pydantic settings
 """
 
 import os
-from typing import Literal, Optional
+from typing import Literal
 from urllib.parse import urlparse
 
 from PIL import Image
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "images"
     MINIO_SECURE: bool = False
-    MINIO_PUBLIC_ENDPOINT: Optional[str] = None
+    MINIO_PUBLIC_ENDPOINT: str | None = None
     MINIO_PUBLIC_READ: bool = False
 
     # Redis
@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     # GPS extraction is privacy-sensitive and therefore opt-in. The persisted
     # dashboard preference overrides this value at job boundaries.
     MAP_ENABLED: bool = False
-    REMOTE_ML_URL: Optional[str] = None
-    REMOTE_ML_API_KEY: Optional[str] = None
+    REMOTE_ML_URL: str | None = None
+    REMOTE_ML_API_KEY: str | None = None
     REMOTE_ML_STRIP_EXIF: bool = True
     REMOTE_ML_FEATURES: str = "embed,caption,detect,ocr,cluster"
     ML_MODEL_IDLE_TTL_SECONDS: int = 300
@@ -118,13 +118,13 @@ class Settings(BaseSettings):
     # Storage
     STORAGE_BACKEND: Literal["minio", "local"] = "minio"
     LOCAL_STORAGE_PATH: str = "./storage/uploads"
-    STORAGE_ENDPOINT: Optional[str] = None
-    STORAGE_ACCESS_KEY: Optional[str] = None
-    STORAGE_SECRET_KEY: Optional[str] = None
-    STORAGE_BUCKET: Optional[str] = None
-    STORAGE_SECURE: Optional[bool] = None
-    STORAGE_PUBLIC_ENDPOINT: Optional[str] = None
-    STORAGE_PUBLIC_READ: Optional[bool] = None
+    STORAGE_ENDPOINT: str | None = None
+    STORAGE_ACCESS_KEY: str | None = None
+    STORAGE_SECRET_KEY: str | None = None
+    STORAGE_BUCKET: str | None = None
+    STORAGE_SECURE: bool | None = None
+    STORAGE_PUBLIC_ENDPOINT: str | None = None
+    STORAGE_PUBLIC_READ: bool | None = None
     STORAGE_AUTO_CREATE_BUCKET: bool = True
 
     @field_validator(

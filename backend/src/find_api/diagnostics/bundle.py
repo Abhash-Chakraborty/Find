@@ -13,11 +13,12 @@ import sys
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeout
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from find_api import __version__
 from find_api.core.config import settings
@@ -51,9 +52,7 @@ class _ErrorLogBuffer(logging.Handler):
         try:
             message = self.format(record) if self.formatter else record.getMessage()
             entry = {
-                "timestamp": datetime.fromtimestamp(
-                    record.created, tz=timezone.utc
-                ).isoformat(),
+                "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
                 "level": record.levelname,
                 "logger": record.name,
                 "message": scrub_string(message),
@@ -94,7 +93,7 @@ def ensure_error_log_buffer() -> None:
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 def _run_with_timeout(

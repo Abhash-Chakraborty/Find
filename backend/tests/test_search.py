@@ -1,6 +1,6 @@
 """Tests for GET /api/search response shape and pagination behavior."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -42,7 +42,7 @@ def _fake_search_row(media_id: int = 1, similarity: float = 0.82) -> MagicMock:
         cluster_id=None,
         similarity=similarity,
         metadata_json='{"caption": "a beach", "objects": ["sand"]}',
-        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
 
@@ -193,7 +193,7 @@ class TestSearchResponseShape:
                 cluster_id=None,
                 similarity=0.8,
                 metadata_json="{}",
-                created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
             ),
             MagicMock(
                 id=102,
@@ -211,7 +211,7 @@ class TestSearchResponseShape:
                 cluster_id=None,
                 similarity=0.79,
                 metadata_json="{}",
-                created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
             ),
         ]
 
@@ -268,7 +268,7 @@ class TestSearchResponseShape:
             cluster_id=None,
             similarity=0.62,
             metadata_json='{"caption": "desk calendar", "objects": [], "ocr_text": "weekly planning calendar monday tuesday"}',
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
         portrait = MagicMock(
@@ -287,7 +287,7 @@ class TestSearchResponseShape:
             cluster_id=None,
             similarity=0.64,
             metadata_json='{"caption": "person portrait", "objects": ["person"], "ocr_text": ""}',
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
         response = _mock_search(
@@ -315,7 +315,7 @@ class TestSearchResponseShape:
             cluster_id=None,
             similarity=0.99,
             metadata_json='{"caption": "calendar notes", "objects": [], "ocr_text": "calendar notes monday"}',
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
         response = _mock_search(client, [row], params={"q": "calendar notes text"})
@@ -341,7 +341,7 @@ class TestSearchResponseShape:
             cluster_id=None,
             similarity=0.61,
             metadata_json='{"caption": "receipt", "objects": [], "ocr_text": "total 42.00"}',
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
         default_response = _mock_search(client, [row], params={"q": "receipt"})

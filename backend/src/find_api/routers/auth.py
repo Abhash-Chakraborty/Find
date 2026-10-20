@@ -7,8 +7,7 @@ prefix added by main.py.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
@@ -46,7 +45,7 @@ limiter = Limiter(key_func=get_remote_address)
 class SetupRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=150)
     password: str = Field(..., min_length=8, max_length=128)
-    display_name: Optional[str] = Field(None, max_length=255)
+    display_name: str | None = Field(None, max_length=255)
 
     @field_validator("password")
     @classmethod
@@ -62,14 +61,14 @@ class LoginRequest(BaseModel):
 
 
 class InviteCreateRequest(BaseModel):
-    ttl_hours: Optional[int] = Field(None, gt=0, le=720)  # max 30 days
+    ttl_hours: int | None = Field(None, gt=0, le=720)  # max 30 days
 
 
 class JoinCreateRequest(BaseModel):
     invite_token: str = Field(..., min_length=1)
     username: str = Field(..., min_length=1, max_length=150)
     password: str = Field(..., min_length=8, max_length=128)
-    display_name: Optional[str] = Field(None, max_length=255)
+    display_name: str | None = Field(None, max_length=255)
 
     @field_validator("password")
     @classmethod
@@ -80,8 +79,8 @@ class JoinCreateRequest(BaseModel):
 
 
 class ProfileUpdateRequest(BaseModel):
-    username: Optional[str] = Field(None, min_length=1, max_length=150)
-    display_name: Optional[str] = Field(None, max_length=255)
+    username: str | None = Field(None, min_length=1, max_length=150)
+    display_name: str | None = Field(None, max_length=255)
 
 
 class PasswordChangeRequest(BaseModel):
@@ -106,7 +105,7 @@ def _user_dict(user: User) -> dict:
     }
 
 
-def _ensure_admin_available(admin: Optional[User], db: Session) -> User:
+def _ensure_admin_available(admin: User | None, db: Session) -> User:
     if admin is not None:
         return admin
     if not is_shared_mode(db):
@@ -120,7 +119,7 @@ def _set_session_cookie(
     """Set the browser session without exposing it to JavaScript."""
     max_age = max(
         0,
-        int((expires_at - datetime.now(timezone.utc)).total_seconds()),
+        int((expires_at - datetime.now(UTC)).total_seconds()),
     )
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -135,8 +134,8 @@ def _set_session_cookie(
 
 
 def _request_session_token(
-    authorization: Optional[str], session_cookie: Optional[str]
-) -> Optional[str]:
+    authorization: str | None, session_cookie: str | None
+) -> str | None:
     if authorization and authorization.startswith("Bearer "):
         return authorization[len("Bearer ") :]
     return session_cookie
@@ -209,7 +208,7 @@ def login(
         raise HTTPException(403, "Account is deactivated")
 
     # Update last_login timestamp
-    user.last_login = datetime.now(timezone.utc)
+    user.last_login = datetime.now(UTC)
     db.commit()
 
     raw_token, expires_at = create_session(db, user.id)
@@ -225,9 +224,9 @@ def login(
 @router.post("/auth/logout")
 def logout(
     response: Response,
-    user: Optional[User] = Depends(get_required_user),
-    authorization: Optional[str] = Header(None),
-    session_cookie: Optional[str] = Cookie(None, alias=SESSION_COOKIE_NAME),
+    user: User | None = Depends(get_required_user),
+    authorization: str | None = Header(None),
+    session_cookie: str | None = Cookie(None, alias=SESSION_COOKIE_NAME),
     db: Session = Depends(get_db),
 ):
     """End the current session."""
@@ -250,7 +249,7 @@ def logout(
 
 @router.get("/auth/me")
 def get_me(
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Return the currently authenticated user's info."""
     if user is None:
@@ -273,7 +272,7 @@ def get_auth_status(db: Session = Depends(get_db)):
 @router.patch("/auth/profile")
 def update_profile(
     body: ProfileUpdateRequest,
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
     db: Session = Depends(get_db),
 ):
     """Update the signed-in account's username and display name."""
@@ -307,7 +306,7 @@ def update_profile(
 def change_password(
     body: PasswordChangeRequest,
     response: Response,
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
     db: Session = Depends(get_db),
 ):
     """Change the password, revoke every old session, and issue a fresh one."""
@@ -335,9 +334,9 @@ def change_password(
 
 @router.get("/auth/sessions")
 def list_sessions(
-    user: Optional[User] = Depends(get_required_user),
-    authorization: Optional[str] = Header(None),
-    session_cookie: Optional[str] = Cookie(None, alias=SESSION_COOKIE_NAME),
+    user: User | None = Depends(get_required_user),
+    authorization: str | None = Header(None),
+    session_cookie: str | None = Cookie(None, alias=SESSION_COOKIE_NAME),
     db: Session = Depends(get_db),
 ):
     """List the signed-in user's server-side sessions without exposing tokens."""
@@ -345,7 +344,7 @@ def list_sessions(
         return {"sessions": []}
     raw_token = _request_session_token(authorization, session_cookie)
     current_hash = hash_token(raw_token) if raw_token else None
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     sessions = (
         db.query(AuthSession)
         .filter(AuthSession.user_id == user.id, AuthSession.expires_at > now)
@@ -371,9 +370,9 @@ def list_sessions(
 def revoke_session(
     session_id: int,
     response: Response,
-    user: Optional[User] = Depends(get_required_user),
-    authorization: Optional[str] = Header(None),
-    session_cookie: Optional[str] = Cookie(None, alias=SESSION_COOKIE_NAME),
+    user: User | None = Depends(get_required_user),
+    authorization: str | None = Header(None),
+    session_cookie: str | None = Cookie(None, alias=SESSION_COOKIE_NAME),
     db: Session = Depends(get_db),
 ):
     """Revoke one session owned by the signed-in user."""
@@ -407,7 +406,7 @@ def revoke_session(
 
 @router.get("/auth/users")
 def list_users(
-    admin: Optional[User] = Depends(get_admin_user),
+    admin: User | None = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
     """List the accounts on this instance. Admin only.
@@ -431,8 +430,8 @@ def list_users(
 
 @router.post("/auth/invites")
 def create_invite(
-    body: Optional[InviteCreateRequest] = None,
-    admin: Optional[User] = Depends(get_admin_user),
+    body: InviteCreateRequest | None = None,
+    admin: User | None = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
     """Generate a single-use invite token.
@@ -444,7 +443,7 @@ def create_invite(
 
     ttl = body.ttl_hours or settings.INVITE_TTL_HOURS
     raw_token, token_hash = generate_invite_token()
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl)
+    expires_at = datetime.now(UTC) + timedelta(hours=ttl)
 
     invite = InviteToken(
         token_hash=token_hash,
@@ -464,7 +463,7 @@ def create_invite(
 
 @router.get("/auth/invites")
 def list_invites(
-    admin: Optional[User] = Depends(get_admin_user),
+    admin: User | None = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
     """List all invite tokens (metadata only, no raw tokens)."""
@@ -513,12 +512,12 @@ def submit_join_request(
     if invite is None:
         raise HTTPException(400, "Invalid or already used invite token")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if invite.expires_at:
         expiry = invite.expires_at
         # Ensure timezone-aware comparison
         if expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=timezone.utc)
+            expiry = expiry.replace(tzinfo=UTC)
         if expiry < now:
             raise HTTPException(400, "Invite token has expired")
 
@@ -562,7 +561,7 @@ def submit_join_request(
 
 @router.get("/auth/join-requests")
 def list_join_requests(
-    admin: Optional[User] = Depends(get_admin_user),
+    admin: User | None = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
     """List all join requests. Admin only."""
@@ -587,7 +586,7 @@ def list_join_requests(
 @router.post("/auth/join-requests/{request_id}/approve")
 def approve_join_request(
     request_id: int,
-    admin: Optional[User] = Depends(get_admin_user),
+    admin: User | None = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
     """Approve a pending join request and create the user account."""
@@ -613,7 +612,7 @@ def approve_join_request(
 
     join_req.status = "approved"
     join_req.reviewed_by = admin.id
-    join_req.reviewed_at = datetime.now(timezone.utc)
+    join_req.reviewed_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(new_user)
@@ -624,7 +623,7 @@ def approve_join_request(
 @router.post("/auth/join-requests/{request_id}/reject")
 def reject_join_request(
     request_id: int,
-    admin: Optional[User] = Depends(get_admin_user),
+    admin: User | None = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
     """Reject a pending join request."""
@@ -638,7 +637,7 @@ def reject_join_request(
 
     join_req.status = "rejected"
     join_req.reviewed_by = admin.id
-    join_req.reviewed_at = datetime.now(timezone.utc)
+    join_req.reviewed_at = datetime.now(UTC)
     db.commit()
 
     return {"message": "Join request rejected"}

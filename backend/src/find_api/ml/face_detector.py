@@ -1,5 +1,4 @@
 import logging
-from typing import Dict, List, Union
 
 import cv2
 import numpy as np
@@ -53,7 +52,7 @@ class FaceDetector:
 
         return app
 
-    def detect_faces(self, image: Union[Image.Image, np.ndarray]) -> List[Dict]:
+    def detect_faces(self, image: Image.Image | np.ndarray) -> list[dict]:
         """
         Detect faces in image
         """
