@@ -564,8 +564,8 @@ def get_image_thumbnail(
 
     try:
         url = get_file_url(object_key)
-    except Exception:
-        raise HTTPException(500, "Could not generate image URL")
+    except Exception as exc:
+        raise HTTPException(500, "Could not generate image URL") from exc
 
     return RedirectResponse(url=url)
 

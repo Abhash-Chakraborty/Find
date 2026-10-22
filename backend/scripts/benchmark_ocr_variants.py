@@ -200,7 +200,7 @@ def benchmark_variant(variant: str, test_images: dict) -> dict:
 
         for category, images in test_images.items():
             latencies = []
-            for name, img in images:
+            for _name, img in images:
                 # Warmup run(s) not timed, to separate first-call JIT/graph
                 # overhead from steady-state per-image latency.
                 for _ in range(WARMUP_RUNS):

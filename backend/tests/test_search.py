@@ -161,7 +161,6 @@ class TestSearchResponseShape:
             "caption",
             "objects",
             "url",
-            "thumbnail_url",
         }
         assert expected.issubset(meta.keys())
         assert meta["thumbnail_url"] == "/api/image/1/thumbnail"
@@ -550,7 +549,7 @@ class TestSearchQueryCache:
         mock_db = MagicMock()
         side_effects = []
         signatures = signatures or ["1:2026-01-01T00:00:00+00:00"] * len(request_rows)
-        for rows, signature in zip(request_rows, signatures):
+        for rows, signature in zip(request_rows, signatures, strict=True):
             side_effects.append(_signature_result(signature))
             if rows is None:
                 continue

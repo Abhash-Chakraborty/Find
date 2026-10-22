@@ -206,10 +206,10 @@ def submit_split_feedback(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to split person cluster")
-        raise HTTPException(status_code=500, detail="Split failed")
+        raise HTTPException(status_code=500, detail="Split failed") from exc
 
 
 @router.post(
@@ -263,10 +263,10 @@ def submit_merge_feedback(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to merge persons")
-        raise HTTPException(status_code=500, detail="Merge failed")
+        raise HTTPException(status_code=500, detail="Merge failed") from exc
 
 
 @router.post(
@@ -334,10 +334,10 @@ def submit_wrong_person_feedback(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to mark wrong person")
-        raise HTTPException(status_code=500, detail="Operation failed")
+        raise HTTPException(status_code=500, detail="Operation failed") from exc
 
 
 @router.post(
@@ -376,10 +376,10 @@ def submit_correct_feedback(
         logger.info(f"Marked person {person_id} as correctly grouped")
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to submit correct feedback")
-        raise HTTPException(status_code=500, detail="Operation failed")
+        raise HTTPException(status_code=500, detail="Operation failed") from exc
 
 
 # ─── General Feedback Endpoints ────────────────────────────────────────────
@@ -427,10 +427,10 @@ def rate_search_result(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to record search rating")
-        raise HTTPException(status_code=500, detail="Failed to save rating")
+        raise HTTPException(status_code=500, detail="Failed to save rating") from exc
 
 
 @router.delete("/feedback/search-preferences")
@@ -461,13 +461,13 @@ def reset_search_preferences(
             "deleted_search_ratings": deleted,
             "reset_media_count": updated,
         }
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to reset search preferences")
         raise HTTPException(
             status_code=500,
             detail="Failed to reset search preferences",
-        )
+        ) from exc
 
 
 @router.post("/feedback/caption-rating", response_model=GeneralFeedbackResponse)
@@ -504,10 +504,10 @@ def rate_caption(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to record caption rating")
-        raise HTTPException(status_code=500, detail="Failed to save rating")
+        raise HTTPException(status_code=500, detail="Failed to save rating") from exc
 
 
 @router.post("/feedback/object-rating", response_model=GeneralFeedbackResponse)
@@ -544,10 +544,10 @@ def rate_object_detection(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to record object rating")
-        raise HTTPException(status_code=500, detail="Failed to save rating")
+        raise HTTPException(status_code=500, detail="Failed to save rating") from exc
 
 
 @router.post("/feedback/caption-correction", response_model=GeneralFeedbackResponse)
@@ -589,10 +589,12 @@ def submit_caption_correction(
         logger.info("Caption correction recorded for media %s", body.media_id)
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to record caption correction")
-        raise HTTPException(status_code=500, detail="Failed to save correction")
+        raise HTTPException(
+            status_code=500, detail="Failed to save correction"
+        ) from exc
 
 
 @router.post("/feedback/object-correction", response_model=GeneralFeedbackResponse)
@@ -643,10 +645,12 @@ def submit_object_correction(
         logger.info("Object correction recorded for media %s", body.media_id)
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to record object correction")
-        raise HTTPException(status_code=500, detail="Failed to save correction")
+        raise HTTPException(
+            status_code=500, detail="Failed to save correction"
+        ) from exc
 
 
 # ─── Analytics Endpoints ──────────────────────────────────────────────────
@@ -712,9 +716,9 @@ def get_feedback_stats(
                 else None,
             },
         }
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to get feedback stats")
-        raise HTTPException(status_code=500, detail="Failed to get statistics")
+        raise HTTPException(status_code=500, detail="Failed to get statistics") from exc
 
 
 @router.get("/people/feedback", response_model=list[PersonFeedbackResponse])

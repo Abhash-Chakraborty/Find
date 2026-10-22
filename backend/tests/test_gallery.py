@@ -102,7 +102,6 @@ class TestGalleryResponseShape:
             "thumbnail_url",
             "liked",
             "url",
-            "thumbnail_url",
         }
         assert expected_keys.issubset(item.keys())
         assert item["thumbnail_url"] == f"/api/image/{item['id']}/thumbnail"

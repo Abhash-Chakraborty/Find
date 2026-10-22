@@ -72,7 +72,7 @@ class ImageClusterer:
                 "cluster_sizes": {},
             }
 
-            for label, count in zip(unique_labels, label_counts):
+            for label, count in zip(unique_labels, label_counts, strict=True):
                 if label != -1:
                     cluster_info["cluster_sizes"][int(label)] = int(count)
 
@@ -180,7 +180,7 @@ class ImageClusterer:
         norms = np.linalg.norm(centroid_matrix, axis=1, keepdims=True)
         np.divide(centroid_matrix, norms, out=centroid_matrix, where=norms > 0)
 
-        for label, centroid in zip(unique_labels, centroid_matrix):
+        for label, centroid in zip(unique_labels, centroid_matrix, strict=True):
             centroids[int(label)] = centroid
 
         return centroids

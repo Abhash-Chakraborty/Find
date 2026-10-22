@@ -161,11 +161,11 @@ def embed(
 
     try:
         meta_dict: dict[str, Any] = json.loads(metadata)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="metadata field must be valid JSON.",
-        )
+        ) from exc
     if not isinstance(meta_dict, dict):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

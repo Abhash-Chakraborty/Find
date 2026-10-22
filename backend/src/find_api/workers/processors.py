@@ -381,7 +381,7 @@ def generate_hybrid_embedding(
                 )
             else:
                 text_embeddings = embedder.embed_text(text_inputs)
-                for name, vec in zip(text_signal_names, text_embeddings):
+                for name, vec in zip(text_signal_names, text_embeddings, strict=True):
                     signal_vectors[name] = _safe_normalize_embedding(vec)
 
         active_signals = list(signal_vectors.keys())

@@ -26,7 +26,7 @@ class LocalStorageBackend(StorageBackend):
             logger.info(f"Initialized local storage at: {self.base_path}")
         except Exception as e:
             logger.error(f"Failed to initialize local storage: {e}")
-            raise StorageException(f"Failed to create storage directory: {e}")
+            raise StorageException(f"Failed to create storage directory: {e}") from e
 
     def _validate_path(self, object_name: str) -> Path:
         """Validate and normalize object path to prevent path traversal"""
@@ -39,8 +39,10 @@ class LocalStorageBackend(StorageBackend):
 
         try:
             full_path.relative_to(self.base_path)
-        except ValueError:
-            raise StorageException(f"Path is outside storage directory: {object_name}")
+        except ValueError as exc:
+            raise StorageException(
+                f"Path is outside storage directory: {object_name}"
+            ) from exc
 
         return full_path
 
@@ -65,7 +67,7 @@ class LocalStorageBackend(StorageBackend):
             raise
         except Exception as e:
             logger.error(f"Failed to upload file: {e}")
-            raise StorageException(f"Upload failed: {e}")
+            raise StorageException(f"Upload failed: {e}") from e
 
     async def get_file(self, object_name: str) -> bytes:
         """Download file from local filesystem"""
@@ -87,7 +89,7 @@ class LocalStorageBackend(StorageBackend):
             raise
         except Exception as e:
             logger.error(f"Failed to download file: {e}")
-            raise StorageException(f"Download failed: {e}")
+            raise StorageException(f"Download failed: {e}") from e
 
     async def download_file_to_path(
         self, object_name: str, destination_path: str
@@ -117,7 +119,7 @@ class LocalStorageBackend(StorageBackend):
             raise
         except Exception as e:
             logger.error(f"Failed to stream file: {e}")
-            raise StorageException(f"Stream failed: {e}")
+            raise StorageException(f"Stream failed: {e}") from e
 
     async def get_file_url(self, object_name: str, expires: int = 3600) -> str:
         """Get local file path as URL"""
@@ -135,7 +137,7 @@ class LocalStorageBackend(StorageBackend):
             raise
         except Exception as e:
             logger.error(f"Failed to generate URL: {e}")
-            raise StorageException(f"URL generation failed: {e}")
+            raise StorageException(f"URL generation failed: {e}") from e
 
     async def delete_file(self, object_name: str) -> None:
         """Delete file from local filesystem"""
@@ -159,7 +161,7 @@ class LocalStorageBackend(StorageBackend):
             raise
         except Exception as e:
             logger.error(f"Failed to delete file: {e}")
-            raise StorageException(f"Deletion failed: {e}")
+            raise StorageException(f"Deletion failed: {e}") from e
 
     async def file_exists(self, object_name: str) -> bool:
         """Check if file exists in local filesystem"""
@@ -170,4 +172,4 @@ class LocalStorageBackend(StorageBackend):
             raise
         except Exception as e:
             logger.error(f"Failed to check file existence: {e}")
-            raise StorageException(f"Existence check failed: {e}")
+            raise StorageException(f"Existence check failed: {e}") from e

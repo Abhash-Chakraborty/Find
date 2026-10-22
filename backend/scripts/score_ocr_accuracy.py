@@ -30,10 +30,10 @@ from PIL import Image
 
 try:
     import Levenshtein
-except ImportError:
+except ImportError as exc:
     print("This script requires python-Levenshtein. Install with:")
     print("  uv add --dev python-Levenshtein")
-    raise SystemExit(1)
+    raise SystemExit(1) from exc
 
 import sys
 

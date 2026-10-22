@@ -732,7 +732,7 @@ def cluster_faces():
         # than one UPDATE round-trip per face.
         face_person_mappings = [
             {"id": face_id, "person_id": person_records[int(label)].id}
-            for face_id, label in zip(face_ids, labels)
+            for face_id, label in zip(face_ids, labels, strict=True)
             if int(label) != -1
         ]
         if face_person_mappings:

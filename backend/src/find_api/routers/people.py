@@ -303,9 +303,9 @@ def trigger_face_clustering(
             "status": "queued",
             "enqueued": True,
         }
-    except Exception:
+    except Exception as exc:
         logger.exception("Face clustering failed")
         raise HTTPException(
             status_code=500,
             detail="Face clustering failed",
-        )
+        ) from exc

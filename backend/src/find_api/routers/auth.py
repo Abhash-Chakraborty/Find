@@ -548,9 +548,9 @@ def submit_join_request(
     db.add(join_req)
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(409, "Username is already taken")
+        raise HTTPException(409, "Username is already taken") from exc
     db.refresh(join_req)
 
     return {

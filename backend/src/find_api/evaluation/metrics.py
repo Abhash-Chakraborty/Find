@@ -79,7 +79,7 @@ def mean_reciprocal_rank(
         return 0.0
     total = sum(
         reciprocal_rank(ranking, relevant)
-        for ranking, relevant in zip(rankings, relevants)
+        for ranking, relevant in zip(rankings, relevants, strict=True)
     )
     return total / len(rankings)
 

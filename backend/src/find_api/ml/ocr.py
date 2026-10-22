@@ -248,7 +248,7 @@ class OCRExtractor:
                     boxes = page.get("dt_polys")
                 if boxes is None:
                     boxes = []
-                for text, score, box in zip(texts, scores, boxes):
+                for text, score, box in zip(texts, scores, boxes, strict=False):
                     blocks.append(self._make_block(text, score, box))
                 continue
 
@@ -261,7 +261,7 @@ class OCRExtractor:
                     boxes = data.get("dt_polys")
                 if boxes is None:
                     boxes = []
-                for text, score, box in zip(texts, scores, boxes):
+                for text, score, box in zip(texts, scores, boxes, strict=False):
                     blocks.append(self._make_block(text, score, box))
                 continue
 

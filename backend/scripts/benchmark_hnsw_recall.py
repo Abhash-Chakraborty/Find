@@ -255,7 +255,7 @@ def run(conn, size: int, kind: str, k: int, n_queries: int, seed: int) -> dict:
             rankings, latencies = hnsw_top_k(conn, queries, k, ef_search)
             recalls = [
                 recall_at_k(ranking, set(expected), k)
-                for ranking, expected in zip(rankings, truth)
+                for ranking, expected in zip(rankings, truth, strict=True)
             ]
             results["configs"].append(
                 {

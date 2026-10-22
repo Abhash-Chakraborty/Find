@@ -219,8 +219,8 @@ async def upload_bulk_images(
                         }
                     )
 
-    except zipfile.BadZipFile:
-        raise HTTPException(400, "Uploaded file is not a valid ZIP archive")
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(400, "Uploaded file is not a valid ZIP archive") from exc
 
     return {"results": results, "total": len(results)}
 
@@ -244,10 +244,14 @@ def _verify_image_content(filename: str, file_data: bytes) -> None:
             img.verify()
     except HTTPException:
         raise
-    except Image.DecompressionBombError:
-        raise HTTPException(400, f"File {filename} exceeds the safe pixel limit")
-    except Exception:
-        raise HTTPException(400, f"File {filename} is corrupted or not a valid image")
+    except Image.DecompressionBombError as exc:
+        raise HTTPException(
+            400, f"File {filename} exceeds the safe pixel limit"
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            400, f"File {filename} is corrupted or not a valid image"
+        ) from exc
 
 
 def _ingest_image(
