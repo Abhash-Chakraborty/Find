@@ -444,15 +444,14 @@ def unlock_vault(
     # vault secret cannot be a trivial passphrase. Existing vaults are not
     # re-validated, so previously-set passphrases keep working.
     is_new_vault = _load_vault_config(db) is None
-    if is_new_vault:
-        if len(payload.passphrase) < MIN_VAULT_PASSPHRASE_LENGTH:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Vault passphrase must be at least "
-                    f"{MIN_VAULT_PASSPHRASE_LENGTH} characters"
-                ),
-            )
+    if is_new_vault and len(payload.passphrase) < MIN_VAULT_PASSPHRASE_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Vault passphrase must be at least "
+                f"{MIN_VAULT_PASSPHRASE_LENGTH} characters"
+            ),
+        )
 
     master_key = _load_or_create_master_key(db, payload.passphrase)
     try:

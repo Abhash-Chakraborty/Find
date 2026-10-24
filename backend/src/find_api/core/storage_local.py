@@ -103,13 +103,15 @@ class LocalStorageBackend(StorageBackend):
                     raise StorageException(f"File not found: {object_name}")
                 dest = Path(destination_path)
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                with open(full_path, "rb") as src:
-                    with open(destination_path, "wb") as dst:
-                        while True:
-                            chunk = src.read(1024 * 1024)
-                            if not chunk:
-                                break
-                            dst.write(chunk)
+                with (
+                    open(full_path, "rb") as src,
+                    open(destination_path, "wb") as dst,
+                ):
+                    while True:
+                        chunk = src.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        dst.write(chunk)
 
             await asyncio.to_thread(_copy)
 

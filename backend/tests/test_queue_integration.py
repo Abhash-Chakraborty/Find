@@ -7,6 +7,7 @@ backend when QUEUE_MODE=sqlite.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from unittest.mock import patch
@@ -36,10 +37,8 @@ def sqlite_settings():
         patch.object(settings, "QUEUE_DB_PATH", path),
     ):
         yield
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(path)
-    except OSError:
-        pass
 
 
 # ---------------------------------------------------------------------------

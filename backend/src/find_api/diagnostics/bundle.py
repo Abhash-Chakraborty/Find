@@ -6,6 +6,7 @@ redaction layer before it is returned to callers.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import platform
@@ -327,18 +328,12 @@ def _collect_queue_stats() -> dict[str, Any]:
             queued += len(q)
             started += len(StartedJobRegistry(queue=q))
             failed += len(FailedJobRegistry(queue=q))
-            try:
+            with contextlib.suppress(Exception):
                 finished += len(q.finished_job_registry)
-            except Exception:  # noqa: BLE001
-                pass
-            try:
+            with contextlib.suppress(Exception):
                 deferred += len(q.deferred_job_registry)
-            except Exception:  # noqa: BLE001
-                pass
-            try:
+            with contextlib.suppress(Exception):
                 scheduled += len(q.scheduled_job_registry)
-            except Exception:  # noqa: BLE001
-                pass
 
         return {
             "mode": mode,

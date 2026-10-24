@@ -126,9 +126,9 @@ def client(db):
                 "find_api.routers.search.get_file_url",
                 return_value="http://fake/img.jpg",
             ),
+            TestClient(app) as c,
         ):
-            with TestClient(app) as c:
-                yield c
+            yield c
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.router.lifespan_context = original_lifespan

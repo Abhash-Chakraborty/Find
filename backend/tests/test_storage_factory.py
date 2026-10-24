@@ -152,11 +152,13 @@ async def test_initialize_storage_propagates_failure():
     fake_backend = MagicMock()
     fake_backend.init_storage = AsyncMock(side_effect=RuntimeError("boom"))
 
-    with patch.object(
-        storage_factory, "create_storage_backend", return_value=fake_backend
+    with (
+        patch.object(
+            storage_factory, "create_storage_backend", return_value=fake_backend
+        ),
+        pytest.raises(RuntimeError, match="boom"),
     ):
-        with pytest.raises(RuntimeError, match="boom"):
-            await storage_factory.initialize_storage()
+        await storage_factory.initialize_storage()
 
 
 def test_get_storage_instance_raises_when_not_initialized():
