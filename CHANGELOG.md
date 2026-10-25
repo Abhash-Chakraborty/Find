@@ -6,8 +6,32 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
 ## [Unreleased]
 
+### Fixed
+
+- Search's file-type filter matches JPEGs again; `jpg` and `jpeg` map to
+  `image/jpeg`, the same as in the gallery.
+- Archived and trashed photos no longer appear in Clusters or People.
+- Photos in a password-protected share load again. A correct password sets a
+  12-hour unlock cookie for that link, so thumbnails no longer need the
+  password or run a bcrypt check each.
+- Switching between CPU and GPU reloads models that are already in memory
+  instead of keeping the old copy until the worker restarts.
+- Retry analysis can recover a failed OCR model load.
+- New uploads appear in the gallery as soon as they finish.
+- The model footprint report shows the caption and OCR models as loaded when
+  they are.
+
+### Removed
+
+- The TestSprite workflow, which sent the app to a hosted test service.
+- `plan.md`, `POST /cluster/trigger` (use `/cluster/run`), unused backend and
+  frontend helpers, and four unused npm packages.
+
 ### Changed
 
+- Docs name BLIP as the caption model.
+- The backend lints with import sorting, pyupgrade, bugbear and simplify
+  rules, and re-raised exceptions keep their cause.
 - Contributor work now targets a protected `canary` default branch; only the
   reviewed canary promotion can enter `main`.
 - Release preparation synchronizes every version surface and uses one manual
