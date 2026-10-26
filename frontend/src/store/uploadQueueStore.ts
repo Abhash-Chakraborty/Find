@@ -54,6 +54,16 @@ export function getProcessingState(
   return "queued";
 }
 
+/** An uploaded item whose indexing job hasn't settled yet. */
+export function isProcessingUpload(item: UploadQueueItem): boolean {
+  return Boolean(
+    item.job_id &&
+      item.status === "uploaded" &&
+      item.processingState !== "indexed" &&
+      item.processingState !== "failed",
+  );
+}
+
 export function getUploadItemProgress(item: UploadQueueItem): number {
   if (item.status === "failed" || item.processingState === "failed") return 100;
   if (item.processingState === "indexed") return 100;
