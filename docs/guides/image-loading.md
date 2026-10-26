@@ -91,8 +91,8 @@ the thumbnail/original split clear when adding new views.
 | `GET /api/gallery` | Returns `url` and `thumbnail_url` per item | Grid should render `thumbnail_url`, with `url` only as a fallback. |
 | `GET /api/search?q=...` | Returns `metadata.url` and `metadata.thumbnail_url` per result | Grid should render `thumbnail_url`, with `url` only as a fallback. |
 | `GET /api/clusters` | Returns `url` and `thumbnail_url` for sample images | Cluster cards should render `thumbnail_url`, with `url` only as a fallback. |
-| `GET /api/cluster/{cluster_id}` | Returns `url` and `thumbnail_url` for member images | Member grids should render `thumbnail_url`, with `url` only as a fallback. |
-| `GET /api/people` and `GET /api/people/{person_id}/images` | Return thumbnail URLs for person and media previews | People grids should render thumbnail URLs. |
+| `GET /api/cluster/{cluster_id}` | Returns `url` and `thumbnail_url` for member images | Member grids should render `thumbnail_url`, with `url` only as a fallback. Members come in pages (`skip`, `limit`: 200 by default, 500 at most; `q` filters by filename); `total` counts every match. |
+| `GET /api/people` and `GET /api/people/{person_id}/images` | Return thumbnail URLs for person and media previews | People grids should render thumbnail URLs. Person images come in pages of photos (`skip`, `limit`), with `total` for the full count. |
 | `GET /api/image/{media_id}` | Returns image detail JSON, including original `url` and `thumbnail_url` | Preview modal can use the original `url` for inspection/download. |
 | `GET /api/image/{media_id}/thumbnail` | Redirects to the stored thumbnail when present, otherwise falls back to the original | Safe default for grid/list image elements. |
 | `POST /api/thumbnails/backfill` | Queues thumbnail generation for existing media without thumbnails | Maintenance action; not used for normal image rendering. |

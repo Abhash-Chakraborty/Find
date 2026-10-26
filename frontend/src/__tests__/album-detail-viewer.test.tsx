@@ -178,3 +178,23 @@ describe("AlbumDetailPage viewer", () => {
     await waitFor(() => expect(api.trashImage).toHaveBeenCalledWith(10));
   });
 });
+
+describe("AlbumDetailPage paging", () => {
+  it("loads the next page of photos on Load more", async () => {
+    api.getAlbumAssets.mockImplementation(
+      async (_albumId: number, { skip = 0 }: { skip?: number } = {}) =>
+        skip === 0
+          ? { items: [item(10), item(11)], total: 3, skip: 0, limit: 2 }
+          : { items: [item(12)], total: 3, skip: 2, limit: 2 },
+    );
+    renderPage();
+
+    await screen.findByTestId("open-asset-11");
+    expect(screen.getByText("Showing 2 of 3")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await screen.findByTestId("open-asset-12");
+    expect(api.getAlbumAssets).toHaveBeenLastCalledWith(1, { skip: 2 });
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+  });
+});

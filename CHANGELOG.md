@@ -48,6 +48,9 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
   took 4.2 ms instead of 203 ms. The match count now counts within that pool.
 - Gallery, search and cluster lists no longer load embeddings or
   sign a storage URL per photo; they link to the app's own image routes.
+- A person, a cluster or an album opens with its first 200 photos and a
+  Load more button, instead of sending every photo in one response. The
+  cluster filename filter now searches all members, not only loaded ones.
 - Clusters, People and the AI runtime card stop polling on an idle library.
   They refresh while images index, during a clustering job, and on focus.
 - Docs name BLIP as the caption model.

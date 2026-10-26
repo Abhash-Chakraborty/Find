@@ -7,7 +7,12 @@
  * covers viewing + managing an existing album's contents.
  */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Archive,
   ArrowLeft,
@@ -26,6 +31,7 @@ import { toast } from "sonner";
 import { AlbumAssetPicker } from "@/components/album-asset-picker";
 import { AlbumShareLinks } from "@/components/album-share-links";
 import { ImagePreviewModal } from "@/components/image-preview-modal";
+import { LoadMoreButton, nextSkip } from "@/components/load-more-button";
 import { TimelineMediaView } from "@/components/timeline-media-view";
 import {
   deleteAlbum,
@@ -52,11 +58,15 @@ export default function AlbumDetailPage() {
     enabled: Number.isFinite(albumId),
   });
 
-  const { data: assetsData, isLoading: assetsLoading } = useQuery({
+  const assetsQuery = useInfiniteQuery({
     queryKey: ["album-assets", albumId],
-    queryFn: () => getAlbumAssets(albumId),
+    queryFn: ({ pageParam }) => getAlbumAssets(albumId, { skip: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages) =>
+      nextSkip(pages, (page) => page.items.length, lastPage.total),
     enabled: Number.isFinite(albumId),
   });
+  const assetsLoading = assetsQuery.isLoading;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["album", albumId] });
@@ -120,7 +130,8 @@ export default function AlbumDetailPage() {
 
   // Assets archived/trashed from the viewer leave the album view immediately
   // (they also fall out of the browsable query on refetch).
-  const allItems = assetsData?.items ?? [];
+  const allItems = assetsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const assetTotal = assetsQuery.data?.pages[0]?.total ?? 0;
   const items = allItems.filter((item) => !removedIds.has(item.id));
 
   return (
@@ -301,6 +312,15 @@ export default function AlbumDetailPage() {
                 />
               );
             }}
+          />
+        )}
+
+        {assetsQuery.hasNextPage && (
+          <LoadMoreButton
+            shown={items.length}
+            total={assetTotal - (allItems.length - items.length)}
+            loading={assetsQuery.isFetchingNextPage}
+            onLoadMore={() => void assetsQuery.fetchNextPage()}
           />
         )}
 

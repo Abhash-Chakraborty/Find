@@ -1,6 +1,12 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Check,
   Grid3x3,
@@ -17,6 +23,7 @@ import {
   ImagePreviewModal,
   type PreviewMedia,
 } from "@/components/image-preview-modal";
+import { LoadMoreButton, nextSkip } from "@/components/load-more-button";
 import { TimelineMediaView } from "@/components/timeline-media-view";
 import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
@@ -30,11 +37,7 @@ import {
   triggerClustering,
   updateCluster,
 } from "@/lib/api";
-import {
-  MINIO_URL_REFRESH_INTERVAL_MS,
-  MINIO_URL_STALE_TIME_MS,
-  resolveMediaUrl,
-} from "@/lib/media";
+import { resolveMediaUrl } from "@/lib/media";
 import { useAiAvailability } from "@/lib/use-ai-availability";
 import { useLibraryBusy } from "@/lib/use-library-busy";
 
@@ -99,13 +102,35 @@ export default function ClustersPage() {
   });
   const { aiUnavailable, unavailableMessage } = useAiAvailability();
 
-  const selectedClusterQuery = useQuery({
-    queryKey: ["cluster-detail", selectedClusterId],
-    queryFn: () => getClusterDetail(selectedClusterId as number),
+  // The filename filter runs on the server so it searches every member,
+  // not only the pages loaded so far. Wait for typing to pause first.
+  const [memberFilter, setMemberFilter] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setMemberFilter(filterText.trim()),
+      250,
+    );
+    return () => window.clearTimeout(timer);
+  }, [filterText]);
+
+  const selectedClusterQuery = useInfiniteQuery({
+    queryKey: ["cluster-detail", selectedClusterId, memberFilter],
+    queryFn: ({ pageParam }) =>
+      getClusterDetail(selectedClusterId as number, {
+        skip: pageParam,
+        q: memberFilter,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages) =>
+      nextSkip(pages, (page) => page.members.length, lastPage.total),
     enabled: selectedClusterId !== null,
-    staleTime: MINIO_URL_STALE_TIME_MS,
-    refetchInterval: MINIO_URL_REFRESH_INTERVAL_MS,
+    // Keep the open cluster on screen while a new filter loads.
+    placeholderData: (previous) =>
+      previous?.pages[0]?.id === selectedClusterId ? previous : undefined,
   });
+  const clusterPage = selectedClusterQuery.data?.pages[0];
+  const clusterMembers =
+    selectedClusterQuery.data?.pages.flatMap((page) => page.members) ?? [];
 
   const clusterJobQuery = useQuery({
     queryKey: ["cluster-job", clusterJobId],
@@ -124,15 +149,8 @@ export default function ClustersPage() {
   });
 
   useEffect(() => {
-    setClusterLabelDraft(
-      selectedClusterQuery.data?.label ??
-        selectedClusterQuery.data?.description ??
-        "",
-    );
-  }, [
-    selectedClusterQuery.data?.label,
-    selectedClusterQuery.data?.description,
-  ]);
+    setClusterLabelDraft(clusterPage?.label ?? clusterPage?.description ?? "");
+  }, [clusterPage?.label, clusterPage?.description]);
 
   useEffect(() => {
     if (!clusterJobId || !clusterJobQuery.data) {
@@ -203,14 +221,17 @@ export default function ClustersPage() {
           ),
         };
       });
-      queryClient.setQueryData<ClusterDetail>(
-        ["cluster-detail", variables.clusterId],
+      queryClient.setQueriesData<InfiniteData<ClusterDetail>>(
+        { queryKey: ["cluster-detail", variables.clusterId] },
         (current) =>
           current
             ? {
                 ...current,
-                label: nextLabel,
-                description: cluster.description,
+                pages: current.pages.map((page) => ({
+                  ...page,
+                  label: nextLabel,
+                  description: cluster.description,
+                })),
               }
             : current,
       );
@@ -263,11 +284,6 @@ export default function ClustersPage() {
     if (indexedImageCount < effectiveMinClusterSize) return "not-enough-images";
     return "no-stable-clusters";
   }, [indexedQuery.isSuccess, indexedImageCount, effectiveMinClusterSize]);
-
-  const filteredMembers =
-    selectedClusterQuery.data?.members.filter((member) =>
-      member.filename.toLowerCase().includes(filterText.toLowerCase()),
-    ) ?? [];
 
   return (
     <div className="page-shell">
@@ -552,10 +568,9 @@ export default function ClustersPage() {
               onClick={() => {
                 setSelectedClusterId(null);
                 setFilterText("");
+                setMemberFilter("");
                 setClusterLabelDraft(
-                  selectedClusterQuery.data?.label ??
-                    selectedClusterQuery.data?.description ??
-                    "",
+                  clusterPage?.label ?? clusterPage?.description ?? "",
                 );
               }}
               className="icon-button absolute right-4 top-4 z-20 bg-[color:var(--overlay)] text-white backdrop-blur-md"
@@ -566,13 +581,13 @@ export default function ClustersPage() {
 
             <div className="border-b border-[var(--frost)] px-6 py-5">
               <h2 className="text-xl font-medium text-[color:var(--near-white)]">
-                {selectedClusterQuery.data
-                  ? getClusterDisplayName(selectedClusterQuery.data)
+                {clusterPage
+                  ? getClusterDisplayName(clusterPage)
                   : `Cluster ${selectedClusterId}`}
               </h2>
-              {selectedClusterQuery.data &&
-                (selectedClusterQuery.data.label?.trim() ||
-                  selectedClusterQuery.data.description?.trim()) && (
+              {clusterPage &&
+                (clusterPage.label?.trim() ||
+                  clusterPage.description?.trim()) && (
                   <p className="mt-1 text-xs uppercase text-[color:var(--muted)]">
                     Cluster {selectedClusterId}
                   </p>
@@ -598,18 +613,18 @@ export default function ClustersPage() {
                 </div>
               )}
 
-              {selectedClusterQuery.data && (
+              {clusterPage && (
                 <div>
                   <div className="mb-6 flex flex-wrap items-center gap-3">
                     <span className="accent-badge status-default">
-                      {selectedClusterQuery.data.member_count} members
+                      {clusterPage.member_count} members
                     </span>
-                    {selectedClusterQuery.data.description &&
-                      selectedClusterQuery.data.label?.trim() &&
-                      selectedClusterQuery.data.description.trim() !==
-                        selectedClusterQuery.data.label.trim() && (
+                    {clusterPage.description &&
+                      clusterPage.label?.trim() &&
+                      clusterPage.description.trim() !==
+                        clusterPage.label.trim() && (
                         <span className="text-sm text-[color:var(--muted)]">
-                          {selectedClusterQuery.data.description}
+                          {clusterPage.description}
                         </span>
                       )}
                   </div>
@@ -618,7 +633,7 @@ export default function ClustersPage() {
                     onSubmit={(event) => {
                       event.preventDefault();
                       updateClusterMutation.mutate({
-                        clusterId: selectedClusterQuery.data.id,
+                        clusterId: clusterPage.id,
                         label: clusterLabelDraft,
                       });
                     }}
@@ -629,7 +644,7 @@ export default function ClustersPage() {
                       onChange={(event) =>
                         setClusterLabelDraft(event.target.value)
                       }
-                      placeholder={`Cluster ${selectedClusterQuery.data.id}`}
+                      placeholder={`Cluster ${clusterPage.id}`}
                       aria-label="Cluster name"
                       maxLength={255}
                       className="min-w-0 flex-1 rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm text-[color:var(--near-white)] outline-none transition focus:border-[#3b9eff]"
@@ -657,14 +672,15 @@ export default function ClustersPage() {
                       className="w-full rounded-2xl border border-[var(--frost)] bg-[color:var(--surface-soft)] px-4 py-3 text-sm text-[color:var(--near-white)] outline-none transition focus:border-[#3b9eff]"
                     />
                   </div>
-                  {filteredMembers.length === 0 && (
-                    <div className="py-12 text-center text-[color:var(--silver)]">
-                      No matching members found.
-                    </div>
-                  )}
+                  {clusterMembers.length === 0 &&
+                    !selectedClusterQuery.isFetching && (
+                      <div className="py-12 text-center text-[color:var(--silver)]">
+                        No matching members found.
+                      </div>
+                    )}
 
                   <TimelineMediaView
-                    items={filteredMembers}
+                    items={clusterMembers}
                     scrollContainerRef={clusterTimelineScrollRef}
                     getId={(member) => member.id}
                     getDate={() => null}
@@ -690,6 +706,16 @@ export default function ClustersPage() {
                       })
                     }
                   />
+                  {selectedClusterQuery.hasNextPage && (
+                    <LoadMoreButton
+                      shown={clusterMembers.length}
+                      total={clusterPage.total}
+                      loading={selectedClusterQuery.isFetchingNextPage}
+                      onLoadMore={() =>
+                        void selectedClusterQuery.fetchNextPage()
+                      }
+                    />
+                  )}
                 </div>
               )}
             </div>

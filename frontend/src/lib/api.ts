@@ -172,6 +172,10 @@ export interface ClusterDetail {
     thumbnail_url?: string | null;
     caption?: string;
   }>;
+  /** Members matching the filename filter; equals member_count without one. */
+  total: number;
+  skip: number;
+  limit: number;
 }
 
 export type ClusterUpdateResponse = Omit<ClusterInfo, "samples">;
@@ -762,8 +766,11 @@ export const getClusters = async (): Promise<ClustersResponse> => {
 
 export const getClusterDetail = async (
   clusterId: number,
+  { skip = 0, limit = DETAIL_PAGE_SIZE, q }: DetailPage & { q?: string } = {},
 ): Promise<ClusterDetail> => {
-  const response = await api.get<ClusterDetail>(`/api/cluster/${clusterId}`);
+  const response = await api.get<ClusterDetail>(`/api/cluster/${clusterId}`, {
+    params: { skip, limit, q: q?.trim() || undefined },
+  });
   return response.data;
 };
 
@@ -834,6 +841,17 @@ export interface PersonImagesResponse {
   person_id: number;
   person_name: string | null;
   images: PersonImage[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+/** Page size for person, cluster and album detail lists. */
+export const DETAIL_PAGE_SIZE = 200;
+
+export interface DetailPage {
+  skip?: number;
+  limit?: number;
 }
 
 export const getPeople = async (): Promise<PersonItem[]> => {
@@ -843,9 +861,11 @@ export const getPeople = async (): Promise<PersonItem[]> => {
 
 export const getPersonImages = async (
   personId: number,
+  { skip = 0, limit = DETAIL_PAGE_SIZE }: DetailPage = {},
 ): Promise<PersonImagesResponse> => {
   const response = await api.get<PersonImagesResponse>(
     `/api/people/${personId}/images`,
+    { params: { skip, limit } },
   );
   return response.data;
 };
@@ -1017,6 +1037,8 @@ export interface Album {
 export interface AlbumAssetsResponse {
   items: MediaItem[];
   total: number;
+  skip: number;
+  limit: number;
 }
 
 export const getAlbums = async (): Promise<{
@@ -1061,9 +1083,11 @@ export const deleteAlbum = async (
 
 export const getAlbumAssets = async (
   albumId: number,
+  { skip = 0, limit = DETAIL_PAGE_SIZE }: DetailPage = {},
 ): Promise<AlbumAssetsResponse> => {
   const response = await api.get<AlbumAssetsResponse>(
     `/api/albums/${albumId}/assets`,
+    { params: { skip, limit } },
   );
   return response.data;
 };

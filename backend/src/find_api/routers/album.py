@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_required_user, scope_media_query
+from find_api.core.paging import detail_limit, detail_skip
 from find_api.models.album import Album, AlbumAsset
 from find_api.models.media import Media
 from find_api.models.user import User
@@ -210,6 +211,8 @@ def delete_album(
 @router.get("/albums/{album_id}/assets")
 def list_album_assets(
     album_id: int,
+    skip: int = Depends(detail_skip),
+    limit: int = Depends(detail_limit),
     db: Session = Depends(get_db),
     user: User | None = Depends(get_required_user),
 ):
@@ -218,16 +221,22 @@ def list_album_assets(
     # Join membership to browsable media so trashed/archived/hidden never leak,
     # and scope to the caller's own media (IDOR guard) — defense-in-depth so
     # foreign media can't be read back even if a membership row was poisoned.
-    rows = (
+    members = (
         scope_media_query(_browsable_media_query(db), user)
         .join(AlbumAsset, AlbumAsset.media_id == Media.id)
         .filter(AlbumAsset.album_id == album_id)
-        .order_by(asc(AlbumAsset.position), asc(AlbumAsset.id))
+    )
+    rows = (
+        members.order_by(asc(AlbumAsset.position), asc(AlbumAsset.id))
+        .offset(skip)
+        .limit(limit)
         .all()
     )
     return {
         "items": [_serialize_media_item(m) for m in rows],
-        "total": len(rows),
+        "total": members.count(),
+        "skip": skip,
+        "limit": limit,
     }
 
 

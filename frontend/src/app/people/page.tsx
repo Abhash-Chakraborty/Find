@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Check,
   Loader2,
@@ -17,6 +22,7 @@ import {
   ImagePreviewModal,
   type PreviewMedia,
 } from "@/components/image-preview-modal";
+import { LoadMoreButton, nextSkip } from "@/components/load-more-button";
 import { FeedbackActions } from "@/components/person-feedback-actions";
 import { TimelineMediaView } from "@/components/timeline-media-view";
 import { VirtualizedGrid } from "@/components/virtualized-grid";
@@ -232,11 +238,18 @@ export default function PeoplePage() {
   }, [faceJobStatus, queryClient]);
   const { aiUnavailable, unavailableMessage } = useAiAvailability();
 
-  const selectedPersonQuery = useQuery({
+  const selectedPersonQuery = useInfiniteQuery({
     queryKey: ["person-images", selectedPersonId],
-    queryFn: () => getPersonImages(selectedPersonId as number),
+    queryFn: ({ pageParam }) =>
+      getPersonImages(selectedPersonId as number, { skip: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages) =>
+      nextSkip(pages, (page) => page.images.length, lastPage.total),
     enabled: selectedPersonId !== null,
   });
+  const personPage = selectedPersonQuery.data?.pages[0];
+  const personImages =
+    selectedPersonQuery.data?.pages.flatMap((page) => page.images) ?? [];
 
   const clusterMutation = useMutation({
     mutationFn: triggerFaceClustering,
@@ -436,15 +449,14 @@ export default function PeoplePage() {
                 id="person-modal-title"
                 className="text-xl font-medium text-[color:var(--near-white)]"
               >
-                {selectedPersonQuery.data?.person_name?.trim() ||
-                  "Unknown person"}
+                {personPage?.person_name?.trim() || "Unknown person"}
               </h2>
-              {selectedPersonQuery.data && (
+              {personPage && (
                 <div className="mt-4 flex gap-3">
                   <FeedbackActions
                     personId={selectedPersonId}
-                    personName={selectedPersonQuery.data?.person_name}
-                    images={selectedPersonQuery.data?.images || []}
+                    personName={personPage.person_name}
+                    images={personImages}
                     onFeedbackApplied={() => {
                       queryClient.invalidateQueries({
                         queryKey: ["person-images", selectedPersonId],
@@ -471,9 +483,9 @@ export default function PeoplePage() {
                 </div>
               )}
 
-              {selectedPersonQuery.data && (
+              {personPage && (
                 <TimelineMediaView
-                  items={selectedPersonQuery.data.images}
+                  items={personImages}
                   scrollContainerRef={personTimelineScrollRef}
                   getId={(img) => img.media_id}
                   getDate={() => null}
@@ -514,6 +526,14 @@ export default function PeoplePage() {
                       </button>
                     );
                   }}
+                />
+              )}
+              {personPage && selectedPersonQuery.hasNextPage && (
+                <LoadMoreButton
+                  shown={personImages.length}
+                  total={personPage.total}
+                  loading={selectedPersonQuery.isFetchingNextPage}
+                  onLoadMore={() => void selectedPersonQuery.fetchNextPage()}
                 />
               )}
             </div>

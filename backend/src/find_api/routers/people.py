@@ -13,6 +13,7 @@ from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_admin_user, get_required_user
 from find_api.core.media_scope import browsable_media
+from find_api.core.paging import detail_limit, detail_skip
 from find_api.core.queue import get_task_queue
 from find_api.models.face import Face
 from find_api.models.media import Media
@@ -173,11 +174,13 @@ def list_people(
 @router.get("/people/{person_id}/images")
 def get_person_images(
     person_id: int,
+    skip: int = Depends(detail_skip),
+    limit: int = Depends(detail_limit),
     db: Session = Depends(get_db),
     user: User | None = Depends(get_required_user),
 ):
     """
-    Get all images that contain a specific person.
+    Get one page of the images that contain a specific person, newest first.
     Used when user clicks on a person group.
     """
     scope_user_id = user.id if (user is not None and user.role != "admin") else None
@@ -187,48 +190,60 @@ def get_person_images(
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    # Get all unique media IDs where this person appears
-    face_query = (
-        db.query(
-            Face.id,
-            Face.media_id,
-            Media.filename,
-            Face.bounding_box,
-            Face.confidence,
-        )
-        .join(Media, Media.id == Face.media_id)
+    # Page by photo, not by face: a photo with two faces of this person is one
+    # item, so the photos are picked first and their faces loaded after.
+    media_query = (
+        db.query(Media.id, Media.filename, Media.created_at)
+        .join(Face, Face.media_id == Media.id)
         .filter(Face.person_id == person_id, *browsable_media())
+        .distinct()
     )
     if scope_user_id is not None:
-        face_query = face_query.filter(Media.uploader_user_id == scope_user_id)
-    face_rows = face_query.order_by(Media.created_at.desc()).all()
+        media_query = media_query.filter(Media.uploader_user_id == scope_user_id)
+    total = media_query.count()
 
     # A regular user who owns none of this person's media should not learn it exists.
-    if scope_user_id is not None and not face_rows:
+    if scope_user_id is not None and total == 0:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    # Group by media_id
-    images = {}
-    for row in face_rows:
-        if row.media_id not in images:
-            images[row.media_id] = {
-                "media_id": row.media_id,
-                "filename": row.filename,
-                "thumbnail_url": build_thumbnail_url(row.media_id),
-                "faces": [],
-            }
-        images[row.media_id]["faces"].append(
-            {
-                "id": row.id,
-                "bounding_box": row.bounding_box,
-                "confidence": row.confidence,
-            }
+    page = (
+        media_query.order_by(Media.created_at.desc(), Media.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    images = {
+        row.id: {
+            "media_id": row.id,
+            "filename": row.filename,
+            "thumbnail_url": build_thumbnail_url(row.id),
+            "faces": [],
+        }
+        for row in page
+    }
+    if images:
+        face_rows = (
+            db.query(Face.id, Face.media_id, Face.bounding_box, Face.confidence)
+            .filter(Face.person_id == person_id, Face.media_id.in_(images))
+            .order_by(Face.id)
+            .all()
         )
+        for row in face_rows:
+            images[row.media_id]["faces"].append(
+                {
+                    "id": row.id,
+                    "bounding_box": row.bounding_box,
+                    "confidence": row.confidence,
+                }
+            )
 
     return {
         "person_id": person_id,
         "person_name": person.name,
         "images": list(images.values()),
+        "total": total,
+        "skip": skip,
+        "limit": limit,
     }
 
 
