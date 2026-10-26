@@ -56,6 +56,15 @@ def _signature_result(token: str = "1:2026-01-01T00:00:00+00:00") -> MagicMock:
     return result
 
 
+def _search_result(rows, total=None) -> MagicMock:
+    """The ranked query result: rows carry the windowed match count."""
+    for row in rows:
+        row.total_matches = len(rows) if total is None else total
+    result = MagicMock()
+    result.all.return_value = list(rows)
+    return result
+
+
 def _mock_search(client, fake_rows, *, params=None, total_count=None, return_db=False):
     """Call /api/search with mocked embeddings and paginated DB responses."""
     response, mock_db = _mock_search_with_db(
@@ -81,11 +90,10 @@ def _mock_search_with_db(
     mock_embedder.embed_text.return_value = [0.0] * 768
 
     mock_db = MagicMock()
-    count_result = MagicMock()
-    count_result.scalar.return_value = (
-        len(fake_rows) if total_count is None else total_count
-    )
-    mock_db.execute.side_effect = [_signature_result(), count_result, iter(fake_rows)]
+    mock_db.execute.side_effect = [
+        _signature_result(),
+        _search_result(fake_rows, total_count),
+    ]
 
     def _override():
         yield mock_db
@@ -238,16 +246,21 @@ class TestSearchResponseShape:
         response, mock_db = _mock_search_with_db(client, [])
 
         assert response.status_code == 200
-        search_sql = str(mock_db.execute.call_args_list[2].args[0])
-        assert "COALESCE(ranking_boost, 0) as ranking_boost" in search_sql
-        assert "+ COALESCE(ranking_boost, 0)" in search_sql
+        search_sql = str(mock_db.execute.call_args_list[1].args[0])
+        assert "COALESCE(ranking_boost, 0) AS ranking_boost" in search_sql
+        assert "1 - distance + ranking_boost AS final_score" in search_sql
 
     def test_search_orders_by_boosted_score_but_filters_by_similarity(self, client):
         response, mock_db = _mock_search_with_db(client, [])
 
         assert response.status_code == 200
-        search_sql = str(mock_db.execute.call_args_list[2].args[0])
-        assert "WHERE similarity > :threshold AND is_hidden = false" in search_sql
+        search_sql = str(mock_db.execute.call_args_list[1].args[0])
+        # Candidates come from a plain nearest-neighbour scan the HNSW index
+        # can serve; the threshold and boost apply to that pool afterwards.
+        assert "ORDER BY vector <=> CAST(:embedding AS vector)" in search_sql
+        assert "LIMIT :candidate_limit" in search_sql
+        assert "WHERE 1 - distance > :threshold" in search_sql
+        assert "is_hidden = false" in search_sql
         assert "ORDER BY final_score DESC, similarity DESC, id ASC" in search_sql
 
     def test_ocr_text_boost_reranks_results(self, client):
@@ -376,11 +389,10 @@ class TestSearchResponseShape:
         )
 
         assert response.status_code == 200
-        count_sql = str(mock_db.execute.call_args_list[1].args[0])
-        search_sql = str(mock_db.execute.call_args_list[2].args[0])
-        search_params = mock_db.execute.call_args_list[2].args[1]
+        search_sql = str(mock_db.execute.call_args_list[1].args[0])
+        search_params = mock_db.execute.call_args_list[1].args[1]
 
-        assert "exif_json ->> 'make' ILIKE :camera_make_pattern" in count_sql
+        assert "exif_json ->> 'make' ILIKE :camera_make_pattern" in search_sql
         assert "exif_json ->> 'model' ILIKE :camera_model_pattern" in search_sql
         assert "created_at >= :date_from" in search_sql
         assert "created_at <= :date_to" in search_sql
@@ -444,9 +456,7 @@ class TestSearchDiagnostics:
         mock_embedder.embed_text.return_value = [0.0] * 768
 
         mock_db = MagicMock()
-        count_result = MagicMock()
-        count_result.scalar.return_value = len(fake_rows)
-        side_effects = [count_result, iter(fake_rows)]
+        side_effects = [_search_result(fake_rows)]
         if not debug:
             side_effects.insert(0, _signature_result())
         mock_db.execute.side_effect = side_effects
@@ -553,9 +563,7 @@ class TestSearchQueryCache:
             side_effects.append(_signature_result(signature))
             if rows is None:
                 continue
-            count_result = MagicMock()
-            count_result.scalar.return_value = len(rows)
-            side_effects.extend([count_result, iter(rows)])
+            side_effects.append(_search_result(rows))
         mock_db.execute.side_effect = side_effects
 
         def _override():
@@ -594,7 +602,7 @@ class TestSearchQueryCache:
         assert second.status_code == 200
         assert first.json() == second.json()
         mock_embedder.embed_text.assert_called_once_with("  Sunset   Beach  ")
-        assert mock_db.execute.call_count == 4
+        assert mock_db.execute.call_count == 3
 
     def test_pagination_change_misses_cache(self, client):
         mock_db, mock_embedder, patches = self._mock_cached_search(
@@ -612,7 +620,7 @@ class TestSearchQueryCache:
         assert first.status_code == 200
         assert second.status_code == 200
         assert mock_embedder.embed_text.call_count == 2
-        assert mock_db.execute.call_count == 6
+        assert mock_db.execute.call_count == 4
 
     def test_include_ocr_change_misses_cache(self, client):
         row = _fake_search_row(media_id=23)
@@ -638,7 +646,7 @@ class TestSearchQueryCache:
         assert "ocr_text" not in without_ocr.json()["results"][0]["metadata"]
         assert with_ocr.json()["results"][0]["metadata"]["ocr_text"] == "total 42.00"
         assert mock_embedder.embed_text.call_count == 2
-        assert mock_db.execute.call_count == 6
+        assert mock_db.execute.call_count == 4
 
     def test_invalidated_cache_forces_recompute(self, client):
         mock_db, mock_embedder, patches = self._mock_cached_search(
@@ -657,7 +665,7 @@ class TestSearchQueryCache:
         assert first.status_code == 200
         assert second.status_code == 200
         assert mock_embedder.embed_text.call_count == 2
-        assert mock_db.execute.call_count == 6
+        assert mock_db.execute.call_count == 4
 
     def test_index_signature_change_misses_cache(self, client):
         mock_db, mock_embedder, patches = self._mock_cached_search(
@@ -679,4 +687,4 @@ class TestSearchQueryCache:
         assert first.status_code == 200
         assert second.status_code == 200
         assert mock_embedder.embed_text.call_count == 2
-        assert mock_db.execute.call_count == 6
+        assert mock_db.execute.call_count == 4

@@ -40,6 +40,8 @@ router = APIRouter()
 
 MOCK_SIMILARITY_THRESHOLD = -0.2
 FULL_SIMILARITY_THRESHOLD = 0.38
+# Nearest neighbours fetched from the index before thresholding and reranking.
+SEARCH_CANDIDATE_POOL = 200
 OrientationFilter = Literal["landscape", "portrait", "square"]
 
 
@@ -293,33 +295,16 @@ def search_images(
         else FULL_SIMILARITY_THRESHOLD
     )
 
-    # First get total count of matching results
-    count_query = text(
-        f"""
-        SELECT COUNT(*) as total
-        FROM media
-        WHERE status = 'indexed' AND vector IS NOT NULL
-        AND is_hidden = false
-        AND is_archived = false AND deleted_at IS NULL
-        {metadata_filter_sql}
-        AND 1 - (vector <=> CAST(:embedding AS vector)) > :threshold
-        {scope_clause}
-    """
-    )
-    count_params = {
-        "embedding": embedding_str,
-        "threshold": threshold,
-        **metadata_filter_params,
-    }
-    if scope_user_id is not None:
-        count_params["scope_user_id"] = scope_user_id
-    count_result = db.execute(count_query, count_params)
-    total_count = count_result.scalar() or 0
-
-    # Get paginated results
+    # Rank in two steps so pgvector can use the HNSW index. The inner query is
+    # a plain nearest-neighbour scan (ORDER BY distance LIMIT n), the only
+    # shape the index serves; the outer query applies the similarity threshold
+    # and the feedback boost to that pool. The boost is capped at +/-0.05
+    # (workers/jobs.py), so a pool several pages deep holds the same top
+    # results a full scan would.
+    candidate_limit = max(SEARCH_CANDIDATE_POOL, (skip + limit + 1) * 2)
     query_sql = text(
         f"""
-        WITH ranked_results AS (
+        WITH candidates AS (
             SELECT
                 id,
                 filename,
@@ -331,34 +316,49 @@ def search_images(
                 thumbnail_height,
                 status,
                 liked,
-                is_hidden,
                 metadata_json,
                 cluster_id,
                 width,
                 height,
                 created_at,
-                1 - (vector <=> CAST(:embedding AS vector)) as similarity,
-                COALESCE(ranking_boost, 0) as ranking_boost,
-                (
-                    1 - (vector <=> CAST(:embedding AS vector))
-                    + COALESCE(ranking_boost, 0)
-                ) as final_score
+                COALESCE(ranking_boost, 0) AS ranking_boost,
+                vector <=> CAST(:embedding AS vector) AS distance
             FROM media
             WHERE status = 'indexed' AND vector IS NOT NULL
+            AND is_hidden = false
             AND is_archived = false AND deleted_at IS NULL
             {metadata_filter_sql}
             {scope_clause}
+            ORDER BY vector <=> CAST(:embedding AS vector)
+            LIMIT :candidate_limit
+        ),
+        ranked AS (
+            SELECT
+                *,
+                1 - distance AS similarity,
+                1 - distance + ranking_boost AS final_score
+            FROM candidates
+            WHERE 1 - distance > :threshold
         )
-        SELECT * FROM ranked_results
-        WHERE similarity > :threshold AND is_hidden = false
+        SELECT *, COUNT(*) OVER () AS total_matches
+        FROM ranked
         ORDER BY final_score DESC, similarity DESC, id ASC
         LIMIT :limit OFFSET :skip
     """
     )
 
     t_retrieval_start = time.perf_counter()
+    if db.get_bind().dialect.name == "postgresql":
+        # An HNSW scan stops after hnsw.ef_search rows (40 by default), and
+        # the WHERE filters drop some of those. An iterative scan keeps going
+        # until the pool is full; relaxed order is fine because the outer
+        # query sorts again.
+        db.execute(text("SET LOCAL hnsw.iterative_scan = relaxed_order"))
+        ef_search = min(max(candidate_limit, 40), 1000)
+        db.execute(text(f"SET LOCAL hnsw.ef_search = {ef_search}"))
     query_params = {
         "embedding": embedding_str,
+        "candidate_limit": candidate_limit,
         "limit": limit,
         "skip": skip,
         "threshold": threshold,
@@ -366,8 +366,10 @@ def search_images(
     }
     if scope_user_id is not None:
         query_params["scope_user_id"] = scope_user_id
-    result = db.execute(query_sql, query_params)
+    result = db.execute(query_sql, query_params).all()
     retrieval_ms = (time.perf_counter() - t_retrieval_start) * 1000
+    # Matches within the pool; it caps the count but never what a page shows.
+    total_count = int(result[0].total_matches) if result else 0
 
     # Build response
     query_tokens = tokenize(q)
