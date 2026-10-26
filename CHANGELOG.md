@@ -28,6 +28,9 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
 ### Security
 
+- torch 2.13.0 and torchvision 0.28.0 close two PyTorch memory-corruption
+  advisories. The NVIDIA build now pulls CUDA 12.9 wheels, since the CUDA
+  12.8 index stops at torch 2.11.
 - Patched backend and frontend dependencies with open advisories. The
   desktop app's glib advisory waits on Tauri moving past gtk 0.18; Find doesn't
   call the affected API.

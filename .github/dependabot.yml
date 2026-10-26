@@ -65,9 +65,9 @@ updates:
         patterns: ["*"]
         exclude-patterns: ["ruff", "black"]
         update-types: ["major"]
-    # torch/torchvision resolve from the pinned pytorch-cpu and pytorch-cu128
-    # indexes (see [tool.uv.sources] in backend/pyproject.toml), and cu128 lags
-    # PyPI. Dependabot reads PyPI, so it proposes versions the nvidia extra
+    # torch/torchvision resolve from the pinned pytorch-cpu and pytorch-cu129
+    # indexes (see [tool.uv.sources] in backend/pyproject.toml), and the CUDA
+    # indexes lag PyPI or stop at a release (cu128 ended at 2.11). Dependabot reads PyPI, so it proposes versions the nvidia extra
     # cannot resolve at all -- #369 proposed torch 2.13.0, which cu128 does not
     # publish, and `uv sync --locked` failed on every runner. That was a minor
     # bump, so the major/minor split above would not have caught it.
@@ -78,8 +78,8 @@ updates:
     # open a PR on its own -- someone has to act on the alert by hand. That is
     # accepted here only because a torch bump has to be hand-verified against
     # the real ML stack regardless (transformers, open-clip-torch, timm,
-    # ultralytics, insightface). #382 tracks the current open torch advisories
-    # and the 2.11.0 evaluation; keep that issue alive while this ignore exists.
+    # ultralytics, insightface). torch 2.13.0 on cu129 closed the advisories
+    # #382 tracked; check the Security tab for new ones while this ignore exists.
     #
     # insightface is ignored for the same shape of reason, not a resolution
     # one. It is only installed by the cpu/nvidia extras, so `uv sync --group
