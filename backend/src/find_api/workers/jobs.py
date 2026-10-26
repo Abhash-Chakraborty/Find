@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 from PIL import Image
 from rq import get_current_job
-from sqlalchemy import func
+from sqlalchemy import Float, case, cast, func, select
 
 from find_api.core.config import settings
 from find_api.core.database import SessionLocal
@@ -537,39 +537,25 @@ def process_feedback_ranking():
     try:
         logger.info("Starting feedback ranking update...")
 
-        media_items = db.query(Media).filter(Media.status == "indexed").all()
-
-        feedback_scores = (
-            db.query(
-                GeneralFeedback.media_id,
-                func.avg(GeneralFeedback.rating).label("avg_rating"),
-            )
-            .filter(
+        # One UPDATE computes every boost in the database, so the job never
+        # loads the library into memory or writes it back row by row.
+        avg_rating = (
+            select(cast(func.avg(GeneralFeedback.rating), Float))
+            .where(
+                GeneralFeedback.media_id == Media.id,
                 GeneralFeedback.feedback_type == "search_rating",
             )
-            .group_by(GeneralFeedback.media_id)
-            .all()
+            .scalar_subquery()
         )
-
-        score_map = {media_id: avg_rating for media_id, avg_rating in feedback_scores}
-
-        for media in media_items:
-            avg_rating = score_map.get(media.id)
-
-            boost = 0.0
-
-            # tiny boost for liked images
-            if media.liked:
-                boost += 0.02
-
-            # tiny adjustment from ratings
-            if avg_rating is not None:
-                boost += (float(avg_rating) - 3.0) * 0.01
-
-            # keep semantic search dominant
-            boost = max(min(boost, 0.05), -0.05)
-
-            media.ranking_boost = boost
+        # tiny boost for liked images, tiny adjustment from ratings
+        boost = case((Media.liked.is_(True), 0.02), else_=0.0) + func.coalesce(
+            (avg_rating - 3.0) * 0.01, 0.0
+        )
+        # keep semantic search dominant
+        capped_boost = case((boost > 0.05, 0.05), (boost < -0.05, -0.05), else_=boost)
+        db.query(Media).filter(Media.status == "indexed").update(
+            {Media.ranking_boost: capped_boost}, synchronize_session=False
+        )
 
         db.commit()
 
