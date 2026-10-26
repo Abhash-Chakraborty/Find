@@ -201,11 +201,10 @@ release workflow:
 The **Prepare version release** action opens a generated version PR into
 `canary` and synchronizes backend, web, desktop, lockfile, UI, and changelog
 versions. After that PR and the `canary` promotion are reviewed, merging the
-promotion into `main` starts a three-hour quiet period. A newer `main` update
-restarts the timer. When the timer completes, GitHub creates the immutable tag,
-release, provenance/SBOM attestations, web image, and every modular backend
-image. Critical fixes use a patch bump and the manual emergency release input;
-sensitive reports must use a private security advisory.
+promotion into `main` makes GitHub create the immutable tag, release,
+provenance/SBOM attestations, web image, and every modular backend image right
+away. Critical fixes use a patch bump; sensitive reports must use a private
+security advisory.
 
 ## Review expectations
 

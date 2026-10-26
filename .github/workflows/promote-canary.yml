@@ -46,4 +46,4 @@ jobs:
             --head canary \
             --title "${TITLE}" \
             --label promotion \
-            --body "Maintainer-controlled promotion from the tested canary branch. Only reviewed changes intended for the next production release should be included. Merging starts the three-hour release quiet period."
+            --body "Maintainer-controlled promotion from the tested canary branch. Only reviewed changes intended for the next production release should be included. Merging tags and publishes the release straight away."
