@@ -375,6 +375,20 @@ class TestPaddleOCRCache:
         assert info.exists is False
         assert info.note
 
+    def test_env_home_hides_weights_in_the_default_home(self, tmp_path, monkeypatch):
+        # PaddleX reads only $PADDLE_PDX_CACHE_HOME when it is set, so weights
+        # left in ~/.paddlex must not make the model look cached.
+        home = tmp_path / "home"
+        stale = home / ".paddlex" / "official_models" / "PP-OCRv5_mobile_det"
+        stale.mkdir(parents=True)
+        (stale / "inference.pdiparams").write_bytes(b"x" * 100)
+        monkeypatch.setattr(os.path, "expanduser", lambda p: p.replace("~", str(home)))
+        monkeypatch.setenv("PADDLE_PDX_CACHE_HOME", str(tmp_path / "empty"))
+
+        info = mf.resolve_paddleocr_cache()
+
+        assert info.exists is False
+
 
 class TestBuildReport:
     def _wire_all_caches(self, tmp_path, monkeypatch):

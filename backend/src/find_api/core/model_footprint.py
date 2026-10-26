@@ -322,12 +322,19 @@ def resolve_insightface_cache() -> CacheInfo:
 
 def resolve_paddleocr_cache() -> CacheInfo:
     """PaddleOCR 3.x resolves weights through PaddleX; older installs use
-    ``~/.paddleocr``. Both are checked."""
-    candidates = [
-        os.getenv("PADDLE_PDX_CACHE_HOME"),
-        os.path.expanduser("~/.paddlex/official_models"),
-        os.path.expanduser("~/.paddleocr"),
-    ]
+    ``~/.paddleocr``. Both are checked.
+
+    When $PADDLE_PDX_CACHE_HOME is set, PaddleX reads only that directory, so
+    weights left in the home-directory defaults don't count as cached.
+    """
+    pdx_home = os.getenv("PADDLE_PDX_CACHE_HOME")
+    if pdx_home:
+        candidates = [pdx_home]
+    else:
+        candidates = [
+            os.path.expanduser("~/.paddlex/official_models"),
+            os.path.expanduser("~/.paddleocr"),
+        ]
     for candidate in candidates:
         if not candidate:
             continue
@@ -350,7 +357,7 @@ def resolve_paddleocr_cache() -> CacheInfo:
         bytes_on_disk=0,
         file_count=0,
         last_modified=None,
-        note="Checked $PADDLE_PDX_CACHE_HOME, ~/.paddlex/official_models, "
+        note="Checked $PADDLE_PDX_CACHE_HOME if set, else ~/.paddlex/official_models "
         "and ~/.paddleocr.",
     )
 
