@@ -122,10 +122,6 @@ def client(db):
                 return_value="http://fake/img.jpg",
             ),
             patch("find_api.routers.gallery.delete_file"),
-            patch(
-                "find_api.routers.search.get_file_url",
-                return_value="http://fake/img.jpg",
-            ),
             TestClient(app) as c,
         ):
             yield c

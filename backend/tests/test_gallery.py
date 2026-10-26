@@ -105,6 +105,8 @@ class TestGalleryResponseShape:
         }
         assert expected_keys.issubset(item.keys())
         assert item["thumbnail_url"] == f"/api/image/{item['id']}/thumbnail"
+        # Lists point at the redirect route instead of presigning every row.
+        assert item["url"] == f"/api/image/{item['id']}/original"
 
     def test_thumbnail_redirect_prefers_thumbnail_key(self, client, db):
         media = _seed(db, filename="sunset.jpg", status="indexed")

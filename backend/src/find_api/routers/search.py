@@ -21,7 +21,6 @@ from find_api.core.runtime_profile import (
     reset_runtime,
     resolve_runtime,
 )
-from find_api.core.storage import get_file_url
 from find_api.ml.search_ranking import (
     bound_similarity,
     compute_textual_boost,
@@ -30,7 +29,11 @@ from find_api.ml.search_ranking import (
     tokenize,
 )
 from find_api.models.user import User
-from find_api.routers.gallery import build_thumbnail_url, parse_metadata_date
+from find_api.routers.gallery import (
+    build_original_url,
+    build_thumbnail_url,
+    parse_metadata_date,
+)
 from find_api.services.query_cache import get_cached_query, set_cached_query
 
 router = APIRouter()
@@ -415,10 +418,7 @@ def search_images(
         if include_ocr:
             media_metadata["ocr_text"] = ocr_text or None
 
-        try:
-            media_metadata["url"] = get_file_url(row.minio_key)
-        except Exception:
-            media_metadata["url"] = None
+        media_metadata["url"] = build_original_url(row.id)
         media_metadata["thumbnail_url"] = build_thumbnail_url(row.id)
 
         vector_similarity = float(row.similarity)

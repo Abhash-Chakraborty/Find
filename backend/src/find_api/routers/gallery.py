@@ -81,6 +81,15 @@ def build_thumbnail_url(media_id: int) -> str:
     return f"/api/image/{media_id}/thumbnail"
 
 
+def build_original_url(media_id: int) -> str:
+    """Return the API route that redirects to the original.
+
+    List payloads use this instead of a presigned URL, so building a page of
+    results makes no storage calls; the route presigns only when opened.
+    """
+    return f"/api/image/{media_id}/original"
+
+
 def normalize_metadata(value):
     if isinstance(value, dict):
         return value
@@ -251,11 +260,7 @@ def _serialize_media_item(media: Media) -> dict:
         "deleted_at": media.deleted_at.isoformat() if media.deleted_at else None,
     }
 
-    # Add original and thumbnail URLs separately.
-    try:
-        item["url"] = get_file_url(media.minio_key)
-    except Exception:
-        item["url"] = None
+    item["url"] = build_original_url(media.id)
     item["thumbnail_url"] = build_thumbnail_url(media.id)
 
     # Add metadata if indexed
