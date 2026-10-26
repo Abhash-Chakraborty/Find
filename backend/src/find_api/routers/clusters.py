@@ -21,6 +21,10 @@ from find_api.routers.gallery import build_original_url, build_thumbnail_url
 
 router = APIRouter()
 
+# Member ids per visibility query. Keeps each IN list well under SQLite's
+# bound-parameter limit on large libraries.
+MEMBER_LOOKUP_BATCH = 5000
+
 
 class ClusterUpdateRequest(BaseModel):
     """Editable cluster metadata."""
@@ -55,39 +59,42 @@ def get_clusters(
     """
     clusters = db.query(Cluster).order_by(desc(Cluster.member_count), Cluster.id).all()
 
-    result = []
-    for cluster in clusters:
-        member_ids = cluster.member_ids or []
-        if not member_ids:
-            continue
-
-        # Visible = browsable AND (in shared mode) owned by the caller.
-        visible_id_rows = scope_media_query(
-            db.query(Media.id).filter(Media.id.in_(member_ids), *browsable_media()),
+    # Look up every member's visibility at once instead of two queries per
+    # cluster. Visible = browsable AND (in shared mode) owned by the caller.
+    all_member_ids = sorted(
+        {media_id for cluster in clusters for media_id in cluster.member_ids or []}
+    )
+    visible_filenames: dict[int, str] = {}
+    for start in range(0, len(all_member_ids), MEMBER_LOOKUP_BATCH):
+        batch = all_member_ids[start : start + MEMBER_LOOKUP_BATCH]
+        rows = scope_media_query(
+            db.query(Media.id, Media.filename).filter(
+                Media.id.in_(batch), *browsable_media()
+            ),
             user,
         ).all()
-        visible_id_set = {row.id for row in visible_id_rows}
+        visible_filenames.update({row.id: row.filename for row in rows})
+
+    result = []
+    for cluster in clusters:
         visible_ids = [
-            media_id for media_id in member_ids if media_id in visible_id_set
+            media_id
+            for media_id in cluster.member_ids or []
+            if media_id in visible_filenames
         ]
         visible_member_count = len(visible_ids)
         if visible_member_count == 0:
             continue
 
-        sample_ids = visible_ids[:5]
-        sample_media = db.query(Media).filter(Media.id.in_(sample_ids)).all()
-
-        samples = []
-        for media in sample_media:
-            url = build_original_url(media.id)
-            samples.append(
-                {
-                    "id": media.id,
-                    "filename": media.filename,
-                    "url": url,
-                    "thumbnail_url": build_thumbnail_url(media.id),
-                }
-            )
+        samples = [
+            {
+                "id": media_id,
+                "filename": visible_filenames[media_id],
+                "url": build_original_url(media_id),
+                "thumbnail_url": build_thumbnail_url(media_id),
+            }
+            for media_id in visible_ids[:5]
+        ]
 
         cluster_info = _cluster_payload(cluster)
         cluster_info["member_count"] = visible_member_count

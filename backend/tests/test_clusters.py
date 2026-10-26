@@ -162,3 +162,34 @@ def test_clusters_exclude_archived_and_trashed_members(client, db):
     assert [sample["id"] for sample in listed["samples"]] == [visible.id]
     assert detail["member_count"] == 1
     assert [member["id"] for member in detail["members"]] == [visible.id]
+
+
+def test_cluster_list_query_count_does_not_grow_with_clusters(
+    client, db, count_selects
+):
+    def list_cost(prefix: str, cluster_count: int) -> int:
+        for index in range(cluster_count):
+            first = _seed_media(db, filename=f"{prefix}-{index}-a.jpg")
+            second = _seed_media(db, filename=f"{prefix}-{index}-b.jpg")
+            _seed_cluster(db, member_ids=[first.id, second.id])
+        return count_selects(lambda: client.get("/api/clusters"))
+
+    few = list_cost("few", 2)
+    many = list_cost("many", 8)
+
+    assert few == many, f"cluster list queries grew with clusters: {few} -> {many}"
+
+
+def test_cluster_samples_follow_member_order_and_skip_hidden(client, db):
+    shown = [_seed_media(db, filename=f"order-{index}.jpg") for index in range(6)]
+    hidden = _seed_media(db, filename="order-hidden.jpg", is_hidden=True)
+    member_ids = [shown[3].id, hidden.id, shown[0].id, *(m.id for m in shown[4:])]
+    member_ids += [shown[1].id, shown[2].id]
+    _seed_cluster(db, member_ids=member_ids)
+
+    cluster = client.get("/api/clusters").json()["clusters"][0]
+
+    visible = [media_id for media_id in member_ids if media_id != hidden.id]
+    assert cluster["member_count"] == 6
+    assert [sample["id"] for sample in cluster["samples"]] == visible[:5]
+    assert cluster["samples"][0]["filename"] == "order-3.jpg"
