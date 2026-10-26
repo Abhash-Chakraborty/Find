@@ -4,6 +4,7 @@ Face model for storing detected faces and their embeddings
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer
+from sqlalchemy.orm import deferred
 from sqlalchemy.sql import func
 
 from find_api.core.database import Base
@@ -37,7 +38,7 @@ class Face(Base):
 
     # The 512-number fingerprint of this face
     # Similar faces will have similar numbers
-    embedding = Column(Vector(FACE_EMBEDDING_DIM), nullable=True)
+    embedding = deferred(Column(Vector(FACE_EMBEDDING_DIM), nullable=True))
 
     # How confident the AI is that this is a real face (0.0 to 1.0)
     confidence = Column(Float, nullable=False, default=0.0)

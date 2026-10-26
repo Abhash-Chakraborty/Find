@@ -17,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     text as sa_text,
 )
+from sqlalchemy.orm import deferred
 from sqlalchemy.sql import func
 
 from find_api.core.config import settings
@@ -111,7 +112,9 @@ class Media(Base):
     )
 
     # Vector embedding for semantic search
-    vector = Column(Vector(settings.EMBEDDING_DIM))
+    # Deferred: list queries never need the 768 floats, and the jobs that do
+    # select the column explicitly.
+    vector = deferred(Column(Vector(settings.EMBEDDING_DIM)))
 
     def __repr__(self):
         return f"<Media(id={self.id}, filename={self.filename}, status={self.status})>"

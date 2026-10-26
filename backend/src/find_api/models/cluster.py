@@ -5,6 +5,7 @@ Cluster model for storing image clusters
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.orm import deferred
 from sqlalchemy.sql import func
 
 from find_api.core.config import settings
@@ -30,7 +31,7 @@ class Cluster(Base):
     member_count = Column(Integer, default=0)
 
     # Centroid vector for assignment
-    centroid_vector = Column(Vector(settings.EMBEDDING_DIM))
+    centroid_vector = deferred(Column(Vector(settings.EMBEDDING_DIM)))
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
