@@ -81,7 +81,7 @@ dev = [
   "pytest==9.1.1",
   "pytest-asyncio==1.4.0",
   "black==26.10.1",
-  "ruff==0.16.10",
+  "ruff==0.17.2",
   "pip-audit==2.10.1",
   "scikit-learn==1.9.1",
   # Used only by the standalone OCR benchmark scripts (scripts/benchmark_ocr_variants.py
