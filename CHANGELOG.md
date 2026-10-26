@@ -20,6 +20,17 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 - New uploads appear in the gallery as soon as they finish.
 - The model footprint report shows the caption and OCR models as loaded when
   they are.
+- Compose installs create the vector index at startup. Before, only Alembic
+  created it, and compose never runs Alembic, so every search read the whole
+  table.
+- The upload monitor polls running jobs every 2.5 s. It used to poll again
+  after every response, so a large batch hit the job endpoint back to back.
+
+### Security
+
+- Patched backend and frontend dependencies with open advisories. The
+  desktop app's glib advisory waits on Tauri moving past gtk 0.18; Find doesn't
+  call the affected API.
 
 ### Removed
 
@@ -29,6 +40,13 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
 ### Changed
 
+- Search ranks the closest 200 or more images through the vector index, then
+  applies the threshold and feedback boost. On 20,000 test vectors a query
+  took 4.2 ms instead of 203 ms. The match count now counts within that pool.
+- Gallery, search and cluster lists no longer load embeddings or
+  sign a storage URL per photo; they link to the app's own image routes.
+- Clusters, People and the AI runtime card stop polling on an idle library.
+  They refresh while images index, during a clustering job, and on focus.
 - Docs name BLIP as the caption model.
 - The backend lints with import sorting, pyupgrade, bugbear and simplify
   rules, and re-raised exceptions keep their cause.
