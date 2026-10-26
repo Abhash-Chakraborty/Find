@@ -103,6 +103,10 @@ Choose the CPU artifact on a machine without an NVIDIA runtime. Setting
 `ACCEL_MODE=cpu` in an NVIDIA image changes execution but does not shrink that
 image; conversely, setting `gpu` in a CPU image cannot install CUDA packages.
 
+For the CPU artifact's measured memory and per-image latency, its hardware
+minimums, and which model weights land in which cache volume, see
+[CPU-Only Runtime Profile](cpu-runtime-profile.md).
+
 ## Troubleshooting
 
 - **"Using CPU" when I expected GPU.** Check `GET /api/config/hardware`: if

@@ -9,7 +9,7 @@ the whole feature is rejected in local (single-user) mode.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -60,7 +60,7 @@ def _seed_media(
         uploader_user_id=uploader_user_id,
         is_archived=is_archived,
         deleted_at=deleted_at,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()
@@ -270,7 +270,7 @@ class TestPartnerMediaAccess:
             db,
             filename="a-trash.jpg",
             uploader_user_id=s["alice"].id,
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
         client.post(
             "/api/partners",

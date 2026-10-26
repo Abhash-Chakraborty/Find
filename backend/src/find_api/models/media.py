@@ -2,22 +2,26 @@
 Media model for storing image metadata and embeddings
 """
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    ForeignKey,
-    DateTime,
-    Text,
     JSON,
     Boolean,
-    text as sa_text,
+    Column,
+    DateTime,
     Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
 )
+from sqlalchemy import (
+    text as sa_text,
+)
+from sqlalchemy.orm import deferred
 from sqlalchemy.sql import func
-from pgvector.sqlalchemy import Vector
-from find_api.core.database import Base
+
 from find_api.core.config import settings
+from find_api.core.database import Base
 
 
 class Media(Base):
@@ -108,7 +112,9 @@ class Media(Base):
     )
 
     # Vector embedding for semantic search
-    vector = Column(Vector(settings.EMBEDDING_DIM))
+    # Deferred: list queries never need the 768 floats, and the jobs that do
+    # select the column explicitly.
+    vector = deferred(Column(Vector(settings.EMBEDDING_DIM)))
 
     def __repr__(self):
         return f"<Media(id={self.id}, filename={self.filename}, status={self.status})>"

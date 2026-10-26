@@ -2,7 +2,6 @@ import datetime as dt
 import importlib.util
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "bump_version.py"
 SPEC = importlib.util.spec_from_file_location("find_bump_version", SCRIPT)
 assert SPEC and SPEC.loader

@@ -2,25 +2,30 @@
 People router - API endpoints for person groups and face clusters
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
+import logging
 
-from find_api.core.database import get_db
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from find_api.core.config import settings
+from find_api.core.database import get_db
 from find_api.core.dependencies import get_admin_user, get_required_user
+from find_api.core.media_scope import browsable_media
+from find_api.core.paging import detail_limit, detail_skip
 from find_api.core.queue import get_task_queue
-from find_api.routers.gallery import build_thumbnail_url
 from find_api.models.face import Face
 from find_api.models.media import Media
 from find_api.models.person import Person
 from find_api.models.user import User
-import logging
+from find_api.routers.gallery import build_thumbnail_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Thumbnails shown per person group on the People page.
+SAMPLE_MEDIA_LIMIT = 4
 
 
 # ─── Pydantic schemas (what the API returns) ──────────────────────────────────
@@ -30,11 +35,11 @@ class PersonResponse(BaseModel):
     """What we send back when listing people"""
 
     id: int
-    name: Optional[str]
+    name: str | None
     face_count: int
     # Sample image IDs to show thumbnails in the UI
-    sample_media_ids: List[int]
-    thumbnail_url: Optional[str] = None
+    sample_media_ids: list[int]
+    thumbnail_url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -58,17 +63,17 @@ class PersonImageResponse(BaseModel):
 
     media_id: int
     filename: str
-    thumbnail_url: Optional[str] = None
-    faces: List[PersonImageFace]
+    thumbnail_url: str | None = None
+    faces: list[PersonImageFace]
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 
-@router.get("/people", response_model=List[PersonResponse])
+@router.get("/people", response_model=list[PersonResponse])
 def list_people(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Get all person groups with face counts and sample images.
@@ -79,29 +84,70 @@ def list_people(
 
     persons = db.query(Person).order_by(Person.created_at.desc()).all()
 
+    def visible_faces():
+        """Faces the caller may see, with the shared-mode scope applied.
+
+        Both aggregates below must filter identically — a count that counts
+        rows the samples exclude would report a person the page cannot show.
+        """
+        query = db.query(
+            Face.person_id.label("person_id"),
+            Face.media_id.label("media_id"),
+            Face.id.label("face_id"),
+        ).join(Media, Media.id == Face.media_id)
+        query = query.filter(*browsable_media())
+        if scope_user_id is not None:
+            query = query.filter(Media.uploader_user_id == scope_user_id)
+        return query
+
+    # Two aggregate queries, not one row per face. Deriving these in Python
+    # would mean reading every face in the library into memory on every request
+    # — constant queries, but unbounded transfer, which is the same scaling
+    # cliff in a different place.
+    counted = visible_faces().subquery()
+    face_counts: dict[int, int] = dict(
+        db.query(counted.c.person_id, func.count(counted.c.face_id))
+        .group_by(counted.c.person_id)
+        .all()
+    )
+
+    # Distinct media per person, then the first few of each, ranked in SQL so
+    # the database returns at most SAMPLE_MEDIA_LIMIT rows per person instead
+    # of every match. Ordering by media_id keeps the chosen thumbnail stable
+    # across requests; the previous `.distinct().limit(4)` had no ORDER BY and
+    # so could return a different sample each time.
+    distinct_pairs = (
+        visible_faces()
+        .with_entities(
+            Face.person_id.label("person_id"), Face.media_id.label("media_id")
+        )
+        .distinct()
+        .subquery()
+    )
+    ranked = db.query(
+        distinct_pairs.c.person_id,
+        distinct_pairs.c.media_id,
+        func.row_number()
+        .over(
+            partition_by=distinct_pairs.c.person_id,
+            order_by=distinct_pairs.c.media_id,
+        )
+        .label("rank"),
+    ).subquery()
+
+    sample_media_ids_by_person: dict[int, list[int]] = {}
+    for person_id, media_id in (
+        db.query(ranked.c.person_id, ranked.c.media_id)
+        .filter(ranked.c.rank <= SAMPLE_MEDIA_LIMIT)
+        .order_by(ranked.c.person_id, ranked.c.media_id)
+        .all()
+    ):
+        sample_media_ids_by_person.setdefault(person_id, []).append(media_id)
+
     result = []
     for person in persons:
-        # Count how many faces belong to this person
-        count_query = (
-            db.query(func.count(Face.id))
-            .join(Media, Media.id == Face.media_id)
-            .filter(Face.person_id == person.id, Media.is_hidden.is_(False))
-        )
-        if scope_user_id is not None:
-            count_query = count_query.filter(Media.uploader_user_id == scope_user_id)
-        face_count = count_query.scalar()
-
-        # Get up to 4 sample media IDs for thumbnail preview
-        sample_query = (
-            db.query(Face.media_id)
-            .join(Media, Media.id == Face.media_id)
-            .filter(Face.person_id == person.id)
-            .filter(Media.is_hidden.is_(False))
-        )
-        if scope_user_id is not None:
-            sample_query = sample_query.filter(Media.uploader_user_id == scope_user_id)
-        sample_faces = sample_query.distinct().limit(4).all()
-        sample_media_ids = [f.media_id for f in sample_faces]
+        face_count = face_counts.get(person.id, 0)
+        sample_media_ids = sample_media_ids_by_person.get(person.id, [])
         # Skip groups with no visible faces. face_count/sample_media_ids are
         # already scoped to the caller in shared mode, so this also hides
         # person groups the user has none of their own media in.
@@ -128,11 +174,13 @@ def list_people(
 @router.get("/people/{person_id}/images")
 def get_person_images(
     person_id: int,
+    skip: int = Depends(detail_skip),
+    limit: int = Depends(detail_limit),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
-    Get all images that contain a specific person.
+    Get one page of the images that contain a specific person, newest first.
     Used when user clicks on a person group.
     """
     scope_user_id = user.id if (user is not None and user.role != "admin") else None
@@ -142,48 +190,60 @@ def get_person_images(
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    # Get all unique media IDs where this person appears
-    face_query = (
-        db.query(
-            Face.id,
-            Face.media_id,
-            Media.filename,
-            Face.bounding_box,
-            Face.confidence,
-        )
-        .join(Media, Media.id == Face.media_id)
-        .filter(Face.person_id == person_id, Media.is_hidden.is_(False))
+    # Page by photo, not by face: a photo with two faces of this person is one
+    # item, so the photos are picked first and their faces loaded after.
+    media_query = (
+        db.query(Media.id, Media.filename, Media.created_at)
+        .join(Face, Face.media_id == Media.id)
+        .filter(Face.person_id == person_id, *browsable_media())
+        .distinct()
     )
     if scope_user_id is not None:
-        face_query = face_query.filter(Media.uploader_user_id == scope_user_id)
-    face_rows = face_query.order_by(Media.created_at.desc()).all()
+        media_query = media_query.filter(Media.uploader_user_id == scope_user_id)
+    total = media_query.count()
 
     # A regular user who owns none of this person's media should not learn it exists.
-    if scope_user_id is not None and not face_rows:
+    if scope_user_id is not None and total == 0:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    # Group by media_id
-    images = {}
-    for row in face_rows:
-        if row.media_id not in images:
-            images[row.media_id] = {
-                "media_id": row.media_id,
-                "filename": row.filename,
-                "thumbnail_url": build_thumbnail_url(row.media_id),
-                "faces": [],
-            }
-        images[row.media_id]["faces"].append(
-            {
-                "id": row.id,
-                "bounding_box": row.bounding_box,
-                "confidence": row.confidence,
-            }
+    page = (
+        media_query.order_by(Media.created_at.desc(), Media.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    images = {
+        row.id: {
+            "media_id": row.id,
+            "filename": row.filename,
+            "thumbnail_url": build_thumbnail_url(row.id),
+            "faces": [],
+        }
+        for row in page
+    }
+    if images:
+        face_rows = (
+            db.query(Face.id, Face.media_id, Face.bounding_box, Face.confidence)
+            .filter(Face.person_id == person_id, Face.media_id.in_(images))
+            .order_by(Face.id)
+            .all()
         )
+        for row in face_rows:
+            images[row.media_id]["faces"].append(
+                {
+                    "id": row.id,
+                    "bounding_box": row.bounding_box,
+                    "confidence": row.confidence,
+                }
+            )
 
     return {
         "person_id": person_id,
         "person_name": person.name,
         "images": list(images.values()),
+        "total": total,
+        "skip": skip,
+        "limit": limit,
     }
 
 
@@ -192,7 +252,7 @@ def update_person_name(
     person_id: int,
     body: PersonUpdate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Let the user name a person group e.g. 'Alice' or 'Dad'.
@@ -235,7 +295,7 @@ def update_person_name(
 
 @router.post("/people/cluster")
 def trigger_face_clustering(
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """
     Manually trigger face clustering job.
@@ -258,9 +318,9 @@ def trigger_face_clustering(
             "status": "queued",
             "enqueued": True,
         }
-    except Exception:
+    except Exception as exc:
         logger.exception("Face clustering failed")
         raise HTTPException(
             status_code=500,
             detail="Face clustering failed",
-        )
+        ) from exc

@@ -2,10 +2,12 @@
 Database configuration and session management
 """
 
+import logging
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
+
 from find_api.core.config import settings
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,7 @@ def init_db():
     try:
         # Import all models to register them for metadata creation
         from find_api.models import (  # noqa: F401
+            activity,
             album,
             app_setting,
             cluster,
@@ -268,6 +271,15 @@ def init_db():
                     text(
                         "CREATE INDEX IF NOT EXISTS ix_media_longitude "
                         "ON media (longitude)"
+                    )
+                )
+                # Same index as the hnsw_vector_idx_001 migration. Compose
+                # never runs Alembic, so without this a normal install has no
+                # vector index and every search scans the whole table.
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_media_vector_hnsw "
+                        "ON media USING hnsw (vector vector_cosine_ops)"
                     )
                 )
                 conn.execute(

@@ -4,9 +4,9 @@ Revision ID: 20260712mediagps
 Revises: 20260630partnershares
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "20260712mediagps"
 down_revision = "20260630partnershares"

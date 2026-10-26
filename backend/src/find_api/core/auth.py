@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 from sqlalchemy.orm import Session
@@ -38,7 +37,7 @@ _DUMMY_PASSWORD_HASH = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).
 )
 
 
-def verify_password_constant_time(plain: str, hashed: Optional[str]) -> bool:
+def verify_password_constant_time(plain: str, hashed: str | None) -> bool:
     """Verify a password, always doing bcrypt work even when no hash exists.
 
     Pass ``None`` (or an empty hash) when the user was not found: a dummy
@@ -93,8 +92,8 @@ def is_shared_mode(db: Session) -> bool:
 
 def get_current_user(
     db: Session,
-    authorization: Optional[str],
-) -> Optional[User]:
+    authorization: str | None,
+) -> User | None:
     """Resolve the authenticated user from a bearer token.
 
     Returns None when the token is missing or invalid. Does NOT
@@ -105,7 +104,7 @@ def get_current_user(
 
     raw_token = authorization[len("Bearer ") :]
     hashed = hash_token(raw_token)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     session = (
         db.query(AuthSession)
@@ -129,9 +128,7 @@ def get_current_user(
 def create_session(db: Session, user_id: int) -> tuple[str, datetime]:
     """Insert a new session row and return (raw_token, expires_at)."""
     raw_token, token_hash = generate_session_token()
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        hours=settings.SESSION_TTL_HOURS
-    )
+    expires_at = datetime.now(UTC) + timedelta(hours=settings.SESSION_TTL_HOURS)
 
     session_row = AuthSession(
         user_id=user_id,

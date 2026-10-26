@@ -1,10 +1,3 @@
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
 export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return "0 Bytes";
 
@@ -26,34 +19,4 @@ export function formatDate(date: string | Date): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-export function getStatusColor(status: string): string {
-  switch (status) {
-    case "indexed":
-      return "text-[#7dffc7]";
-    case "processing":
-      return "text-[#9fceff]";
-    case "pending":
-      return "text-[#ffe08a]";
-    case "failed":
-      return "text-[#ff9bab]";
-    default:
-      return "text-[#a1a4a5]";
-  }
-}
-
-export function getStatusBadgeClass(status: string): string {
-  switch (status) {
-    case "indexed":
-      return "accent-badge status-indexed";
-    case "processing":
-      return "accent-badge status-processing";
-    case "pending":
-      return "accent-badge status-pending";
-    case "failed":
-      return "accent-badge status-failed";
-    default:
-      return "accent-badge status-default";
-  }
 }

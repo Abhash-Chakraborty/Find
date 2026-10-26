@@ -297,7 +297,18 @@ export function ImagePreviewModal({
     if (media.id) {
       setLikedOverride(null);
       setConfirmingDelete(false);
+      setCaptionCopied(false);
+      setOcrCopied(false);
     }
+  }, [media.id]);
+
+  // Which image is on screen right now, readable from an async continuation.
+  // Clearing the flags above is not enough on its own: `clipboard.writeText`
+  // is a promise, so a copy started on the previous image can resolve *after*
+  // navigation and set the indicator again for the new one.
+  const activeMediaIdRef = useRef(media.id);
+  useEffect(() => {
+    activeMediaIdRef.current = media.id;
   }, [media.id]);
 
   const detailData = detailQuery.data;
@@ -354,7 +365,6 @@ export function ImagePreviewModal({
     onSuccess: ({ id, liked }) => {
       setLikedOverride(liked);
       onLikedChange?.(id, liked);
-      queryClient.invalidateQueries({ queryKey: ["gallery"] });
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", id] });
     },
@@ -363,7 +373,6 @@ export function ImagePreviewModal({
   const deleteMutation = useMutation({
     mutationFn: (mediaId: number) => deleteImage(mediaId),
     onSuccess: ({ id }) => {
-      queryClient.invalidateQueries({ queryKey: ["gallery"] });
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["clusters"] });
       queryClient.invalidateQueries({ queryKey: ["people"] });
@@ -376,7 +385,6 @@ export function ImagePreviewModal({
   const reprocessMutation = useMutation({
     mutationFn: (mediaId: number) => reprocessImage(mediaId),
     onSuccess: ({ media_id }) => {
-      queryClient.invalidateQueries({ queryKey: ["gallery"] });
       queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["image-detail", media_id] });
       toast.success("Retry queued — analysis will restart shortly.");
@@ -619,9 +627,16 @@ export function ImagePreviewModal({
                   <button
                     type="button"
                     onClick={async () => {
+                      const copiedFor = media.id;
                       try {
                         await navigator.clipboard.writeText(caption);
-                        setCaptionCopied(true);
+                        // The toast still fires: the clipboard really does hold
+                        // this caption. Only the per-image indicator is
+                        // suppressed, because it would otherwise label a
+                        // different image as copied.
+                        if (activeMediaIdRef.current === copiedFor) {
+                          setCaptionCopied(true);
+                        }
                         toast.success("Caption copied to clipboard");
                       } catch {
                         toast.error("Failed to copy caption");
@@ -789,9 +804,12 @@ export function ImagePreviewModal({
                       <button
                         type="button"
                         onClick={async () => {
+                          const copiedFor = media.id;
                           try {
                             await navigator.clipboard.writeText(ocrText);
-                            setOcrCopied(true);
+                            if (activeMediaIdRef.current === copiedFor) {
+                              setOcrCopied(true);
+                            }
                             toast.success("OCR text copied to clipboard");
                           } catch {
                             toast.error("Failed to copy OCR text");

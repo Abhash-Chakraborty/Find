@@ -14,6 +14,10 @@ import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
+import {
+  OfflineUploadQueue,
+  useOfflineUploadQueue,
+} from "@/components/offline-upload-queue";
 import { UploadStatusRing } from "@/components/upload-status-indicator";
 import {
   extractErrorMessage,
@@ -21,6 +25,7 @@ import {
   uploadImages,
   uploadImagesBulk,
 } from "@/lib/api";
+import { enqueueFiles, isIndexedDbAvailable } from "@/lib/offline-queue";
 import {
   getUploadItemProgress,
   type UploadQueueItem,
@@ -117,6 +122,11 @@ export default function UploadPage() {
 
   const isUploading = uploadPhase === "uploading";
 
+  // Offline staging (#259). `refresh` is pulled out because onDrop needs to
+  // re-render the panel after enqueuing without depending on the whole object.
+  const offlineQueue = useOfflineUploadQueue();
+  const { online: isOnline, refresh: refreshOfflineQueue } = offlineQueue;
+
   const activeJobs = useMemo(
     () =>
       uploadedFiles.filter(
@@ -135,11 +145,42 @@ export default function UploadPage() {
         toast.error("No valid images selected");
         return;
       }
+
+      // Offline: stage the bytes locally rather than firing a request that is
+      // going to fail. Without IndexedDB there is nowhere to stage them, so
+      // fall through and let the upload fail with a real error instead of
+      // silently accepting files we cannot keep.
+      if (!isOnline && isIndexedDbAvailable()) {
+        try {
+          const { added, skipped } = await enqueueFiles(acceptedFiles);
+          await refreshOfflineQueue();
+          if (added.length > 0) {
+            toast.success(
+              `Saved ${added.length} file${added.length === 1 ? "" : "s"} to upload when you reconnect`,
+            );
+          }
+          if (skipped.length > 0) {
+            toast.info(
+              `${skipped.length} file${skipped.length === 1 ? " is" : "s are"} already queued`,
+            );
+          }
+        } catch (error) {
+          toast.error(
+            extractErrorMessage(
+              error,
+              "Could not stage files for later upload",
+            ),
+          );
+        }
+        return;
+      }
+
       beginUpload();
       try {
         const data = await uploadImages(acceptedFiles, setUploadProgress);
         completeUpload(data);
-        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
+        void queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+        void queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
         toast.success(
           `Queued ${data.total} file${data.total === 1 ? "" : "s"} for library processing`,
         );
@@ -148,7 +189,15 @@ export default function UploadPage() {
         toast.error(extractErrorMessage(error, "Upload failed"));
       }
     },
-    [beginUpload, completeUpload, failUpload, queryClient, setUploadProgress],
+    [
+      beginUpload,
+      completeUpload,
+      failUpload,
+      isOnline,
+      queryClient,
+      refreshOfflineQueue,
+      setUploadProgress,
+    ],
   );
 
   const onBulkDrop = useCallback(
@@ -168,7 +217,8 @@ export default function UploadPage() {
       try {
         const data = await uploadImagesBulk(archive, setUploadProgress);
         completeUpload(data);
-        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
+        void queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
+        void queryClient.invalidateQueries({ queryKey: ["gallery-counts"] });
         const uploadedCount = data.results.filter(
           (item) => item.status === "uploaded",
         ).length;
@@ -335,6 +385,8 @@ export default function UploadPage() {
             </button>
           </div>
         </div>
+
+        <OfflineUploadQueue {...offlineQueue} />
 
         <div
           {...activeRootProps()}

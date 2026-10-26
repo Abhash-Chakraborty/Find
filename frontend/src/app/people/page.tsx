@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Check,
   Loader2,
@@ -17,10 +22,12 @@ import {
   ImagePreviewModal,
   type PreviewMedia,
 } from "@/components/image-preview-modal";
+import { LoadMoreButton, nextSkip } from "@/components/load-more-button";
 import { FeedbackActions } from "@/components/person-feedback-actions";
 import { TimelineMediaView } from "@/components/timeline-media-view";
 import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
+  getJobStatus,
   getPeople,
   getPersonImages,
   type PersonItem,
@@ -30,6 +37,7 @@ import {
 } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 import { useAiAvailability } from "@/lib/use-ai-availability";
+import { useLibraryBusy } from "@/lib/use-library-busy";
 
 // ─── Person Card Component ────────────────────────────────────────────────────
 
@@ -95,9 +103,14 @@ function PersonCard({
               className="relative h-full w-full overflow-hidden rounded-xl"
             >
               {mediaId && src ? (
+                // Decorative on purpose: these are up to four crops of the same
+                // person, and the card already announces that identity through
+                // the overlay button ("Open <name> group") and the name below.
+                // Naming each tile would make a screen reader read four
+                // near-identical labels that add nothing.
                 <Image
                   src={src}
-                  alt="Person photo"
+                  alt=""
                   fill
                   className="border border-[var(--frost)] object-cover"
                   sizes="(max-width: 768px) 25vw, 10vw"
@@ -192,6 +205,10 @@ export default function PeoplePage() {
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [previewMedia, setPreviewMedia] = useState<PreviewMedia | null>(null);
   const personTimelineScrollRef = useRef<HTMLDivElement | null>(null);
+  const [faceJobId, setFaceJobId] = useState<string | null>(null);
+  // People change when new images are indexed or a face clustering job
+  // runs, so the list polls only while one of those is in flight.
+  const libraryBusy = useLibraryBusy();
 
   const {
     data: people,
@@ -201,20 +218,44 @@ export default function PeoplePage() {
   } = useQuery({
     queryKey: ["people"],
     queryFn: getPeople,
-    refetchInterval: 15000,
+    refetchInterval: faceJobId ? 4000 : libraryBusy ? 15000 : false,
   });
+  const faceJobQuery = useQuery({
+    queryKey: ["face-cluster-job", faceJobId],
+    queryFn: () => getJobStatus(faceJobId as string),
+    enabled: faceJobId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "finished" || status === "failed" ? false : 2500;
+    },
+  });
+  const faceJobStatus = faceJobQuery.data?.status;
+  useEffect(() => {
+    if (faceJobStatus !== "finished" && faceJobStatus !== "failed") return;
+    if (faceJobStatus === "failed") toast.error("Face clustering failed");
+    setFaceJobId(null);
+    queryClient.invalidateQueries({ queryKey: ["people"] });
+  }, [faceJobStatus, queryClient]);
   const { aiUnavailable, unavailableMessage } = useAiAvailability();
 
-  const selectedPersonQuery = useQuery({
+  const selectedPersonQuery = useInfiniteQuery({
     queryKey: ["person-images", selectedPersonId],
-    queryFn: () => getPersonImages(selectedPersonId as number),
+    queryFn: ({ pageParam }) =>
+      getPersonImages(selectedPersonId as number, { skip: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages) =>
+      nextSkip(pages, (page) => page.images.length, lastPage.total),
     enabled: selectedPersonId !== null,
   });
+  const personPage = selectedPersonQuery.data?.pages[0];
+  const personImages =
+    selectedPersonQuery.data?.pages.flatMap((page) => page.images) ?? [];
 
   const clusterMutation = useMutation({
     mutationFn: triggerFaceClustering,
-    onSuccess: () => {
+    onSuccess: (result: { job_id?: string }) => {
       toast.success("Face clustering queued");
+      setFaceJobId(result.job_id ?? null);
       queryClient.invalidateQueries({ queryKey: ["people"] });
     },
     onError: () => {
@@ -408,15 +449,14 @@ export default function PeoplePage() {
                 id="person-modal-title"
                 className="text-xl font-medium text-[color:var(--near-white)]"
               >
-                {selectedPersonQuery.data?.person_name?.trim() ||
-                  "Unknown person"}
+                {personPage?.person_name?.trim() || "Unknown person"}
               </h2>
-              {selectedPersonQuery.data && (
+              {personPage && (
                 <div className="mt-4 flex gap-3">
                   <FeedbackActions
                     personId={selectedPersonId}
-                    personName={selectedPersonQuery.data?.person_name}
-                    images={selectedPersonQuery.data?.images || []}
+                    personName={personPage.person_name}
+                    images={personImages}
                     onFeedbackApplied={() => {
                       queryClient.invalidateQueries({
                         queryKey: ["person-images", selectedPersonId],
@@ -443,9 +483,9 @@ export default function PeoplePage() {
                 </div>
               )}
 
-              {selectedPersonQuery.data && (
+              {personPage && (
                 <TimelineMediaView
-                  items={selectedPersonQuery.data.images}
+                  items={personImages}
                   scrollContainerRef={personTimelineScrollRef}
                   getId={(img) => img.media_id}
                   getDate={() => null}
@@ -486,6 +526,14 @@ export default function PeoplePage() {
                       </button>
                     );
                   }}
+                />
+              )}
+              {personPage && selectedPersonQuery.hasNextPage && (
+                <LoadMoreButton
+                  shown={personImages.length}
+                  total={personPage.total}
+                  loading={selectedPersonQuery.isFetchingNextPage}
+                  onLoadMore={() => void selectedPersonQuery.fetchNextPage()}
                 />
               )}
             </div>

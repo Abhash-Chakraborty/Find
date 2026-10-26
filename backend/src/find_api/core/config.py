@@ -3,14 +3,18 @@ Application configuration using Pydantic settings
 """
 
 import os
-from typing import Literal, Optional
+from typing import Literal
+from urllib.parse import urlparse
 
 from PIL import Image
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 PILLOW_MAX_IMAGE_PIXELS = Image.MAX_IMAGE_PIXELS or 89_478_485
+
+# Hosts where plaintext HTTP to the remote ML server never leaves the machine
+# (or the compose network), so requiring TLS would be pure friction.
+_LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "::1", "[::1]"}
 
 
 class Settings(BaseSettings):
@@ -31,7 +35,7 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "images"
     MINIO_SECURE: bool = False
-    MINIO_PUBLIC_ENDPOINT: Optional[str] = None
+    MINIO_PUBLIC_ENDPOINT: str | None = None
     MINIO_PUBLIC_READ: bool = False
 
     # Redis
@@ -47,9 +51,9 @@ class Settings(BaseSettings):
     # Runtime/build profile. Docker images set this explicitly so the API can
     # distinguish installed capabilities from hardware that merely exists on
     # the host. ``development`` keeps source checkouts backwards compatible.
-    FIND_BUILD_PROFILE: Literal[
-        "development", "no-ai", "mock", "cpu", "nvidia"
-    ] = "development"
+    FIND_BUILD_PROFILE: Literal["development", "no-ai", "mock", "cpu", "nvidia"] = (
+        "development"
+    )
 
     # ML Models
     ML_MODE: Literal["disabled", "full", "mock", "remote"] = "full"
@@ -59,8 +63,8 @@ class Settings(BaseSettings):
     # GPS extraction is privacy-sensitive and therefore opt-in. The persisted
     # dashboard preference overrides this value at job boundaries.
     MAP_ENABLED: bool = False
-    REMOTE_ML_URL: Optional[str] = None
-    REMOTE_ML_API_KEY: Optional[str] = None
+    REMOTE_ML_URL: str | None = None
+    REMOTE_ML_API_KEY: str | None = None
     REMOTE_ML_STRIP_EXIF: bool = True
     REMOTE_ML_FEATURES: str = "embed,caption,detect,ocr,cluster"
     ML_MODEL_IDLE_TTL_SECONDS: int = 300
@@ -78,6 +82,12 @@ class Settings(BaseSettings):
     #   gpu  = prefer GPU; automatically fall back to CPU if unavailable
     #   cpu  = force CPU
     ACCEL_MODE: Literal["auto", "gpu", "cpu"] = "auto"
+    # PP-OCRv5 model variant: "server" (heavier, GPU-oriented) vs "mobile"
+    # (lightweight, CPU-oriented). Defaults to "mobile" based on recorded
+    # CPU benchmark results (~3x faster, ~40-47% less RAM, equal-or-better
+    # accuracy in 4/5 test categories) -- see
+    # docs/ocr-mobile-benchmark.md for the full writeup. See issue #341.
+    OCR_VARIANT: Literal["mobile", "server"] = "mobile"
 
     # Processing
     MAX_UPLOAD_SIZE_MB: int = 50
@@ -89,6 +99,9 @@ class Settings(BaseSettings):
     # Trashed assets older than this many days are eligible for permanent
     # auto-purge (via POST /trash/purge). 0 disables age-based purging.
     TRASH_RETENTION_DAYS: int = 30
+    # Activity log rows older than this many days are eligible for auto-purge
+    # (via POST /activity/purge). 0 disables age-based purging.
+    ACTIVITY_RETENTION_DAYS: int = 90
     BATCH_SIZE: int = 1
     EMBEDDING_DIM: int = 768  # SigLIP ViT-B-16 dimension
 
@@ -105,13 +118,13 @@ class Settings(BaseSettings):
     # Storage
     STORAGE_BACKEND: Literal["minio", "local"] = "minio"
     LOCAL_STORAGE_PATH: str = "./storage/uploads"
-    STORAGE_ENDPOINT: Optional[str] = None
-    STORAGE_ACCESS_KEY: Optional[str] = None
-    STORAGE_SECRET_KEY: Optional[str] = None
-    STORAGE_BUCKET: Optional[str] = None
-    STORAGE_SECURE: Optional[bool] = None
-    STORAGE_PUBLIC_ENDPOINT: Optional[str] = None
-    STORAGE_PUBLIC_READ: Optional[bool] = None
+    STORAGE_ENDPOINT: str | None = None
+    STORAGE_ACCESS_KEY: str | None = None
+    STORAGE_SECRET_KEY: str | None = None
+    STORAGE_BUCKET: str | None = None
+    STORAGE_SECURE: bool | None = None
+    STORAGE_PUBLIC_ENDPOINT: str | None = None
+    STORAGE_PUBLIC_READ: bool | None = None
     STORAGE_AUTO_CREATE_BUCKET: bool = True
 
     @field_validator(
@@ -126,6 +139,19 @@ class Settings(BaseSettings):
         """Keep memory lifecycle settings positive so cleanup cannot be disabled accidentally."""
         if value <= 0:
             raise ValueError(f"{info.field_name} must be greater than 0")
+        return value
+
+    @field_validator("ACTIVITY_RETENTION_DAYS", "TRASH_RETENTION_DAYS")
+    @classmethod
+    def validate_retention_days(cls, value: int, info):
+        """Reject negative retention windows.
+
+        0 is a documented "keep forever" switch, but a negative value has no
+        meaning -- it would silently disable cleanup instead of failing, so a
+        typo like -1 in the environment looks like it worked.
+        """
+        if value < 0:
+            raise ValueError(f"{info.field_name} must be 0 or greater")
         return value
 
     @field_validator("MAX_IMAGE_PIXELS")
@@ -148,6 +174,25 @@ class Settings(BaseSettings):
             raise ValueError("ML_MODE=remote requires REMOTE_ML_URL")
         if not self.REMOTE_ML_API_KEY or not self.REMOTE_ML_API_KEY.strip():
             raise ValueError("ML_MODE=remote requires REMOTE_ML_API_KEY")
+
+        # Remote mode ships photo bytes and the bearer token to another host.
+        # Over plaintext HTTP both are readable by anything on the path, which
+        # is the opposite of what a local-first tool promises, so require TLS
+        # unless the server is on this machine.
+        parsed = urlparse(self.REMOTE_ML_URL.strip())
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError(
+                "REMOTE_ML_URL must be an http:// or https:// URL "
+                f"(got {parsed.scheme or 'no'} scheme)"
+            )
+        hostname = (parsed.hostname or "").lower()
+        if parsed.scheme == "http" and hostname not in _LOCAL_HOSTNAMES:
+            raise ValueError(
+                "REMOTE_ML_URL must use https:// for non-local hosts: remote mode "
+                "transmits image bytes and the bearer token to it. Use https://, "
+                "or point REMOTE_ML_URL at localhost and terminate TLS in front "
+                "of the ML server."
+            )
         return self
 
     @model_validator(mode="after")

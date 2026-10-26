@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
 from find_api.models.media import Media
 from find_api.services.duplicate_service import (
-    flag_as_duplicate,
     find_near_duplicate,
+    flag_as_duplicate,
 )
 
 
@@ -31,7 +31,7 @@ def _seed_media(db, *, filename: str, duplicate_of: int | None = None) -> Media:
         thumbnail_width=256,
         thumbnail_height=192,
         duplicate_of=duplicate_of,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()

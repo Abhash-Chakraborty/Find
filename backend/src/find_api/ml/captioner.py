@@ -1,11 +1,11 @@
 """Local image captioning using the native BLIP model implementation."""
 
-import torch
-from transformers import BlipForConditionalGeneration, BlipProcessor
-from PIL import Image
-import numpy as np
-from typing import Union
 import logging
+
+import numpy as np
+import torch
+from PIL import Image
+from transformers import BlipForConditionalGeneration, BlipProcessor
 
 from find_api.core.config import settings
 from find_api.core.hardware import current_torch_device
@@ -50,7 +50,7 @@ class ImageCaptioner:
 
     def generate_caption(
         self,
-        image: Union[Image.Image, np.ndarray],
+        image: Image.Image | np.ndarray,
         max_length: int = 256,
         num_beams: int = 3,
     ) -> str:
@@ -100,53 +100,6 @@ class ImageCaptioner:
 
         except Exception as e:
             logger.error(f"Failed to generate caption: {e}")
-            raise
-
-    def generate_conditional_caption(
-        self, image: Union[Image.Image, np.ndarray], prompt: str, max_length: int = 256
-    ) -> str:
-        """
-        Generate caption conditioned on a text prompt (VQA style)
-        """
-        try:
-            if isinstance(image, np.ndarray):
-                image = Image.fromarray(image)
-
-            if image.mode != "RGB":
-                image = image.convert("RGB")
-
-            config_key = f"model={settings.BLIP_MODEL}|accel={current_accel_mode()}"
-            with self.manager.use_model(
-                "captioner", self._load_model, config_key=config_key
-            ) as bundle:
-                model = bundle["model"]
-                processor = bundle["processor"]
-                device = bundle["device"]
-                dtype = bundle["dtype"]
-
-                inputs = processor(text=prompt, images=image, return_tensors="pt")
-                inputs = {
-                    k: v.to(device, dtype)
-                    if v.dtype == torch.float32 or v.dtype == torch.float16
-                    else v.to(device)
-                    for k, v in inputs.items()
-                }
-
-                with torch.inference_mode():
-                    generated_ids = model.generate(
-                        input_ids=inputs["input_ids"],
-                        pixel_values=inputs["pixel_values"],
-                        max_new_tokens=max_length,
-                        do_sample=False,
-                        use_cache=True,
-                    )
-
-                return processor.decode(
-                    generated_ids[0], skip_special_tokens=True
-                ).strip()
-
-        except Exception as e:
-            logger.error(f"Failed to generate conditional caption: {e}")
             raise
 
 

@@ -2,20 +2,22 @@
 Background worker jobs for image processing
 """
 
-from PIL import Image
 import io
 import logging
-from datetime import datetime, timezone
-from rq import get_current_job
+from datetime import UTC, datetime
 
+from PIL import Image
+from rq import get_current_job
+from sqlalchemy import Float, case, cast, func, select
+
+from find_api.core.config import settings
 from find_api.core.database import SessionLocal
+from find_api.core.model_manager import get_model_manager
 from find_api.core.queue import (
     clear_clustering_job_state,
     clear_feedback_ranking_job_state,
     enqueue_clustering_job,
 )
-from find_api.core.storage import get_file, upload_thumbnail
-from find_api.core.model_manager import get_model_manager
 from find_api.core.runtime_profile import (
     RuntimeUnavailableError,
     bind_runtime,
@@ -23,14 +25,13 @@ from find_api.core.runtime_profile import (
     reset_runtime,
     resolve_runtime,
 )
-from find_api.core.config import settings
-from find_api.models.media import Media
-from find_api.services.query_cache import invalidate_query_cache
-from find_api.utils.exif import extract_exif_data, extract_gps_coordinates
-from find_api.utils.errors import sanitize_error
-
-from sqlalchemy import func
+from find_api.core.storage import get_file, upload_thumbnail
 from find_api.models.feedback import GeneralFeedback
+from find_api.models.media import Media
+from find_api.services.activity_log import record_activity
+from find_api.services.query_cache import invalidate_query_cache
+from find_api.utils.errors import sanitize_error
+from find_api.utils.exif import extract_exif_data, extract_gps_coordinates
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,30 @@ def _metadata_only_payload(profile: str) -> dict:
             "embedding": skipped.copy(),
         },
     }
+
+
+def _remote_cluster_embeddings(embeddings):
+    """Run the clustering pass on the remote ML server.
+
+    ``cluster`` ships enabled by default in REMOTE_ML_FEATURES, so remote mode
+    must actually dispatch it -- otherwise the /api/ml/cluster endpoint and
+    remote_cluster() are dead code and clustering silently runs locally on a
+    host that may not even have scikit-learn installed.
+    """
+    import numpy as np
+
+    from find_api.ml.remote_client import _feature_enabled, remote_cluster
+
+    if not _feature_enabled("cluster"):
+        logger.info("Remote mode: cluster disabled; running clustering locally")
+        from find_api.ml.clusterer import get_image_clusterer
+
+        return get_image_clusterer().cluster(embeddings)
+
+    logger.info("Dispatching clustering to remote ML server")
+    payload = remote_cluster([row.tolist() for row in np.asarray(embeddings)])
+    labels = np.asarray(payload["labels"], dtype=np.int32)
+    return labels, payload.get("info", {})
 
 
 def cosine_similarity(left, right) -> float:
@@ -199,6 +224,7 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
             media.vector = None
         else:
             from find_api.workers.processors import (
+                RemoteFeatureDisabled,
                 extract_image_metadata,
                 generate_hybrid_embedding,
             )
@@ -217,6 +243,18 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
                         "status": "success",
                         "error": None,
                     }
+            except RemoteFeatureDisabled as e:
+                # Embedding is switched off for this remote deployment. Leave
+                # the column NULL rather than storing a placeholder: a vector
+                # here means "this image is semantically searchable", and a
+                # stand-in would make every search silently wrong.
+                logger.info("Skipping embedding for media %s: %s", media_id, e)
+                media.vector = None
+                if "stage_status" in metadata:
+                    metadata["stage_status"]["embedding"] = {
+                        "status": "skipped",
+                        "error": None,
+                    }
             except Exception as e:
                 if "stage_status" in metadata:
                     metadata["stage_status"]["embedding"] = {
@@ -229,13 +267,31 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
 
         media.metadata_json = metadata
         media.status = "indexed"
-        media.processed_at = datetime.now(timezone.utc)
+        media.processed_at = datetime.now(UTC)
 
         db.commit()
         invalidate_query_cache()
 
+        def record_upload_completed() -> None:
+            """Record the success only once every remaining step has survived.
+
+            Called immediately before each successful return rather than here, right
+            after the indexing commit. Steps still to run after this point can raise
+            into the outer handler, which writes ``upload.failed`` for the same media --
+            and the feed then carries both a completed and a failed row for one job.
+            """
+            record_activity(
+                db,
+                "upload",
+                "completed",
+                user_id=media.uploader_user_id,
+                media_id=media.id,
+                payload={"filename": media.filename},
+            )
+
         if runtime.applied_mode == "disabled":
             logger.info("Metadata-only processing complete for media %s", media_id)
+            record_upload_completed()
             return {
                 "media_id": media_id,
                 "status": "success",
@@ -294,6 +350,7 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
         except Exception as e:
             logger.warning(f"Cleanup failed after processing media {media_id}: {e}")
 
+        record_upload_completed()
         return {"media_id": media_id, "status": "success", "metadata": metadata}
 
     except Exception as e:
@@ -310,6 +367,14 @@ def analyze_image(media_id: int, clear_model_failures: bool = False):
             if metadata:
                 media.metadata_json = metadata
             db.commit()
+            record_activity(
+                db,
+                "upload",
+                "failed",
+                user_id=media.uploader_user_id,
+                media_id=media.id,
+                payload={"filename": media.filename, "reason": safe_error},
+            )
 
         raise
 
@@ -378,7 +443,10 @@ def cluster_images():
         # Step 3: Run clustering — pure computation, no DB.
 
         clusterer = get_image_clusterer()
-        labels, info = clusterer.cluster(embeddings)
+        if runtime.applied_mode == "remote":
+            labels, info = _remote_cluster_embeddings(embeddings)
+        else:
+            labels, info = clusterer.cluster(embeddings)
 
         cluster_labels = sorted({int(label) for label in labels if int(label) != -1})
         # Step 4: Validate result BEFORE touching anything.
@@ -469,39 +537,25 @@ def process_feedback_ranking():
     try:
         logger.info("Starting feedback ranking update...")
 
-        media_items = db.query(Media).filter(Media.status == "indexed").all()
-
-        feedback_scores = (
-            db.query(
-                GeneralFeedback.media_id,
-                func.avg(GeneralFeedback.rating).label("avg_rating"),
-            )
-            .filter(
+        # One UPDATE computes every boost in the database, so the job never
+        # loads the library into memory or writes it back row by row.
+        avg_rating = (
+            select(cast(func.avg(GeneralFeedback.rating), Float))
+            .where(
+                GeneralFeedback.media_id == Media.id,
                 GeneralFeedback.feedback_type == "search_rating",
             )
-            .group_by(GeneralFeedback.media_id)
-            .all()
+            .scalar_subquery()
         )
-
-        score_map = {media_id: avg_rating for media_id, avg_rating in feedback_scores}
-
-        for media in media_items:
-            avg_rating = score_map.get(media.id)
-
-            boost = 0.0
-
-            # tiny boost for liked images
-            if media.liked:
-                boost += 0.02
-
-            # tiny adjustment from ratings
-            if avg_rating is not None:
-                boost += (float(avg_rating) - 3.0) * 0.01
-
-            # keep semantic search dominant
-            boost = max(min(boost, 0.05), -0.05)
-
-            media.ranking_boost = boost
+        # tiny boost for liked images, tiny adjustment from ratings
+        boost = case((Media.liked.is_(True), 0.02), else_=0.0) + func.coalesce(
+            (avg_rating - 3.0) * 0.01, 0.0
+        )
+        # keep semantic search dominant
+        capped_boost = case((boost > 0.05, 0.05), (boost < -0.05, -0.05), else_=boost)
+        db.query(Media).filter(Media.status == "indexed").update(
+            {Media.ranking_boost: capped_boost}, synchronize_session=False
+        )
 
         db.commit()
 
@@ -664,7 +718,7 @@ def cluster_faces():
         # than one UPDATE round-trip per face.
         face_person_mappings = [
             {"id": face_id, "person_id": person_records[int(label)].id}
-            for face_id, label in zip(face_ids, labels)
+            for face_id, label in zip(face_ids, labels, strict=True)
             if int(label) != -1
         ]
         if face_person_mappings:

@@ -69,3 +69,13 @@ Share an album via a public link — no account needed to view.
   a notice if a requested GPU isn't available (Find falls back to CPU
   automatically). See the [Hardware Acceleration](hardware-acceleration.md)
   guide for details.
+
+## Activity
+
+A local, append-only log of what happened: upload/processing outcomes,
+archive/trash/restore, vault unlock/lock, and settings changes. Read and
+managed via the `/api/activity` endpoints (a dedicated UI route is planned).
+
+- Rows never contain image bytes, embeddings, OCR text, captions, secrets, or session tokens - only small details like a filename or a changed setting key, kept for diagnosing what changed.
+- **Clear** deletes your activity on demand; rows older than the retention window (`ACTIVITY_RETENTION_DAYS`, default 90) are eligible for auto-purge. Neither is scheduled automatically yet - both are user- or operator-triggered, like trash's `TRASH_RETENTION_DAYS`.
+- In shared mode, each member sees only their own activity; admins see every member's.

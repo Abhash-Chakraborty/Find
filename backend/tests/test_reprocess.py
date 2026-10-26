@@ -7,16 +7,17 @@ Run with (from backend/ directory):
 """
 
 import datetime
-from typing import Optional
-import pytest
 from unittest.mock import MagicMock, patch
-from fastapi.testclient import TestClient
+
+import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.pool import StaticPool
+
 import find_api.routers.gallery as gallery_module
 from find_api.core.database import get_db
-from sqlalchemy import create_engine, String, Integer, Boolean, DateTime, Text, JSON
-from sqlalchemy.orm import sessionmaker, DeclarativeBase, Mapped, mapped_column
-from sqlalchemy.pool import StaticPool
 
 # ---------------------------------------------------------------------------
 # Minimal in-memory SQLite replica of the Media model (no pgvector needed)
@@ -41,41 +42,41 @@ class FakeMedia(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     file_hash: Mapped[str] = mapped_column(String(64), unique=True)
     minio_key: Mapped[str] = mapped_column(String(255))
-    thumbnail_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    thumbnail_content_type: Mapped[Optional[str]] = mapped_column(
+    thumbnail_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    thumbnail_content_type: Mapped[str | None] = mapped_column(
         String(100), nullable=True
     )
-    thumbnail_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    thumbnail_width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    thumbnail_height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    thumbnail_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    thumbnail_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    thumbnail_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     filename: Mapped[str] = mapped_column(String(255))
-    content_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     liked: Mapped[bool] = mapped_column(Boolean, default=False)
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
     # Mirror the asset-state columns the gallery router queries
     # (_browsable_media_query) so this stand-in stays in sync with the real model.
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
-    deleted_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+    deleted_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime, nullable=True
     )
     status: Mapped[str] = mapped_column(String(50), default="pending")
-    analysis_job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+    analysis_job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime, nullable=True
     )
-    updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime, nullable=True
     )
-    processed_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+    processed_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime, nullable=True
     )
-    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    exif_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    metadata_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    cluster_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    exif_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    cluster_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 Base.metadata.create_all(bind=engine)

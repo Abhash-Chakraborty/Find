@@ -2,17 +2,18 @@
 Extract EXIF data from images
 """
 
-from PIL import Image
-from PIL.ExifTags import TAGS, GPSTAGS
-from typing import Dict, Any, Optional
 import logging
+from typing import Any
+
+from PIL import Image
+from PIL.ExifTags import GPSTAGS, TAGS
 
 logger = logging.getLogger(__name__)
 
 GPS_INFO_TAG = 0x8825
 
 
-def _gps_degrees(value: Any, reference: Any) -> Optional[float]:
+def _gps_degrees(value: Any, reference: Any) -> float | None:
     """Convert an EXIF DMS tuple into signed decimal degrees."""
     try:
         degrees, minutes, seconds = (float(part) for part in value)
@@ -24,7 +25,7 @@ def _gps_degrees(value: Any, reference: Any) -> Optional[float]:
         return None
 
 
-def extract_gps_coordinates(image: Image.Image) -> Optional[tuple[float, float]]:
+def extract_gps_coordinates(image: Image.Image) -> tuple[float, float] | None:
     """Return ``(latitude, longitude)`` from EXIF, without network geocoding.
 
     Callers must opt in before storing this sensitive location metadata. The
@@ -51,7 +52,7 @@ def extract_gps_coordinates(image: Image.Image) -> Optional[tuple[float, float]]
 
 def extract_exif_data(
     image: Image.Image, *, include_gps: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Extract EXIF metadata from image
 

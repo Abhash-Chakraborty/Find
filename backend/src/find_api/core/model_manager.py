@@ -6,13 +6,14 @@ import asyncio
 import gc
 import json
 import logging
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import os
 import threading
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Iterator, List
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
 
 from find_api.core.config import settings
 
@@ -66,7 +67,7 @@ class ModelManager:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(ModelManager, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
@@ -74,13 +75,14 @@ class ModelManager:
         if self._initialized:
             return
 
-        self.models: Dict[str, Any] = {}
-        self.in_flight: Dict[str, int] = {}
-        self.last_used: Dict[str, float] = {}
-        self._loading: Dict[str, threading.Event] = {}
-        self.failed_loads: Dict[str, Dict[str, Any]] = {}
-        self.unavailable_models: Dict[str, ModelLoadFailure] = {}
-        self.runtime_status: Dict[str, Any] | None = None
+        self.models: dict[str, Any] = {}
+        self.model_config_keys: dict[str, str | None] = {}
+        self.in_flight: dict[str, int] = {}
+        self.last_used: dict[str, float] = {}
+        self._loading: dict[str, threading.Event] = {}
+        self.failed_loads: dict[str, dict[str, Any]] = {}
+        self.unavailable_models: dict[str, ModelLoadFailure] = {}
+        self.runtime_status: dict[str, Any] | None = None
         self._lock = threading.RLock()
         self.gpu_lock = asyncio.Lock()
         self._cleanup_thread = None
@@ -161,8 +163,18 @@ class ModelManager:
         while True:
             with self._lock:
                 if name in self.models:
-                    self.last_used[name] = time.time()
-                    return self.models[name]
+                    # A model loaded for another configuration (say CPU after the
+                    # user picked GPU) is reloaded once nothing is using it.
+                    if (
+                        self.model_config_keys.get(name) == config_key
+                        or self.in_flight.get(name, 0) > 0
+                    ):
+                        self.last_used[name] = time.time()
+                        return self.models[name]
+                    logger.info(
+                        "Reloading model %s because its configuration changed", name
+                    )
+                    self._drop_model_locked(name)
 
                 if name in self.unavailable_models:
                     failure = self.unavailable_models[name]
@@ -192,7 +204,7 @@ class ModelManager:
         try:
             model = loader()
         except Exception as exc:
-            failed_at = datetime.now(timezone.utc)
+            failed_at = datetime.now(UTC)
             failure = ModelLoadFailure(
                 name=name,
                 error_type=exc.__class__.__name__,
@@ -221,6 +233,7 @@ class ModelManager:
 
                 self._evict_for_capacity_locked(skip={name})
                 self.models[name] = model
+                self.model_config_keys[name] = config_key
                 self.in_flight.setdefault(name, 0)
                 self.last_used[name] = time.time()
                 self.failed_loads.pop(name, None)
@@ -294,7 +307,7 @@ class ModelManager:
             except Exception as e:
                 logger.warning(f"Failed to clear CUDA cache: {e}")
 
-    def get_loaded_models(self) -> List[str]:
+    def get_loaded_models(self) -> list[str]:
         """Get list of currently loaded model names"""
         with self._lock:
             return list(self.models.keys())
@@ -303,6 +316,7 @@ class ModelManager:
         """Reset mutable singleton state for focused tests."""
         with self._lock:
             self.models.clear()
+            self.model_config_keys.clear()
             self.in_flight.clear()
             self.last_used.clear()
             self._loading.clear()
@@ -312,13 +326,29 @@ class ModelManager:
             self.max_loaded_models = settings.ML_MAX_LOADED_MODELS
             self.publish_status()
 
-    def set_runtime_status(self, status: Dict[str, Any]) -> None:
+    def set_runtime_status(self, status: dict[str, Any]) -> None:
         """Publish the runtime snapshot most recently applied by this process."""
         with self._lock:
             self.runtime_status = status.copy()
             self.publish_status()
 
-    def get_status(self) -> Dict[str, Any]:
+    def merge_runtime_status(self, key: str, value: Any) -> None:
+        """Atomically set a single top-level entry in the shared runtime status.
+
+        Several ML components (CLIP/BLIP/YOLO/OCR) each publish their own
+        top-level key through this same runtime status dict. A caller that
+        instead does ``get_status()`` then ``set_runtime_status()`` from the
+        outside is a read-modify-write race: a concurrent publisher's update
+        can land in between and get silently dropped. Doing the read, merge,
+        and write under the single manager lock closes that window.
+        """
+        with self._lock:
+            merged = dict(self.runtime_status or {})
+            merged[key] = value
+            self.runtime_status = merged
+            self.publish_status()
+
+    def get_status(self) -> dict[str, Any]:
         """Return current process model-manager status."""
         with self._lock:
             status = {
@@ -342,12 +372,16 @@ class ModelManager:
 
             redis_conn = Redis.from_url(settings.REDIS_URL)
             key = f"find:model_status:{self.process_name}"
-            redis_conn.setex(key, 600, json.dumps(self.get_status()))
+            # set(ex=) rather than setex(): redis-py deprecated setex in 2.6.12
+            # and started emitting the warning on every call from 8.x, which is
+            # once per publish. Identical semantics, 600s TTL.
+            redis_conn.set(key, json.dumps(self.get_status()), ex=600)
         except Exception as exc:
             logger.debug("Failed to publish model manager status: %s", exc)
 
     def _drop_model_locked(self, name: str):
         self.models.pop(name, None)
+        self.model_config_keys.pop(name, None)
         self.last_used.pop(name, None)
         self.in_flight.pop(name, None)
 
@@ -387,10 +421,19 @@ class ModelManager:
             self.publish_status()
 
     def clear_model_failures(self, names: list[str] | tuple[str, ...]) -> None:
-        """Allow multiple known-unavailable models to be retried."""
+        """Allow multiple known-unavailable models to be retried.
+
+        A name also covers its variants, so "paddleocr" clears
+        "paddleocr:mobile" and "paddleocr:server".
+        """
         with self._lock:
-            for name in names:
-                self._clear_model_failure_locked(name)
+            failed = set(self.unavailable_models) | set(self.failed_loads)
+            for failed_name in failed:
+                if any(
+                    failed_name == name or failed_name.startswith(f"{name}:")
+                    for name in names
+                ):
+                    self._clear_model_failure_locked(failed_name)
             self.publish_status()
 
     def clear(self) -> None:

@@ -1,8 +1,8 @@
 """Tests for process-local ML model caching and failed-load handling."""
 
-from datetime import datetime, timezone
 import sys
 import types
+from datetime import UTC, datetime
 
 import pytest
 from PIL import Image
@@ -127,6 +127,46 @@ def test_config_key_added_after_failure_allows_retry(manager):
     assert calls["count"] == 2
 
 
+def test_loaded_model_reloads_when_config_key_changes(manager):
+    loads = []
+
+    def loader():
+        loads.append(len(loads))
+        return f"model {len(loads)}"
+
+    assert manager.get_model("accel-model", loader, config_key="accel=cpu") == "model 1"
+    assert manager.get_model("accel-model", loader, config_key="accel=cpu") == "model 1"
+    assert manager.get_model("accel-model", loader, config_key="accel=gpu") == "model 2"
+    assert len(loads) == 2
+
+
+def test_model_in_use_is_not_swapped_mid_lease(manager):
+    with manager.use_model("leased-model", lambda: "cpu", config_key="accel=cpu"):
+        assert (
+            manager.get_model("leased-model", lambda: "gpu", config_key="accel=gpu")
+            == "cpu"
+        )
+    assert (
+        manager.get_model("leased-model", lambda: "gpu", config_key="accel=gpu")
+        == "gpu"
+    )
+
+
+def test_clearing_a_model_family_clears_its_variants(manager):
+    def broken_loader():
+        raise RuntimeError("load failed")
+
+    with pytest.raises(ModelUnavailableError):
+        manager.get_model("paddleocr:mobile", broken_loader)
+    with pytest.raises(ModelUnavailableError):
+        manager.get_model("paddleocr-other", broken_loader)
+
+    manager.clear_model_failures(("paddleocr",))
+
+    assert "paddleocr:mobile" not in manager.unavailable_models
+    assert "paddleocr-other" in manager.unavailable_models
+
+
 def test_unavailable_stage_records_safe_metadata_and_continues(monkeypatch):
     monkeypatch.setattr(settings, "ML_MODE", "real")
 
@@ -140,7 +180,7 @@ def test_unavailable_stage_records_safe_metadata_and_continues(monkeypatch):
                 name="yolo",
                 error_type="RuntimeError",
                 reason="RuntimeError: simulated detector load failure",
-                failed_at=datetime.now(timezone.utc),
+                failed_at=datetime.now(UTC),
             )
             raise ModelUnavailableError("yolo", failure)
 

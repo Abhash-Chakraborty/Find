@@ -63,6 +63,11 @@ const nextConfig = {
   },
   experimental: {
     ppr: false,
+    // TypeScript 7 is the native rewrite and no longer exposes the JS compiler
+    // API Next.js links against, so the built-in type-check step cannot load
+    // it. This routes that step through the tsc CLI instead, which is the
+    // documented path for TS 7. Type errors still fail the build.
+    useTypeScriptCli: true,
   },
   typescript: {
     ignoreBuildErrors: false,

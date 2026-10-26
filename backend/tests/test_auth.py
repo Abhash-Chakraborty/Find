@@ -534,3 +534,97 @@ class TestSecurityProperties:
             headers=_auth_header(member_token),
         )
         assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Instance members
+# ---------------------------------------------------------------------------
+
+
+class TestUserListing:
+    """GET /auth/users backs the Instance page's member list (#263).
+
+    The join-request list cannot stand in for it: the first admin is created by
+    /auth/setup and never appears as a request.
+    """
+
+    def test_admin_sees_the_setup_admin(self, client):
+        token = _setup_admin(client)["token"]
+
+        resp = client.get("/api/auth/users", headers=_auth_header(token))
+
+        assert resp.status_code == 200
+        users = resp.json()["users"]
+        assert [user["username"] for user in users] == [ADMIN_USERNAME]
+        assert users[0]["role"] == "admin"
+
+    def test_approved_member_appears_in_the_list(self, client):
+        token = _setup_admin(client)["token"]
+        invite = _create_invite(client, token)
+        join = _join(client, invite["invite_token"])
+        client.post(
+            f"/api/auth/join-requests/{join['join_request_id']}/approve",
+            headers=_auth_header(token),
+        )
+
+        resp = client.get("/api/auth/users", headers=_auth_header(token))
+
+        assert resp.status_code == 200
+        users = {user["username"]: user for user in resp.json()["users"]}
+        assert set(users) == {ADMIN_USERNAME, "newuser"}
+        assert users["newuser"]["role"] == "member"
+
+    def test_rejected_request_creates_no_user(self, client):
+        token = _setup_admin(client)["token"]
+        invite = _create_invite(client, token)
+        join = _join(client, invite["invite_token"])
+        client.post(
+            f"/api/auth/join-requests/{join['join_request_id']}/reject",
+            headers=_auth_header(token),
+        )
+
+        resp = client.get("/api/auth/users", headers=_auth_header(token))
+
+        assert [user["username"] for user in resp.json()["users"]] == [ADMIN_USERNAME]
+
+    def test_never_exposes_the_password_hash(self, client):
+        token = _setup_admin(client)["token"]
+
+        resp = client.get("/api/auth/users", headers=_auth_header(token))
+
+        # Assert on the whole serialized body rather than per-key, so a future
+        # field carrying the hash cannot slip through.
+        assert "password_hash" not in resp.text
+        assert ADMIN_PASSWORD not in resp.text
+        assert set(resp.json()["users"][0]) == {
+            "id",
+            "username",
+            "display_name",
+            "role",
+        }
+
+    def test_member_cannot_list_users(self, client):
+        token = _setup_admin(client)["token"]
+        invite = _create_invite(client, token)
+        join = _join(client, invite["invite_token"])
+        client.post(
+            f"/api/auth/join-requests/{join['join_request_id']}/approve",
+            headers=_auth_header(token),
+        )
+        member_token = _login(client, username="newuser", password="newpass123").json()[
+            "token"
+        ]
+
+        resp = client.get("/api/auth/users", headers=_auth_header(member_token))
+
+        assert resp.status_code == 403
+
+    def test_anonymous_cannot_list_users(self, client):
+        _setup_admin(client)
+        # Setup leaves a session cookie on the shared client, so drop it --
+        # otherwise this asserts the admin path a second time.
+        client.cookies.clear()
+
+        resp = client.get("/api/auth/users")
+
+        assert resp.status_code in (401, 403)

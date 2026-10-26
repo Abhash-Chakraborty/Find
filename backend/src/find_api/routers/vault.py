@@ -2,31 +2,31 @@
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 import secrets
 import tempfile
+from datetime import UTC, datetime
 from io import BytesIO
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Body, Cookie, Depends, Header, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+from find_api.core.auth import get_current_user, hash_password, verify_password
 from find_api.core.crypto import (
     VAULT_STORAGE_DIR,
     build_vault_aad,
     create_key_verifier,
-    delete_session_key,
     decrypt_file_stream,
+    delete_session_key,
     derive_master_key,
     encrypt_file,
     get_session_key,
@@ -34,8 +34,7 @@ from find_api.core.crypto import (
     verify_master_key,
 )
 from find_api.core.database import get_db
-from find_api.core.auth import hash_password, verify_password
-from find_api.core.dependencies import get_required_user
+from find_api.core.dependencies import SESSION_COOKIE_NAME, get_required_user
 from find_api.core.storage import (
     delete_file,
     download_file_to_path,
@@ -45,6 +44,7 @@ from find_api.core.storage import (
 )
 from find_api.models.media import Media
 from find_api.models.user import User
+from find_api.services.activity_log import record_activity
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -78,17 +78,17 @@ class VaultRecoverRequest(BaseModel):
 
 
 class VaultLockRequest(BaseModel):
-    session_token: Optional[str] = None
+    session_token: str | None = None
 
 
 class VaultHideRequest(BaseModel):
     media_id: int
-    session_token: Optional[str] = None
+    session_token: str | None = None
 
 
 class VaultRestoreRequest(BaseModel):
     media_id: int
-    session_token: Optional[str] = None
+    session_token: str | None = None
 
 
 def _normalize_binary(value: object) -> bytes:
@@ -100,9 +100,7 @@ def _normalize_binary(value: object) -> bytes:
     return bytes(value)
 
 
-def _resolve_session_token(
-    authorization: Optional[str], session_token: Optional[str]
-) -> str:
+def _resolve_session_token(authorization: str | None, session_token: str | None) -> str:
     """Resolve a vault session token from the request body or Authorization header."""
     token = session_token.strip() if session_token else ""
 
@@ -129,7 +127,7 @@ def _get_cached_master_key(session_token: str) -> bytes:
         ) from exc
 
 
-def _load_vault_config(db: Session) -> Optional[tuple[bytes, bytes, bytes]]:
+def _load_vault_config(db: Session) -> tuple[bytes, bytes, bytes] | None:
     """Return the singleton vault verifier configuration when it exists."""
     row = db.execute(
         text(
@@ -266,7 +264,7 @@ def _migrate_legacy_encrypted_items(db: Session, master_key: bytes) -> None:
             associated_data=build_vault_aad(media.id, media.file_hash),
             prefix=f"vault-migrate-{media.id}-",
         )
-        uploaded_thumbnail: Optional[dict] = None
+        uploaded_thumbnail: dict | None = None
         try:
             plaintext = plaintext_file.read_bytes()
             upload_file(
@@ -303,7 +301,7 @@ def _load_media_or_404(db: Session, media_id: int) -> Media:
     return media
 
 
-def _load_vault_metadata(db: Session, media_id: int) -> Optional[tuple[str, bytes]]:
+def _load_vault_metadata(db: Session, media_id: int) -> tuple[str, bytes] | None:
     """Return encrypted vault blob metadata for a media row."""
     row = db.execute(
         text(
@@ -316,7 +314,7 @@ def _load_vault_metadata(db: Session, media_id: int) -> Optional[tuple[str, byte
     return row[0], _normalize_binary(row[1])
 
 
-def _apply_thumbnail_metadata(media: Media, metadata: Optional[dict]) -> None:
+def _apply_thumbnail_metadata(media: Media, metadata: dict | None) -> None:
     """Apply generated thumbnail metadata or clear stale thumbnail pointers."""
     media.thumbnail_key = metadata.get("thumbnail_key") if metadata else None
     media.thumbnail_content_type = (
@@ -327,7 +325,7 @@ def _apply_thumbnail_metadata(media: Media, metadata: Optional[dict]) -> None:
     media.thumbnail_height = metadata.get("thumbnail_height") if metadata else None
 
 
-def _delete_storage_objects_best_effort(*object_keys: Optional[str]) -> None:
+def _delete_storage_objects_best_effort(*object_keys: str | None) -> None:
     """Remove rollback artifacts without masking the primary failure."""
     for object_key in dict.fromkeys(key for key in object_keys if key):
         try:
@@ -353,7 +351,7 @@ def _rollback_hidden_state_after_delete_failure(
     original object has been replaced successfully. This prevents a storage
     deletion failure from leaving a visible row whose object no longer exists.
     """
-    uploaded_thumbnail: Optional[dict] = None
+    uploaded_thumbnail: dict | None = None
     try:
         plaintext = plaintext_path.read_bytes()
         upload_file(plaintext, original_key, content_type)
@@ -435,7 +433,7 @@ def unlock_vault(
     request: Request,
     payload: VaultUnlockRequest,
     db: Session = Depends(get_db),
-    _user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Unlock the vault and cache a short-lived session token."""
     if not payload.passphrase or not payload.passphrase.strip():
@@ -445,15 +443,15 @@ def unlock_vault(
     # passphrase. Enforce a minimum length at creation time so the global
     # vault secret cannot be a trivial passphrase. Existing vaults are not
     # re-validated, so previously-set passphrases keep working.
-    if _load_vault_config(db) is None:
-        if len(payload.passphrase) < MIN_VAULT_PASSPHRASE_LENGTH:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Vault passphrase must be at least "
-                    f"{MIN_VAULT_PASSPHRASE_LENGTH} characters"
-                ),
-            )
+    is_new_vault = _load_vault_config(db) is None
+    if is_new_vault and len(payload.passphrase) < MIN_VAULT_PASSPHRASE_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Vault passphrase must be at least "
+                f"{MIN_VAULT_PASSPHRASE_LENGTH} characters"
+            ),
+        )
 
     master_key = _load_or_create_master_key(db, payload.passphrase)
     try:
@@ -466,6 +464,12 @@ def unlock_vault(
         db.rollback()
     session_token = secrets.token_urlsafe(32)
     set_session_key(session_token, master_key)
+    record_activity(
+        db,
+        "vault",
+        "created" if is_new_vault else "unlocked",
+        user_id=user.id if user else None,
+    )
     return {"session_token": session_token}
 
 
@@ -573,7 +577,7 @@ def recover_vault(
 
 @router.get("/vault/list")
 def list_vault_media(
-    authorization: Optional[str] = Header(default=None),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """List media records hidden in the vault for an unlocked session."""
@@ -603,8 +607,10 @@ def list_vault_media(
 
 @router.post("/vault/lock")
 def lock_vault(
-    payload: Optional[VaultLockRequest] = Body(default=None),
-    authorization: Optional[str] = Header(default=None),
+    payload: VaultLockRequest | None = Body(default=None),
+    authorization: str | None = Header(default=None),
+    session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+    db: Session = Depends(get_db),
 ):
     """Invalidate an active vault session token."""
     session_token = _resolve_session_token(
@@ -612,13 +618,20 @@ def lock_vault(
     )
     if not delete_session_key(session_token):
         raise HTTPException(status_code=401, detail="Invalid or expired vault session")
+    # Attribution comes from the login cookie, never from Authorization:
+    # on this route that header carries the *vault* session token, which
+    # resolves to no user. Depending on get_required_user here would 401
+    # every shared-mode lock. get_current_user is the non-raising form, so
+    # a cookie-less API client still locks, just without attribution.
+    actor = get_current_user(db, f"Bearer {session_cookie}" if session_cookie else None)
+    record_activity(db, "vault", "locked", user_id=actor.id if actor else None)
     return {"status": "locked"}
 
 
 @router.post("/vault/hide")
 def hide_media(
     payload: VaultHideRequest,
-    authorization: Optional[str] = Header(default=None),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """Encrypt a media object into the vault and remove the original blob."""
@@ -636,7 +649,7 @@ def hide_media(
     if _protected_storage_enabled(db):
         media.is_hidden = True
         media.vault_state = "hidden"
-        media.hidden_at = datetime.now(timezone.utc)
+        media.hidden_at = datetime.now(UTC)
         media.encrypted_at = None
         db.commit()
         return {"status": "hidden", "media_id": media.id, "storage_mode": "protected"}
@@ -679,7 +692,7 @@ def hide_media(
             )
             media.is_hidden = True
             media.vault_state = "hidden_encrypted"
-            hidden_timestamp = datetime.now(timezone.utc)
+            hidden_timestamp = datetime.now(UTC)
             media.hidden_at = hidden_timestamp
             media.encrypted_at = hidden_timestamp
             db.commit()
@@ -720,7 +733,7 @@ def hide_media(
 @router.post("/vault/restore")
 def restore_media(
     payload: VaultRestoreRequest,
-    authorization: Optional[str] = Header(default=None),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """Restore an authenticated vault item to configured storage safely.
@@ -744,6 +757,13 @@ def restore_media(
             media.hidden_at = None
             media.encrypted_at = None
             db.commit()
+            record_activity(
+                db,
+                "vault",
+                "restored",
+                user_id=media.uploader_user_id,
+                media_id=media.id,
+            )
             return {
                 "status": "restored",
                 "media_id": media.id,
@@ -767,7 +787,7 @@ def restore_media(
 
     original_key = media.minio_key
     content_type = media.content_type or "application/octet-stream"
-    thumbnail_metadata: Optional[dict] = None
+    thumbnail_metadata: dict | None = None
     staged_encrypted = encrypted_file.with_name(
         f".{encrypted_file.name}.{uuid4().hex}.restore-pending"
     )
@@ -832,6 +852,9 @@ def restore_media(
             encrypted_blob_removed = False
             logger.exception("Restored vault item left an encrypted cleanup artifact")
 
+        record_activity(
+            db, "vault", "restored", user_id=media.uploader_user_id, media_id=media.id
+        )
         return {
             "status": "restored",
             "media_id": media.id,
@@ -844,7 +867,7 @@ def restore_media(
 @router.get("/vault/thumbnail/{media_id}")
 def thumbnail_hidden_media(
     media_id: int,
-    authorization: Optional[str] = Header(default=None),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """Return a small authenticated preview without exposing the original."""
@@ -905,7 +928,7 @@ def thumbnail_hidden_media(
 @router.get("/vault/stream/{media_id}")
 def stream_hidden_media(
     media_id: int,
-    authorization: Optional[str] = Header(default=None),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """Stream a hidden media blob after AEAD metadata verification succeeds."""

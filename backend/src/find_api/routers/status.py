@@ -3,12 +3,13 @@ Status endpoint for checking job progress
 """
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from find_api.core.config import settings
 from find_api.core.dependencies import get_admin_user, get_required_user
+from find_api.core.model_footprint import build_report
 from find_api.core.model_manager import get_model_manager
 from find_api.core.queue import get_job, get_redis_connection
 from find_api.core.runtime_profile import worker_health
@@ -17,8 +18,23 @@ from find_api.models.user import User
 router = APIRouter()
 
 
+@router.get("/status/models/footprint")
+def get_model_footprint(_admin: User | None = Depends(get_admin_user)):
+    """
+    Report what each ML model downloads and loads: configured identifier,
+    on-disk cache size, loaded/unloaded state, execution device, and
+    last-use time.
+
+    Admin-only, and never returns filesystem paths (see
+    ``find_api.core.model_footprint`` for the full-path local CLI
+    equivalent). Use this as the measurement source before changing ML
+    model defaults or installer download sizes.
+    """
+    return build_report(include_paths=False)
+
+
 @router.get("/status/models")
-def get_loaded_models(_admin: Optional[User] = Depends(get_admin_user)):
+def get_loaded_models(_admin: User | None = Depends(get_admin_user)):
     """
     Get currently loaded ML models across API/worker processes.
 
@@ -66,7 +82,7 @@ def get_loaded_models(_admin: Optional[User] = Depends(get_admin_user)):
 @router.get("/status/{job_id}")
 def get_job_status(
     job_id: str,
-    _user: Optional[User] = Depends(get_required_user),
+    _user: User | None = Depends(get_required_user),
 ):
     """
     Check status of a processing job

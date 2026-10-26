@@ -9,3 +9,16 @@ vault_storage
 *.db
 *.sqlite
 *.sqlite3
+
+# Model weights. Ultralytics downloads yolo*.pt into the working directory on
+# first use, so a contributor who has ever run the worker outside Docker has one
+# sitting in backend/. .gitignore keeps it out of git but not out of the build
+# context, so without this it is baked into every image — which makes image size
+# depend on whose machine built it. The runtime fetches weights into the model
+# cache volume at first run; none of them belong in the image.
+*.pt
+*.pth
+*.onnx
+*.pdparams
+*.pdmodel
+*.safetensors

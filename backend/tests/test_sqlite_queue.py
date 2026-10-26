@@ -8,6 +8,7 @@ Run with (from backend/ directory):
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 import threading
@@ -16,7 +17,6 @@ import time
 import pytest
 
 from find_api.core.sqlite_queue import SqliteQueue, _resolve_job_type
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -29,10 +29,8 @@ def db_path():
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     yield path
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(path)
-    except OSError:
-        pass
 
 
 @pytest.fixture()

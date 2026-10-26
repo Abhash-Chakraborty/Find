@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import os
 import tempfile
-import time
 import threading
+import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Dict, Iterator
 
 import argon2
 from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-active_vault_sessions: Dict[str, tuple[bytes, float]] = {}
+active_vault_sessions: dict[str, tuple[bytes, float]] = {}
 _sessions_lock = threading.Lock()
 SESSION_TTL_SECONDS = 3600
 
@@ -69,7 +69,7 @@ def build_vault_aad(media_id: int, file_hash: str) -> bytes:
         raise ValueError("file_hash must not be empty")
     return (
         f"{_VAULT_BLOB_AAD_VERSION}|media_id:{media_id}|file_hash:{file_hash}"
-    ).encode("utf-8")
+    ).encode()
 
 
 def get_session_key(token: str) -> bytes:

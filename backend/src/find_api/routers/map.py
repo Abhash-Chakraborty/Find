@@ -4,8 +4,6 @@ Coordinates come from opt-in EXIF extraction. The API never reverse geocodes,
 contacts a tile provider, or returns hidden/vault media.
 """
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -26,14 +24,14 @@ def _map_enabled(db: Session) -> bool:
 
 def _marker_query(
     db: Session,
-    user: Optional[User],
+    user: User | None,
     *,
     include_archived: bool,
-    liked: Optional[bool],
-    west: Optional[float],
-    south: Optional[float],
-    east: Optional[float],
-    north: Optional[float],
+    liked: bool | None,
+    west: float | None,
+    south: float | None,
+    east: float | None,
+    north: float | None,
 ):
     query = scope_media_query(_public_media_query(db), user).filter(
         Media.deleted_at.is_(None),
@@ -65,13 +63,13 @@ def _marker_query(
 @router.get("/map/markers")
 def get_map_markers(
     include_archived: bool = False,
-    liked: Optional[bool] = None,
-    west: Optional[float] = Query(None, ge=-180, le=180),
-    south: Optional[float] = Query(None, ge=-90, le=90),
-    east: Optional[float] = Query(None, ge=-180, le=180),
-    north: Optional[float] = Query(None, ge=-90, le=90),
+    liked: bool | None = None,
+    west: float | None = Query(None, ge=-180, le=180),
+    south: float | None = Query(None, ge=-90, le=90),
+    east: float | None = Query(None, ge=-180, le=180),
+    north: float | None = Query(None, ge=-90, le=90),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Return scoped media coordinates for local client-side clustering."""
     if not _map_enabled(db):

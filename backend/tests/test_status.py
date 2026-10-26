@@ -1,7 +1,7 @@
 """Tests for GET /api/status/{job_id} — job status response shape."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 
@@ -25,7 +25,7 @@ class TestJobStatus:
     def test_queued_job(self, client):
         fake_job = self._make_fake_job(
             get_status=lambda: "queued",
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
             started_at=None,
             ended_at=None,
             completed_at=None,
@@ -50,9 +50,9 @@ class TestJobStatus:
     def test_finished_job_includes_result(self, client):
         fake_job = self._make_fake_job(
             get_status=lambda: "finished",
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            started_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
-            ended_at=datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            started_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+            ended_at=datetime(2026, 1, 1, 0, 0, 5, tzinfo=UTC),
             completed_at=None,
             is_finished=True,
             is_failed=False,
@@ -72,9 +72,9 @@ class TestJobStatus:
     def test_failed_job_includes_error(self, client):
         fake_job = self._make_fake_job(
             get_status=lambda: "failed",
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            started_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
-            ended_at=datetime(2026, 1, 1, 0, 0, 3, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            started_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+            ended_at=datetime(2026, 1, 1, 0, 0, 3, tzinfo=UTC),
             completed_at=None,
             is_finished=False,
             is_failed=True,
@@ -173,3 +173,53 @@ def test_loaded_models_endpoint_includes_worker_snapshot(client):
         == "load failed"
     )
     assert body["worker_health"]["state"] == "stale"
+
+
+def test_model_footprint_endpoint_returns_report_without_paths(client, tmp_path):
+    """GET /api/status/models/footprint reports cache/loaded/device info and
+    never leaks filesystem paths, even though the endpoint is admin-gated."""
+    fake_redis = MagicMock()
+    fake_redis.scan_iter.return_value = []
+    fake_redis.get.return_value = None
+
+    with (
+        patch("find_api.core.model_footprint.get_model_manager") as mock_get_manager,
+        patch(
+            "find_api.core.queue.get_redis_connection",
+            return_value=fake_redis,
+        ),
+    ):
+        mock_manager = mock_get_manager.return_value
+        mock_manager.get_status.return_value = {
+            "process": "api",
+            "loaded_models": ["siglip"],
+            "in_flight": {},
+            "failed_models": {},
+            "max_loaded_models": 5,
+            "updated_at": 0,
+        }
+        mock_manager.last_used = {}
+
+        response = client.get("/api/status/models/footprint")
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert {m["key"] for m in body["models"]} == {
+        "siglip",
+        "captioner",
+        "yolo",
+        "insightface",
+        "paddleocr",
+    }
+
+    siglip_entry = next(m for m in body["models"] if m["key"] == "siglip")
+    assert siglip_entry["loaded"] is True
+
+    for entry in body["models"]:
+        assert "path" not in entry["cache"]
+
+    assert set(body["packs"].keys()) == {"light", "full", "proposed_cpu"}
+    assert body["packs"]["light"]["total_count"] == 1
+    assert body["packs"]["full"]["total_count"] == 5
+    assert body["packs"]["proposed_cpu"]["status"] == "not_implemented"

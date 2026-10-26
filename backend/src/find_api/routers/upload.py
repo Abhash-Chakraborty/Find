@@ -7,11 +7,11 @@ import io
 import logging
 import mimetypes
 import zipfile
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from PIL import Image
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from find_api.core.config import settings
@@ -30,9 +30,9 @@ router = APIRouter()
 
 @router.post("/upload")
 async def upload_images(
-    files: List[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """
     Upload one or more images for processing
@@ -68,6 +68,12 @@ async def upload_images(
             raise
         except Exception:
             logger.exception("Failed to upload %s", file.filename)
+            # The session is shared by every file in this request, and a failed
+            # commit leaves it unusable until rolled back. Without this, one bad
+            # file fails the whole remainder of the batch with
+            # PendingRollbackError. Already-committed files are unaffected --
+            # rollback only discards work that never landed.
+            db.rollback()
             results.append(
                 {
                     "filename": file.filename,
@@ -83,7 +89,7 @@ async def upload_images(
 async def upload_bulk_images(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """
     Upload images in bulk via ZIP archive
@@ -201,6 +207,10 @@ async def upload_bulk_images(
                     )
                 except Exception:
                     logger.exception("Failed to process %s from bulk upload", filename)
+                    # See the note in upload_images: the session is shared
+                    # across the archive, so a failed commit has to be cleared
+                    # or every later member fails too.
+                    db.rollback()
                     results.append(
                         {
                             "filename": filename,
@@ -209,8 +219,8 @@ async def upload_bulk_images(
                         }
                     )
 
-    except zipfile.BadZipFile:
-        raise HTTPException(400, "Uploaded file is not a valid ZIP archive")
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(400, "Uploaded file is not a valid ZIP archive") from exc
 
     return {"results": results, "total": len(results)}
 
@@ -234,19 +244,23 @@ def _verify_image_content(filename: str, file_data: bytes) -> None:
             img.verify()
     except HTTPException:
         raise
-    except Image.DecompressionBombError:
-        raise HTTPException(400, f"File {filename} exceeds the safe pixel limit")
-    except Exception:
-        raise HTTPException(400, f"File {filename} is corrupted or not a valid image")
+    except Image.DecompressionBombError as exc:
+        raise HTTPException(
+            400, f"File {filename} exceeds the safe pixel limit"
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            400, f"File {filename} is corrupted or not a valid image"
+        ) from exc
 
 
 def _ingest_image(
     *,
     filename: str,
-    content_type: Optional[str],
+    content_type: str | None,
     file_data: bytes,
     db: Session,
-    uploader_user_id: Optional[int] = None,
+    uploader_user_id: int | None = None,
 ) -> dict:
     """Create or reuse a media record from raw image bytes"""
     detected_type = content_type or mimetypes.guess_type(filename)[0] or ""
@@ -294,7 +308,18 @@ def _ingest_image(
     media = Media(**media_kwargs)
 
     db.add(media)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if "file_hash" not in str(exc.orig):
+            raise
+        existing = db.query(Media).filter(Media.file_hash == file_hash).first()
+        if existing is None:
+            raise
+        logger.info(f"File {filename} already exists (hash: {file_hash})")
+        return {"filename": filename, "status": "duplicate", "media_id": existing.id}
+
     db.refresh(media)
 
     job = get_task_queue().enqueue(
@@ -313,7 +338,7 @@ def _ingest_image(
     }
 
 
-def _get_extension(filename: str, content_type: Optional[str]) -> str:
+def _get_extension(filename: str, content_type: str | None) -> str:
     """Determine appropriate file extension for storage"""
     if "." in filename:
         return "." + filename.split(".")[-1]

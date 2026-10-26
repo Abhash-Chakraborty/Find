@@ -6,8 +6,58 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
 ## [Unreleased]
 
+## [1.1.4] — 2026-10-26
+
+### Fixed
+
+- Search's file-type filter matches JPEGs again; `jpg` and `jpeg` map to
+  `image/jpeg`, the same as in the gallery.
+- Archived and trashed photos no longer appear in Clusters or People.
+- Photos in a password-protected share load again. A correct password sets a
+  12-hour unlock cookie for that link, so thumbnails no longer need the
+  password or run a bcrypt check each.
+- Switching between CPU and GPU reloads models that are already in memory
+  instead of keeping the old copy until the worker restarts.
+- Retry analysis can recover a failed OCR model load.
+- New uploads appear in the gallery as soon as they finish.
+- The model footprint report shows the caption and OCR models as loaded when
+  they are.
+- Compose installs create the vector index at startup. Before, only Alembic
+  created it, and compose never runs Alembic, so every search read the whole
+  table.
+- The upload monitor polls running jobs every 2.5 s. It used to poll again
+  after every response, so a large batch hit the job endpoint back to back.
+
+### Security
+
+- torch 2.13.0 and torchvision 0.28.0 close two PyTorch memory-corruption
+  advisories. The NVIDIA build now pulls CUDA 12.9 wheels, since the CUDA
+  12.8 index stops at torch 2.11.
+- Patched backend and frontend dependencies with open advisories. The
+  desktop app's glib advisory waits on Tauri moving past gtk 0.18; Find doesn't
+  call the affected API.
+
+### Removed
+
+- The TestSprite workflow, which sent the app to a hosted test service.
+- `plan.md`, `POST /cluster/trigger` (use `/cluster/run`), unused backend and
+  frontend helpers, and four unused npm packages.
+
 ### Changed
 
+- Search ranks the closest 200 or more images through the vector index, then
+  applies the threshold and feedback boost. On 20,000 test vectors a query
+  took 4.2 ms instead of 203 ms. The match count now counts within that pool.
+- Gallery, search and cluster lists no longer load embeddings or
+  sign a storage URL per photo; they link to the app's own image routes.
+- A person, a cluster or an album opens with its first 200 photos and a
+  Load more button, instead of sending every photo in one response. The
+  cluster filename filter now searches all members, not only loaded ones.
+- Clusters, People and the AI runtime card stop polling on an idle library.
+  They refresh while images index, during a clustering job, and on focus.
+- Docs name BLIP as the caption model.
+- The backend lints with import sorting, pyupgrade, bugbear and simplify
+  rules, and re-raised exceptions keep their cause.
 - Contributor work now targets a protected `canary` default branch; only the
   reviewed canary promotion can enter `main`.
 - Release preparation synchronizes every version surface and uses one manual

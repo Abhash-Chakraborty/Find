@@ -1,6 +1,6 @@
 """Tests for analysis-job reconciliation."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from find_api.core.recovery import (
@@ -47,7 +47,7 @@ def test_failed_job_marks_media_failed(db):
         db,
         status="processing",
         analysis_job_id="failed-job",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     with patch(
@@ -67,7 +67,7 @@ def test_finished_job_without_media_update_marks_media_failed(db):
         db,
         status="processing",
         analysis_job_id="finished-job",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     with patch(
@@ -87,7 +87,7 @@ def test_active_job_does_not_false_fail_old_media(db):
         db,
         status="processing",
         analysis_job_id="started-job",
-        created_at=datetime.now(timezone.utc) - timedelta(days=1),
+        created_at=datetime.now(UTC) - timedelta(days=1),
     )
 
     with patch(
@@ -107,7 +107,7 @@ def test_missing_old_job_marks_media_failed(db):
         db,
         status="pending",
         analysis_job_id="missing-job",
-        created_at=datetime.now(timezone.utc) - timedelta(seconds=1800),
+        created_at=datetime.now(UTC) - timedelta(seconds=1800),
     )
 
     with patch(
@@ -127,7 +127,7 @@ def test_missing_fresh_job_stays_active(db):
         db,
         status="pending",
         analysis_job_id="missing-job",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     with patch(

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline - Find</title>
+    <!--
+      Served by the service worker when a navigation fails and no cached copy of
+      the requested page exists. It must be completely self-contained: if the
+      network is down, no Next.js chunk, font, or stylesheet is going to load.
+    -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #111827;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --card: #f9fafb;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0a0a0a;
+          --fg: #f3f4f6;
+          --muted: #9ca3af;
+          --border: #262626;
+          --card: #141414;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+      main {
+        max-width: 30rem;
+        width: 100%;
+        text-align: center;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 9999px;
+        font-size: 0.8125rem;
+        color: var(--muted);
+        margin-bottom: 1.25rem;
+      }
+      .dot {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 9999px;
+        background: #f59e0b;
+      }
+      h1 {
+        font-size: 1.5rem;
+        line-height: 1.3;
+        margin: 0 0 0.75rem;
+      }
+      p {
+        color: var(--muted);
+        line-height: 1.6;
+        margin: 0 0 1rem;
+      }
+      .card {
+        text-align: left;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 1rem 1.25rem;
+        margin: 1.5rem 0;
+      }
+      .card h2 {
+        font-size: 0.9375rem;
+        margin: 0 0 0.5rem;
+      }
+      .card ul {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: var(--muted);
+        line-height: 1.7;
+        font-size: 0.9375rem;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+        padding: 0.6rem 1.25rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--border);
+        background: var(--fg);
+        color: var(--bg);
+      }
+      button:hover {
+        opacity: 0.9;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="badge"><span class="dot"></span>Disconnected</span>
+      <h1>Find can&rsquo;t reach your library</h1>
+      <p>
+        Find runs against a backend on your own machine or network. This page is
+        being served from your browser&rsquo;s cache because that backend
+        can&rsquo;t be reached right now.
+      </p>
+
+      <div class="card">
+        <h2>Your data is safe</h2>
+        <ul>
+          <li>Nothing has been lost &mdash; your library lives on your server.</li>
+          <li>Files you queued for upload are still staged on this device.</li>
+          <li>They will be submitted automatically once the connection returns.</li>
+        </ul>
+      </div>
+
+      <p>
+        Check that the Find backend is running, then try again.
+      </p>
+      <button type="button" onclick="location.reload()">Retry</button>
+    </main>
+    <script>
+      // Reload as soon as the browser reports connectivity, so the user does not
+      // have to notice and press the button themselves.
+      window.addEventListener("online", () => {
+        location.reload();
+      });
+    </script>
+  </body>
+</html>

@@ -1,6 +1,6 @@
-from typing import Any, List, Optional
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_admin_user, get_required_user
-from find_api.models.feedback import PersonFeedback, GeneralFeedback
-from find_api.models.person import Person
-from find_api.models.face import Face
-from find_api.models.media import Media
-from find_api.models.user import User
 from find_api.core.queue import enqueue_feedback_ranking_job
+from find_api.models.face import Face
+from find_api.models.feedback import GeneralFeedback, PersonFeedback
+from find_api.models.media import Media
+from find_api.models.person import Person
+from find_api.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["feedback"])
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api", tags=["feedback"])
 # ─── Helpers ───────────────────────────────────────────────────────────────
 
 
-def _scope_user_id(user: Optional[User]) -> Optional[int]:
+def _scope_user_id(user: User | None) -> int | None:
     """Return the id a regular user is restricted to, or None (unrestricted).
 
     Local mode (user is None) and admins are unrestricted.
@@ -32,7 +32,7 @@ def _scope_user_id(user: Optional[User]) -> Optional[int]:
     return user.id
 
 
-def _load_owned_media_or_404(db: Session, media_id: int, user: Optional[User]) -> Media:
+def _load_owned_media_or_404(db: Session, media_id: int, user: User | None) -> Media:
     """Fetch media the caller may act on, else 404.
 
     Returns 404 (not 403) for media owned by others so the endpoint does
@@ -47,7 +47,7 @@ def _load_owned_media_or_404(db: Session, media_id: int, user: Optional[User]) -
     return media
 
 
-def _require_person_access(db: Session, person_id: int, user: Optional[User]) -> Person:
+def _require_person_access(db: Session, person_id: int, user: User | None) -> Person:
     """Fetch a person the caller may act on, else 404.
 
     A regular user may only act on a person who appears in media they
@@ -72,7 +72,7 @@ def _require_person_access(db: Session, person_id: int, user: Optional[User]) ->
     return person
 
 
-def _validate_rating(rating: Optional[int]) -> None:
+def _validate_rating(rating: int | None) -> None:
     if rating is None:
         raise HTTPException(status_code=400, detail="rating is required")
     if rating < 1 or rating > 5:
@@ -86,9 +86,9 @@ class PersonFeedbackRequest(BaseModel):
     """Request body for person cluster feedback"""
 
     feedback_type: str  # "split", "merge", "wrong_person", "correct"
-    face_ids: List[int]
-    target_person_id: Optional[int] = None
-    user_reason: Optional[str] = None
+    face_ids: list[int]
+    target_person_id: int | None = None
+    user_reason: str | None = None
 
 
 class PersonFeedbackResponse(BaseModel):
@@ -97,8 +97,8 @@ class PersonFeedbackResponse(BaseModel):
     id: int
     feedback_type: str
     source_person_id: int
-    target_person_id: Optional[int]
-    face_ids: List[int]
+    target_person_id: int | None
+    face_ids: list[int]
     status: str
     created_at: datetime
 
@@ -109,12 +109,12 @@ class GeneralFeedbackRequest(BaseModel):
     """Request body for general feedback and correction data."""
 
     feedback_type: str
-    media_id: Optional[int] = None
-    person_id: Optional[int] = None
-    rating: Optional[int] = None  # 1-5
-    rating_reason: Optional[str] = None
-    corrected_caption: Optional[str] = None
-    corrected_objects: Optional[List[str]] = None
+    media_id: int | None = None
+    person_id: int | None = None
+    rating: int | None = None  # 1-5
+    rating_reason: str | None = None
+    corrected_caption: str | None = None
+    corrected_objects: list[str] | None = None
 
 
 class GeneralFeedbackResponse(BaseModel):
@@ -122,11 +122,11 @@ class GeneralFeedbackResponse(BaseModel):
 
     id: int
     feedback_type: str
-    media_id: Optional[int]
-    person_id: Optional[int]
-    rating: Optional[int]
-    rating_reason: Optional[str]
-    extra_metadata: Optional[dict[str, Any]]
+    media_id: int | None
+    person_id: int | None
+    rating: int | None
+    rating_reason: str | None
+    extra_metadata: dict[str, Any] | None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -142,7 +142,7 @@ def submit_split_feedback(
     person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Mark faces to be split into a separate person group.
@@ -206,10 +206,10 @@ def submit_split_feedback(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to split person cluster")
-        raise HTTPException(status_code=500, detail="Split failed")
+        raise HTTPException(status_code=500, detail="Split failed") from exc
 
 
 @router.post(
@@ -221,7 +221,7 @@ def submit_merge_feedback(
     target_person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Merge two person groups into one.
@@ -263,10 +263,10 @@ def submit_merge_feedback(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to merge persons")
-        raise HTTPException(status_code=500, detail="Merge failed")
+        raise HTTPException(status_code=500, detail="Merge failed") from exc
 
 
 @router.post(
@@ -276,7 +276,7 @@ def submit_wrong_person_feedback(
     person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Mark specific face(s) as belonging to a different person.
@@ -334,10 +334,10 @@ def submit_wrong_person_feedback(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to mark wrong person")
-        raise HTTPException(status_code=500, detail="Operation failed")
+        raise HTTPException(status_code=500, detail="Operation failed") from exc
 
 
 @router.post(
@@ -347,7 +347,7 @@ def submit_correct_feedback(
     person_id: int,
     body: PersonFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Mark person cluster as correctly grouped (positive feedback).
@@ -376,10 +376,10 @@ def submit_correct_feedback(
         logger.info(f"Marked person {person_id} as correctly grouped")
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to submit correct feedback")
-        raise HTTPException(status_code=500, detail="Operation failed")
+        raise HTTPException(status_code=500, detail="Operation failed") from exc
 
 
 # ─── General Feedback Endpoints ────────────────────────────────────────────
@@ -389,7 +389,7 @@ def submit_correct_feedback(
 def rate_search_result(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Rate the relevance of a search result (1-5 stars).
@@ -427,16 +427,16 @@ def rate_search_result(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to record search rating")
-        raise HTTPException(status_code=500, detail="Failed to save rating")
+        raise HTTPException(status_code=500, detail="Failed to save rating") from exc
 
 
 @router.delete("/feedback/search-preferences")
 def reset_search_preferences(
     db: Session = Depends(get_db),
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """
     Reset local search ranking preferences without deleting media or likes.
@@ -461,20 +461,20 @@ def reset_search_preferences(
             "deleted_search_ratings": deleted,
             "reset_media_count": updated,
         }
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to reset search preferences")
         raise HTTPException(
             status_code=500,
             detail="Failed to reset search preferences",
-        )
+        ) from exc
 
 
 @router.post("/feedback/caption-rating", response_model=GeneralFeedbackResponse)
 def rate_caption(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Rate the accuracy of an image caption (1-5 stars).
@@ -504,17 +504,17 @@ def rate_caption(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to record caption rating")
-        raise HTTPException(status_code=500, detail="Failed to save rating")
+        raise HTTPException(status_code=500, detail="Failed to save rating") from exc
 
 
 @router.post("/feedback/object-rating", response_model=GeneralFeedbackResponse)
 def rate_object_detection(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Rate the accuracy of object detection (1-5 stars).
@@ -544,17 +544,17 @@ def rate_object_detection(
         )
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to record object rating")
-        raise HTTPException(status_code=500, detail="Failed to save rating")
+        raise HTTPException(status_code=500, detail="Failed to save rating") from exc
 
 
 @router.post("/feedback/caption-correction", response_model=GeneralFeedbackResponse)
 def submit_caption_correction(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Store user-edited caption text for future local personalization/training.
@@ -589,17 +589,19 @@ def submit_caption_correction(
         logger.info("Caption correction recorded for media %s", body.media_id)
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to record caption correction")
-        raise HTTPException(status_code=500, detail="Failed to save correction")
+        raise HTTPException(
+            status_code=500, detail="Failed to save correction"
+        ) from exc
 
 
 @router.post("/feedback/object-correction", response_model=GeneralFeedbackResponse)
 def submit_object_correction(
     body: GeneralFeedbackRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Store user-corrected object labels for future local personalization/training.
@@ -643,10 +645,12 @@ def submit_object_correction(
         logger.info("Object correction recorded for media %s", body.media_id)
 
         return feedback
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to record object correction")
-        raise HTTPException(status_code=500, detail="Failed to save correction")
+        raise HTTPException(
+            status_code=500, detail="Failed to save correction"
+        ) from exc
 
 
 # ─── Analytics Endpoints ──────────────────────────────────────────────────
@@ -655,7 +659,7 @@ def submit_object_correction(
 @router.get("/feedback/stats")
 def get_feedback_stats(
     db: Session = Depends(get_db),
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """
     Get aggregate feedback statistics for analytics.
@@ -712,17 +716,17 @@ def get_feedback_stats(
                 else None,
             },
         }
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to get feedback stats")
-        raise HTTPException(status_code=500, detail="Failed to get statistics")
+        raise HTTPException(status_code=500, detail="Failed to get statistics") from exc
 
 
-@router.get("/people/feedback", response_model=List[PersonFeedbackResponse])
+@router.get("/people/feedback", response_model=list[PersonFeedbackResponse])
 def list_person_feedback(
-    person_id: Optional[int] = None,
-    feedback_type: Optional[str] = None,
+    person_id: int | None = None,
+    feedback_type: str | None = None,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     List all person feedback entries, optionally filtered by person or type.

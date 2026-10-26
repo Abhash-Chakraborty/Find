@@ -2,8 +2,9 @@
 Person model for storing person groups (face clusters)
 """
 
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.sql import func
+
 from find_api.core.database import Base
 
 
@@ -33,4 +34,4 @@ class Person(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     def __repr__(self):
-        return f"<Person(id={self.id}, " f"name={self.name!r})>"
+        return f"<Person(id={self.id}, name={self.name!r})>"

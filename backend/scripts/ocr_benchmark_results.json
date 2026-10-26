@@ -1,0 +1,142 @@
+{
+  "mobile": {
+    "variant": "mobile",
+    "load_time_seconds": 18.06,
+    "ram_after_load_mb": 688.8,
+    "ram_delta_load_mb": 225.1,
+    "peak_ram_mb": 1063.0,
+    "downloaded_cache_mb": 0.0,
+    "latency_by_category": {
+      "photos": {
+        "images_tested": [
+          "gt_AMOXICILLIN_250MG.png",
+          "gt_AZITHROMYCIN_500MG.png",
+          "gt_IBUPROFEN_400MG_TABLETS.png",
+          "gt_PARACETAMOL_500MG.png"
+        ],
+        "mean_latency_ms": 4397.7,
+        "median_latency_ms": 4404.2,
+        "min_latency_ms": 4253.8,
+        "max_latency_ms": 4460.0
+      },
+      "screenshots": {
+        "images_tested": [
+          "gt_AMOXICILLIN_250MG.png",
+          "gt_CETIRIZINE_10MG.png",
+          "gt_OMEPRAZOLE_20MG_CAPSULES.png",
+          "gt_PARACETAMOL_500MG.png"
+        ],
+        "mean_latency_ms": 4392.0,
+        "median_latency_ms": 4373.6,
+        "min_latency_ms": 4349.6,
+        "max_latency_ms": 4560.4
+      },
+      "receipts": {
+        "images_tested": [
+          "gt_AMOXICILLIN_250MG.png",
+          "gt_CETIRIZINE_10MG.png",
+          "gt_METFORMIN_500MG_SR.png",
+          "gt_PARACETAMOL_500MG.png"
+        ],
+        "mean_latency_ms": 4543.0,
+        "median_latency_ms": 4541.1,
+        "min_latency_ms": 4513.1,
+        "max_latency_ms": 4570.7
+      },
+      "rotated": {
+        "images_tested": [
+          "gt_AMOXICILLIN_250MG.png",
+          "gt_AZITHROMYCIN_500MG.png",
+          "gt_PARACETAMOL_500MG.png",
+          "gt_VITAMIN_D3_60000_IU.png"
+        ],
+        "mean_latency_ms": 4633.3,
+        "median_latency_ms": 4652.2,
+        "min_latency_ms": 4552.5,
+        "max_latency_ms": 4697.9
+      },
+      "low_contrast": {
+        "images_tested": [
+          "gt_AZITHROMYCIN_500MG.png",
+          "gt_CETIRIZINE_10MG.png",
+          "gt_METFORMIN_500MG_SR.png",
+          "gt_OMEPRAZOLE_20MG_CAPSULES.png"
+        ],
+        "mean_latency_ms": 4409.5,
+        "median_latency_ms": 4411.0,
+        "min_latency_ms": 4365.5,
+        "max_latency_ms": 4459.3
+      }
+    }
+  },
+  "server": {
+    "variant": "server",
+    "load_time_seconds": 21.0,
+    "ram_after_load_mb": 1145.4,
+    "ram_delta_load_mb": 248.2,
+    "peak_ram_mb": 1990.2,
+    "downloaded_cache_mb": 0.0,
+    "latency_by_category": {
+      "photos": {
+        "images_tested": [
+          "gt_AMOXICILLIN_250MG.png",
+          "gt_AZITHROMYCIN_500MG.png",
+          "gt_IBUPROFEN_400MG_TABLETS.png",
+          "gt_PARACETAMOL_500MG.png"
+        ],
+        "mean_latency_ms": 13764.5,
+        "median_latency_ms": 13646.8,
+        "min_latency_ms": 13041.7,
+        "max_latency_ms": 14428.9
+      },
+      "screenshots": {
+        "images_tested": [
+          "gt_AMOXICILLIN_250MG.png",
+          "gt_CETIRIZINE_10MG.png",
+          "gt_OMEPRAZOLE_20MG_CAPSULES.png",
+          "gt_PARACETAMOL_500MG.png"
+        ],
+        "mean_latency_ms": 13220.5,
+        "median_latency_ms": 12951.0,
+        "min_latency_ms": 12299.4,
+        "max_latency_ms": 14815.5
+      },
+      "receipts": {
+        "images_tested": [
+          "gt_AMOXICILLIN_250MG.png",
+          "gt_CETIRIZINE_10MG.png",
+          "gt_METFORMIN_500MG_SR.png",
+          "gt_PARACETAMOL_500MG.png"
+        ],
+        "mean_latency_ms": 17698.9,
+        "median_latency_ms": 17943.6,
+        "min_latency_ms": 15719.7,
+        "max_latency_ms": 19959.6
+      },
+      "rotated": {
+        "images_tested": [
+          "gt_AMOXICILLIN_250MG.png",
+          "gt_AZITHROMYCIN_500MG.png",
+          "gt_PARACETAMOL_500MG.png",
+          "gt_VITAMIN_D3_60000_IU.png"
+        ],
+        "mean_latency_ms": 14198.7,
+        "median_latency_ms": 14494.1,
+        "min_latency_ms": 11488.2,
+        "max_latency_ms": 18202.4
+      },
+      "low_contrast": {
+        "images_tested": [
+          "gt_AZITHROMYCIN_500MG.png",
+          "gt_CETIRIZINE_10MG.png",
+          "gt_METFORMIN_500MG_SR.png",
+          "gt_OMEPRAZOLE_20MG_CAPSULES.png"
+        ],
+        "mean_latency_ms": 14039.1,
+        "median_latency_ms": 13800.7,
+        "min_latency_ms": 13034.7,
+        "max_latency_ms": 16135.8
+      }
+    }
+  }
+}

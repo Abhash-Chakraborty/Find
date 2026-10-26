@@ -9,15 +9,16 @@ Sharing roles and the activity feed are out of scope here (later stages).
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import asc, desc, func
-from sqlalchemy.orm import Query as SAQuery, Session
+from sqlalchemy.orm import Query as SAQuery
+from sqlalchemy.orm import Session
 
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_required_user, scope_media_query
+from find_api.core.paging import detail_limit, detail_skip
 from find_api.models.album import Album, AlbumAsset
 from find_api.models.media import Media
 from find_api.models.user import User
@@ -34,13 +35,13 @@ router = APIRouter()
 # --- Schemas ---------------------------------------------------------------
 class AlbumCreate(BaseModel):
     name: str = Field("Untitled Album", min_length=1, max_length=255)
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class AlbumUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    cover_media_id: Optional[int] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = None
+    cover_media_id: int | None = None
 
 
 class AlbumAssetsRequest(BaseModel):
@@ -54,33 +55,48 @@ class AlbumOrderRequest(BaseModel):
 
 
 # --- Scoping helpers -------------------------------------------------------
-def _scope_albums(query: SAQuery, user: Optional[User]) -> SAQuery:
+def _scope_albums(query: SAQuery, user: User | None) -> SAQuery:
     """Restrict an album query to those the user may see (IDOR guard)."""
     if user is None or user.role == "admin":
         return query
     return query.filter(Album.owner_user_id == user.id)
 
 
-def _load_album_or_404(db: Session, album_id: int, user: Optional[User]) -> Album:
+def _load_album_or_404(db: Session, album_id: int, user: User | None) -> Album:
     album = _scope_albums(db.query(Album), user).filter(Album.id == album_id).first()
     if not album:
         raise HTTPException(404, "Album not found")
     return album
 
 
-def _album_asset_count(db: Session, album_id: int, user: Optional[User]) -> int:
+def _album_asset_counts(
+    db: Session, album_ids: list[int], user: User | None
+) -> dict[int, int]:
     # Count only members that actually appear in the album listing — i.e.
     # browsable (not hidden/archived/trashed) and owned by the caller — so the
-    # card count never disagrees with what the detail view shows.
-    return (
+    # card count never disagrees with what the detail view shows. One grouped
+    # query covers every album on the page.
+    if not album_ids:
+        return {}
+    rows = (
         scope_media_query(_browsable_media_query(db), user)
         .join(AlbumAsset, AlbumAsset.media_id == Media.id)
-        .filter(AlbumAsset.album_id == album_id)
-        .count()
+        .filter(AlbumAsset.album_id.in_(album_ids))
+        .with_entities(AlbumAsset.album_id, func.count(Media.id))
+        .group_by(AlbumAsset.album_id)
+        .all()
     )
+    return dict(rows)
 
 
-def _serialize_album(db: Session, album: Album, user: Optional[User]) -> dict:
+def _serialize_album(
+    db: Session,
+    album: Album,
+    user: User | None,
+    asset_count: int | None = None,
+) -> dict:
+    if asset_count is None:
+        asset_count = _album_asset_counts(db, [album.id], user).get(album.id, 0)
     return {
         "id": album.id,
         "name": album.name,
@@ -91,7 +107,7 @@ def _serialize_album(db: Session, album: Album, user: Optional[User]) -> dict:
             if album.cover_media_id
             else None
         ),
-        "asset_count": _album_asset_count(db, album.id, user),
+        "asset_count": asset_count,
         "created_at": album.created_at.isoformat() if album.created_at else None,
         "updated_at": album.updated_at.isoformat() if album.updated_at else None,
     }
@@ -101,15 +117,16 @@ def _serialize_album(db: Session, album: Album, user: Optional[User]) -> dict:
 @router.get("/albums")
 def list_albums(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     albums = (
         _scope_albums(db.query(Album), user)
         .order_by(desc(Album.created_at), desc(Album.id))
         .all()
     )
+    counts = _album_asset_counts(db, [a.id for a in albums], user)
     return {
-        "albums": [_serialize_album(db, a, user) for a in albums],
+        "albums": [_serialize_album(db, a, user, counts.get(a.id, 0)) for a in albums],
         "total": len(albums),
     }
 
@@ -118,7 +135,7 @@ def list_albums(
 def create_album(
     request: AlbumCreate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     album = Album(
         name=request.name,
@@ -135,7 +152,7 @@ def create_album(
 def get_album(
     album_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     album = _load_album_or_404(db, album_id, user)
     return _serialize_album(db, album, user)
@@ -146,7 +163,7 @@ def update_album(
     album_id: int,
     request: AlbumUpdate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     album = _load_album_or_404(db, album_id, user)
 
@@ -177,7 +194,7 @@ def update_album(
 def delete_album(
     album_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     album = _load_album_or_404(db, album_id, user)
     # Delete membership rows explicitly so behavior is identical on SQLite
@@ -194,24 +211,32 @@ def delete_album(
 @router.get("/albums/{album_id}/assets")
 def list_album_assets(
     album_id: int,
+    skip: int = Depends(detail_skip),
+    limit: int = Depends(detail_limit),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     _load_album_or_404(db, album_id, user)
 
     # Join membership to browsable media so trashed/archived/hidden never leak,
     # and scope to the caller's own media (IDOR guard) — defense-in-depth so
     # foreign media can't be read back even if a membership row was poisoned.
-    rows = (
+    members = (
         scope_media_query(_browsable_media_query(db), user)
         .join(AlbumAsset, AlbumAsset.media_id == Media.id)
         .filter(AlbumAsset.album_id == album_id)
-        .order_by(asc(AlbumAsset.position), asc(AlbumAsset.id))
+    )
+    rows = (
+        members.order_by(asc(AlbumAsset.position), asc(AlbumAsset.id))
+        .offset(skip)
+        .limit(limit)
         .all()
     )
     return {
         "items": [_serialize_media_item(m) for m in rows],
-        "total": len(rows),
+        "total": members.count(),
+        "skip": skip,
+        "limit": limit,
     }
 
 
@@ -220,7 +245,7 @@ def add_album_assets(
     album_id: int,
     request: AlbumAssetsRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     _load_album_or_404(db, album_id, user)
 
@@ -276,7 +301,7 @@ def remove_album_assets(
     album_id: int,
     request: AlbumAssetsRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     album = _load_album_or_404(db, album_id, user)
 
@@ -309,7 +334,7 @@ def reorder_album(
     album_id: int,
     request: AlbumOrderRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Set manual ordering from an ordered list of media ids.
 

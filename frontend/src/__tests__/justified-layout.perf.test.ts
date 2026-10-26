@@ -49,11 +49,17 @@ describe("justified-layout performance", () => {
       Array.from({ length: n }, (_, i) => ({ ratio: 0.5 + (i % 7) * 0.3 }));
     const opts = { containerWidth: 1200, targetRowHeight: 235, gap: 8 };
 
+    // Fastest of several runs, so one GC pause or busy CI core can't skew the
+    // ratio; a quadratic algorithm is slow on every run, not just one.
     const timeFor = (n: number): number => {
       const items = makeItems(n);
-      const start = performance.now();
-      computeJustifiedLayout(items, opts);
-      return performance.now() - start;
+      let best = Number.POSITIVE_INFINITY;
+      for (let run = 0; run < 5; run++) {
+        const start = performance.now();
+        computeJustifiedLayout(items, opts);
+        best = Math.min(best, performance.now() - start);
+      }
+      return best;
     };
 
     // Warm up to stabilize JIT before measuring.

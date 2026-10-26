@@ -5,12 +5,13 @@ Implements StorageBackend interface for MinIO object storage
 
 import asyncio
 import json
+import logging
 from datetime import timedelta
-from urllib.parse import urlparse, urlunparse
 from io import BytesIO
+from urllib.parse import urlparse, urlunparse
+
 from minio import Minio
 from minio.error import S3Error
-import logging
 
 from find_api.core.config import settings
 from find_api.core.storage_abstract import StorageBackend, StorageException
@@ -72,7 +73,7 @@ class MinIOStorageBackend(StorageBackend):
 
         except S3Error as e:
             logger.error(f"Failed to initialize MinIO storage: {e}")
-            raise StorageException(f"MinIO initialization failed: {e}")
+            raise StorageException(f"MinIO initialization failed: {e}") from e
 
     def _apply_public_read_policy(self) -> None:
         """Apply public read policy to bucket"""
@@ -128,7 +129,7 @@ class MinIOStorageBackend(StorageBackend):
             return object_name
         except S3Error as e:
             logger.error(f"Failed to upload file to MinIO: {e}")
-            raise StorageException(f"MinIO upload failed: {e}")
+            raise StorageException(f"MinIO upload failed: {e}") from e
 
     async def get_file(self, object_name: str) -> bytes:
         """Download file from MinIO"""
@@ -147,7 +148,7 @@ class MinIOStorageBackend(StorageBackend):
             return await asyncio.to_thread(_download)
         except S3Error as e:
             logger.error(f"Failed to download file from MinIO: {e}")
-            raise StorageException(f"MinIO download failed: {e}")
+            raise StorageException(f"MinIO download failed: {e}") from e
 
     async def download_file_to_path(
         self, object_name: str, destination_path: str
@@ -171,7 +172,7 @@ class MinIOStorageBackend(StorageBackend):
             await asyncio.to_thread(_stream)
         except S3Error as e:
             logger.error(f"Failed to stream file from MinIO: {e}")
-            raise StorageException(f"MinIO stream failed: {e}")
+            raise StorageException(f"MinIO stream failed: {e}") from e
 
     async def get_file_url(self, object_name: str, expires: int = 3600) -> str:
         """Get presigned or public URL for file"""
@@ -224,7 +225,7 @@ class MinIOStorageBackend(StorageBackend):
             return base_url
         except S3Error as e:
             logger.error(f"Failed to generate URL: {e}")
-            raise StorageException(f"URL generation failed: {e}")
+            raise StorageException(f"URL generation failed: {e}") from e
 
     async def delete_file(self, object_name: str) -> None:
         """Delete file from MinIO"""
@@ -233,7 +234,7 @@ class MinIOStorageBackend(StorageBackend):
             logger.info(f"Deleted file from MinIO: {object_name}")
         except S3Error as e:
             logger.error(f"Failed to delete file from MinIO: {e}")
-            raise StorageException(f"MinIO deletion failed: {e}")
+            raise StorageException(f"MinIO deletion failed: {e}") from e
 
     async def file_exists(self, object_name: str) -> bool:
         """Check if file exists in MinIO"""
@@ -244,4 +245,4 @@ class MinIOStorageBackend(StorageBackend):
             if e.code == "NoSuchKey":
                 return False
             logger.error(f"Failed to check file existence: {e}")
-            raise StorageException(f"File existence check failed: {e}")
+            raise StorageException(f"File existence check failed: {e}") from e

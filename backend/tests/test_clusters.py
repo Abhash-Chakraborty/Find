@@ -1,7 +1,7 @@
 """Tests for cluster API thumbnail URL fields."""
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from find_api.models.cluster import Cluster
 from find_api.models.media import Media
@@ -19,7 +19,7 @@ def _seed_media(db, *, filename: str, is_hidden: bool = False) -> Media:
         height=600,
         is_hidden=is_hidden,
         vault_state="hidden_encrypted" if is_hidden else "visible",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()
@@ -34,7 +34,7 @@ def _seed_cluster(db, *, member_ids: list[int]) -> Cluster:
         member_count=len(member_ids),
         label="Test cluster",
         description="Cluster used in tests",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(cluster)
     db.commit()
@@ -144,3 +144,52 @@ def test_hidden_only_cluster_detail_returns_404(client, db):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Cluster not found"
+
+
+def test_clusters_exclude_archived_and_trashed_members(client, db):
+    visible = _seed_media(db, filename="state-visible.jpg")
+    archived = _seed_media(db, filename="state-archived.jpg")
+    trashed = _seed_media(db, filename="state-trashed.jpg")
+    archived.is_archived = True
+    trashed.deleted_at = datetime.now(UTC)
+    db.commit()
+    cluster = _seed_cluster(db, member_ids=[visible.id, archived.id, trashed.id])
+
+    listed = client.get("/api/clusters").json()["clusters"][0]
+    detail = client.get(f"/api/cluster/{cluster.id}").json()
+
+    assert listed["member_count"] == 1
+    assert [sample["id"] for sample in listed["samples"]] == [visible.id]
+    assert detail["member_count"] == 1
+    assert [member["id"] for member in detail["members"]] == [visible.id]
+
+
+def test_cluster_list_query_count_does_not_grow_with_clusters(
+    client, db, count_selects
+):
+    def list_cost(prefix: str, cluster_count: int) -> int:
+        for index in range(cluster_count):
+            first = _seed_media(db, filename=f"{prefix}-{index}-a.jpg")
+            second = _seed_media(db, filename=f"{prefix}-{index}-b.jpg")
+            _seed_cluster(db, member_ids=[first.id, second.id])
+        return count_selects(lambda: client.get("/api/clusters"))
+
+    few = list_cost("few", 2)
+    many = list_cost("many", 8)
+
+    assert few == many, f"cluster list queries grew with clusters: {few} -> {many}"
+
+
+def test_cluster_samples_follow_member_order_and_skip_hidden(client, db):
+    shown = [_seed_media(db, filename=f"order-{index}.jpg") for index in range(6)]
+    hidden = _seed_media(db, filename="order-hidden.jpg", is_hidden=True)
+    member_ids = [shown[3].id, hidden.id, shown[0].id, *(m.id for m in shown[4:])]
+    member_ids += [shown[1].id, shown[2].id]
+    _seed_cluster(db, member_ids=member_ids)
+
+    cluster = client.get("/api/clusters").json()["clusters"][0]
+
+    visible = [media_id for media_id in member_ids if media_id != hidden.id]
+    assert cluster["member_count"] == 6
+    assert [sample["id"] for sample in cluster["samples"]] == visible[:5]
+    assert cluster["samples"][0]["filename"] == "order-3.jpg"

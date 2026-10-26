@@ -53,8 +53,7 @@ class MockEmbedder:
             return self._vector_from_bytes(b"text:")
 
         vectors = [
-            self._vector_from_bytes(f"token:{token}".encode("utf-8"))
-            for token in tokens
+            self._vector_from_bytes(f"token:{token}".encode()) for token in tokens
         ]
 
         vector = np.mean(vectors, axis=0)

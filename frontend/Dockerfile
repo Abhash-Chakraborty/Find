@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-alpine AS base
+# Node 24 is Active LTS. Keep this major in lockstep with `node-version` in
+# .github/workflows/ci.yml -- `docker-check` asserts the two agree, so changing
+# one alone fails CI.
+FROM node:24-alpine AS base
 ARG PNPM_VERSION=11.3.0
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"

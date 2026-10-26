@@ -1,8 +1,6 @@
 """Clusters endpoints for retrieving cluster information."""
 
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -14,14 +12,19 @@ from find_api.core.dependencies import (
     get_required_user,
     scope_media_query,
 )
+from find_api.core.media_scope import browsable_media
+from find_api.core.paging import detail_limit, detail_skip
 from find_api.core.queue import enqueue_clustering_job
-from find_api.core.storage import get_file_url
-from find_api.routers.gallery import build_thumbnail_url
 from find_api.models.cluster import Cluster
 from find_api.models.media import Media
 from find_api.models.user import User
+from find_api.routers.gallery import build_original_url, build_thumbnail_url
 
 router = APIRouter()
+
+# Member ids per visibility query. Keeps each IN list well under SQLite's
+# bound-parameter limit on large libraries.
+MEMBER_LOOKUP_BATCH = 5000
 
 
 class ClusterUpdateRequest(BaseModel):
@@ -47,7 +50,7 @@ def _cluster_payload(cluster: Cluster, *, members: list | None = None):
 @router.get("/clusters")
 def get_clusters(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
     Get all clusters with member information
@@ -57,45 +60,42 @@ def get_clusters(
     """
     clusters = db.query(Cluster).order_by(desc(Cluster.member_count), Cluster.id).all()
 
-    result = []
-    for cluster in clusters:
-        member_ids = cluster.member_ids or []
-        if not member_ids:
-            continue
-
-        # Visible = not hidden AND (in shared mode) owned by the caller.
-        visible_id_rows = scope_media_query(
-            db.query(Media.id).filter(
-                Media.id.in_(member_ids), Media.is_hidden.is_(False)
+    # Look up every member's visibility at once instead of two queries per
+    # cluster. Visible = browsable AND (in shared mode) owned by the caller.
+    all_member_ids = sorted(
+        {media_id for cluster in clusters for media_id in cluster.member_ids or []}
+    )
+    visible_filenames: dict[int, str] = {}
+    for start in range(0, len(all_member_ids), MEMBER_LOOKUP_BATCH):
+        batch = all_member_ids[start : start + MEMBER_LOOKUP_BATCH]
+        rows = scope_media_query(
+            db.query(Media.id, Media.filename).filter(
+                Media.id.in_(batch), *browsable_media()
             ),
             user,
         ).all()
-        visible_id_set = {row.id for row in visible_id_rows}
+        visible_filenames.update({row.id: row.filename for row in rows})
+
+    result = []
+    for cluster in clusters:
         visible_ids = [
-            media_id for media_id in member_ids if media_id in visible_id_set
+            media_id
+            for media_id in cluster.member_ids or []
+            if media_id in visible_filenames
         ]
         visible_member_count = len(visible_ids)
         if visible_member_count == 0:
             continue
 
-        sample_ids = visible_ids[:5]
-        sample_media = db.query(Media).filter(Media.id.in_(sample_ids)).all()
-
-        samples = []
-        for media in sample_media:
-            try:
-                url = get_file_url(media.minio_key)
-            except Exception:
-                url = None
-
-            samples.append(
-                {
-                    "id": media.id,
-                    "filename": media.filename,
-                    "url": url,
-                    "thumbnail_url": build_thumbnail_url(media.id),
-                }
-            )
+        samples = [
+            {
+                "id": media_id,
+                "filename": visible_filenames[media_id],
+                "url": build_original_url(media_id),
+                "thumbnail_url": build_thumbnail_url(media_id),
+            }
+            for media_id in visible_ids[:5]
+        ]
 
         cluster_info = _cluster_payload(cluster)
         cluster_info["member_count"] = visible_member_count
@@ -113,59 +113,76 @@ def get_clusters(
 @router.get("/cluster/{cluster_id}")
 def get_cluster_detail(
     cluster_id: int,
+    skip: int = Depends(detail_skip),
+    limit: int = Depends(detail_limit),
+    q: str | None = Query(None, max_length=255),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """
-    Get detailed information about a specific cluster
+    Get a cluster and one page of its members, newest first.
 
     Args:
         cluster_id: Cluster ID
+        skip, limit: The page of members to return
+        q: Only members whose filename contains this text
 
     Returns:
-        Cluster information with all members
+        Cluster information, the page of members, and how many match
     """
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
 
     if not cluster:
         raise HTTPException(404, "Cluster not found")
 
-    # Get all member media
     member_ids = cluster.member_ids or []
-    members = scope_media_query(
-        db.query(Media).filter(Media.id.in_(member_ids), Media.is_hidden.is_(False)),
+    visible = scope_media_query(
+        db.query(Media.id, Media.filename, Media.metadata_json).filter(
+            Media.id.in_(member_ids), *browsable_media()
+        ),
         user,
-    ).all()
+    )
+    member_count = visible.count()
 
-    # A regular user who owns none of this cluster's media should not see it.
-    if user is not None and user.role != "admin" and not members:
+    # A regular user who owns none of this cluster's media should not see it,
+    # and a cluster with nothing left to show is gone for everyone.
+    if member_count == 0:
         raise HTTPException(404, "Cluster not found")
 
-    member_list = []
-    for media in members:
-        try:
-            url = get_file_url(media.minio_key)
-        except Exception:
-            url = None
+    matching = visible
+    if q and q.strip():
+        pattern = "%" + _escape_like(q.strip()) + "%"
+        matching = visible.filter(Media.filename.ilike(pattern, escape="\\"))
+    total = matching.count() if matching is not visible else member_count
 
-        member_list.append(
-            {
-                "id": media.id,
-                "filename": media.filename,
-                "url": url,
-                "thumbnail_url": build_thumbnail_url(media.id),
-                "caption": media.metadata_json.get("caption", "")
-                if media.metadata_json
-                else "",
-            }
-        )
-
-    if not member_list:
-        raise HTTPException(404, "Cluster not found")
+    page = (
+        matching.order_by(Media.created_at.desc(), Media.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    member_list = [
+        {
+            "id": row.id,
+            "filename": row.filename,
+            "url": build_original_url(row.id),
+            "thumbnail_url": build_thumbnail_url(row.id),
+            "caption": (row.metadata_json or {}).get("caption", ""),
+        }
+        for row in page
+    ]
 
     payload = _cluster_payload(cluster, members=member_list)
-    payload["member_count"] = len(member_list)
+    payload["member_count"] = member_count
+    payload["total"] = total
+    payload["skip"] = skip
+    payload["limit"] = limit
     return payload
+
+
+def _escape_like(text: str) -> str:
+    """Make %, _ and \ in a search box match themselves."""
+    return text.replace("\\", "\\\\").replace("%", "\%").replace("_", "\_")
 
 
 @router.patch("/cluster/{cluster_id}")
@@ -173,7 +190,7 @@ def update_cluster(
     cluster_id: int,
     payload: ClusterUpdateRequest,
     db: Session = Depends(get_db),
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """Update editable cluster metadata.
 
@@ -196,7 +213,7 @@ def update_cluster(
 @router.post("/cluster/run")
 def trigger_clustering(
     db: Session = Depends(get_db),
-    _admin: Optional[User] = Depends(get_admin_user),
+    _admin: User | None = Depends(get_admin_user),
 ):
     """
     Manually trigger clustering job

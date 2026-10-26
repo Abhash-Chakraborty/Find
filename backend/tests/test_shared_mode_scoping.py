@@ -9,7 +9,7 @@ endpoints stay permissive — that path is covered by the other test modules.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -56,7 +56,7 @@ def _seed_media(db, *, filename: str, uploader_user_id: int | None) -> Media:
         width=800,
         height=600,
         uploader_user_id=uploader_user_id,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(media)
     db.commit()

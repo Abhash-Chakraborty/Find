@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+from find_api.core import runtime_profile
 from find_api.core.runtime_profile import (
     RuntimePreferences,
     bind_runtime,
@@ -27,10 +28,13 @@ def _preferences(
 
 
 def test_artifacts_expose_only_installed_modes():
-    assert supported_modes("no-ai") == ("disabled",)
-    assert supported_modes("mock") == ("disabled", "mock")
-    assert supported_modes("cpu") == ("disabled", "mock", "full")
-    assert supported_modes("nvidia") == ("disabled", "mock", "full")
+    # "remote" is present everywhere: it offloads inference over HTTP and needs
+    # no local model runtime, so even the no-ai artifact can be pointed at a
+    # remote server.
+    assert supported_modes("no-ai") == ("disabled", "remote")
+    assert supported_modes("mock") == ("disabled", "mock", "remote")
+    assert supported_modes("cpu") == ("disabled", "mock", "full", "remote")
+    assert supported_modes("nvidia") == ("disabled", "mock", "full", "remote")
 
 
 def test_no_ai_artifact_is_metadata_only():
@@ -52,13 +56,51 @@ def test_kill_switch_disables_even_installed_full_runtime():
     assert resolution.restart_required is False
 
 
-def test_remote_mode_is_unavailable_without_local_fallback():
+def test_remote_mode_is_unavailable_without_local_fallback(monkeypatch):
+    """Unconfigured remote must stay unavailable and never silently run locally."""
+    monkeypatch.setattr(runtime_profile.settings, "REMOTE_ML_URL", None)
+    monkeypatch.setattr(runtime_profile.settings, "REMOTE_ML_API_KEY", None)
+
     resolution = resolve_runtime(
         _preferences(), build_profile="nvidia", configured_mode="remote"
     )
     assert resolution.applied_mode == "unavailable"
     assert resolution.restart_required is False
     assert "will not fall back" in (resolution.unavailable_reason or "").lower()
+
+
+def test_configured_remote_mode_resolves_to_remote(monkeypatch):
+    """A pointed-at remote server must resolve to the remote runtime.
+
+    Resolving it to "unavailable" made every `applied_mode == "unavailable"`
+    guard fire -- analyze_image raised RuntimeUnavailableError before the
+    remote dispatch was reached, so remote mode could not ingest anything.
+    """
+    monkeypatch.setattr(
+        runtime_profile.settings, "REMOTE_ML_URL", "https://ml.example.com"
+    )
+    monkeypatch.setattr(runtime_profile.settings, "REMOTE_ML_API_KEY", "token")
+
+    resolution = resolve_runtime(
+        _preferences(), build_profile="nvidia", configured_mode="remote"
+    )
+    assert resolution.applied_mode == "remote"
+    assert resolution.unavailable_reason is None
+    assert resolution.restart_required is False
+
+
+def test_remote_mode_is_supported_in_slim_profiles(monkeypatch):
+    """Remote needs no local model runtime, so no-ai artifacts can use it."""
+    monkeypatch.setattr(
+        runtime_profile.settings, "REMOTE_ML_URL", "https://ml.example.com"
+    )
+    monkeypatch.setattr(runtime_profile.settings, "REMOTE_ML_API_KEY", "token")
+
+    resolution = resolve_runtime(
+        _preferences(), build_profile="no-ai", configured_mode="remote"
+    )
+    assert resolution.applied_mode == "remote"
+    assert "remote" in resolution.supported_modes
 
 
 def test_bound_job_preferences_drive_all_runtime_seams_and_reset():

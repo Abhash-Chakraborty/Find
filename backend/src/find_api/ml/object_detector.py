@@ -2,11 +2,11 @@
 Object detection using Ultralytics YOLO
 """
 
-from ultralytics import YOLO
-from PIL import Image
-import numpy as np
-from typing import List, Dict, Union
 import logging
+
+import numpy as np
+from PIL import Image
+from ultralytics import YOLO
 
 from find_api.core.config import settings
 from find_api.core.hardware import current_torch_device
@@ -34,8 +34,8 @@ class ObjectDetector:
         return model
 
     def detect(
-        self, image: Union[Image.Image, np.ndarray], conf_threshold: float = 0.25
-    ) -> List[Dict]:
+        self, image: Image.Image | np.ndarray, conf_threshold: float = 0.25
+    ) -> list[dict]:
         """
         Detect objects in image
         """

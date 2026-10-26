@@ -2,12 +2,12 @@
 CLIP embedding generation using SigLIP
 """
 
-import torch
-import open_clip
-from PIL import Image
-import numpy as np
-from typing import Union, List
 import logging
+
+import numpy as np
+import open_clip
+import torch
+from PIL import Image
 
 from find_api.core.config import settings
 from find_api.core.hardware import current_torch_device
@@ -52,7 +52,7 @@ class CLIPEmbedder:
             f"accel={current_accel_mode()}"
         )
 
-    def embed_image(self, image: Union[Image.Image, np.ndarray]) -> np.ndarray:
+    def embed_image(self, image: Image.Image | np.ndarray) -> np.ndarray:
         """
         Generate embedding for a single image
         """
@@ -89,7 +89,7 @@ class CLIPEmbedder:
             logger.error(f"Failed to generate image embedding: {e}")
             raise
 
-    def embed_text(self, text: Union[str, List[str]]) -> np.ndarray:
+    def embed_text(self, text: str | list[str]) -> np.ndarray:
         """
         Generate embedding for text query
         """

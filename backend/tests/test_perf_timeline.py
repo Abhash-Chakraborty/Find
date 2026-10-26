@@ -18,7 +18,7 @@ headroom so this is a regression tripwire, not a benchmark.
 
 import hashlib
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -43,7 +43,7 @@ def _seed_library(db, n: int, months: int) -> None:
         m = ((month - 1) % 12) + 1
         # Vary day so ordering within a month is meaningful.
         day = (i % 27) + 1
-        created = datetime(year, m, day, 12, 0, 0, tzinfo=timezone.utc)
+        created = datetime(year, m, day, 12, 0, 0, tzinfo=UTC)
         rows.append(
             Media(
                 file_hash=hashlib.sha256(f"perf-{i}".encode()).hexdigest(),
@@ -92,9 +92,9 @@ class TestTimelinePerf:
                 f"{MONTHS} months: {elapsed * 1000:.1f} ms "
                 f"(budget {BUCKETS_BUDGET_S * 1000:.0f} ms)"
             )
-        assert (
-            elapsed < BUCKETS_BUDGET_S
-        ), f"/timeline/buckets took {elapsed:.3f}s (budget {BUCKETS_BUDGET_S}s)"
+        assert elapsed < BUCKETS_BUDGET_S, (
+            f"/timeline/buckets took {elapsed:.3f}s (budget {BUCKETS_BUDGET_S}s)"
+        )
 
     def test_single_bucket_window_under_budget(self, client, seeded, capsys):
         # Pick a month that actually has assets.
@@ -114,9 +114,9 @@ class TestTimelinePerf:
                 f"\n[perf] /timeline/bucket ({month_key}, {body['count']} assets): "
                 f"{elapsed * 1000:.1f} ms (budget {BUCKET_BUDGET_S * 1000:.0f} ms)"
             )
-        assert (
-            elapsed < BUCKET_BUDGET_S
-        ), f"/timeline/bucket took {elapsed:.3f}s (budget {BUCKET_BUDGET_S}s)"
+        assert elapsed < BUCKET_BUDGET_S, (
+            f"/timeline/bucket took {elapsed:.3f}s (budget {BUCKET_BUDGET_S}s)"
+        )
 
     def test_liked_filter_aggregate_under_budget(self, client, seeded):
         # The favorites filter must not change the query's scaling characteristics.

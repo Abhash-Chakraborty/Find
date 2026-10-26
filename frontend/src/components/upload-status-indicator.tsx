@@ -6,6 +6,7 @@ import { useEffect, useMemo } from "react";
 import { getJobStatus } from "@/lib/api";
 import {
   getUploadItemProgress,
+  isProcessingUpload,
   useUploadQueueStore,
 } from "@/store/uploadQueueStore";
 
@@ -15,24 +16,28 @@ export function UploadQueueMonitor() {
   const phase = useUploadQueueStore((state) => state.phase);
   const updateJob = useUploadQueueStore((state) => state.updateJob);
   const clearCompleted = useUploadQueueStore((state) => state.clearCompleted);
-  const activeJobs = useMemo(
+  const activeJobCount = useMemo(
+    () => items.filter(isProcessingUpload).length,
+    [items],
+  );
+  // Every poll rewrites the items, so the effect keys on the job ids. Keyed
+  // on the items it would restart, and poll again, after every response.
+  const activeJobKey = useMemo(
     () =>
-      items.filter(
-        (item) =>
-          item.job_id &&
-          item.status === "uploaded" &&
-          item.processingState !== "indexed" &&
-          item.processingState !== "failed",
-      ),
+      items
+        .filter(isProcessingUpload)
+        .map((item) => item.job_id)
+        .join(","),
     [items],
   );
 
   useEffect(() => {
-    if (activeJobs.length === 0) return;
+    if (!activeJobKey) return;
+    const jobIds = activeJobKey.split(",");
     let cancelled = false;
     const poll = async () => {
       const settled = await Promise.allSettled(
-        activeJobs.map((item) => getJobStatus(item.job_id ?? "")),
+        jobIds.map((jobId) => getJobStatus(jobId)),
       );
       if (cancelled) return;
       let terminalUpdate = false;
@@ -44,20 +49,26 @@ export function UploadQueueMonitor() {
           result.value.status === "failed";
       }
       if (terminalUpdate) {
-        void queryClient.invalidateQueries({ queryKey: ["gallery"] });
         void queryClient.invalidateQueries({ queryKey: ["gallery-infinite"] });
       }
     };
-    void poll();
-    const interval = window.setInterval(() => void poll(), 2500);
+    // Nobody watches the progress in a hidden tab, so it skips its polls and
+    // catches up as soon as the tab is shown again.
+    const pollIfVisible = () => {
+      if (document.visibilityState === "visible") void poll();
+    };
+    pollIfVisible();
+    const interval = window.setInterval(pollIfVisible, 2500);
+    document.addEventListener("visibilitychange", pollIfVisible);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", pollIfVisible);
     };
-  }, [activeJobs, queryClient, updateJob]);
+  }, [activeJobKey, queryClient, updateJob]);
 
   useEffect(() => {
-    if (phase !== "idle" || items.length === 0 || activeJobs.length > 0) return;
+    if (phase !== "idle" || items.length === 0 || activeJobCount > 0) return;
     if (
       items.some(
         (item) => item.status === "failed" || item.processingState === "failed",
@@ -67,7 +78,7 @@ export function UploadQueueMonitor() {
     }
     const timer = window.setTimeout(clearCompleted, 1800);
     return () => window.clearTimeout(timer);
-  }, [activeJobs.length, clearCompleted, items, phase]);
+  }, [activeJobCount, clearCompleted, items, phase]);
 
   return null;
 }

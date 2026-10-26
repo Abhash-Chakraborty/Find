@@ -4,10 +4,10 @@ import pytest
 
 from find_api.core.model_pack import (
     ModelPack,
+    NotImplementedPackCache,
     PackCategory,
     PackProgress,
     PackStatus,
-    NotImplementedPackCache,
 )
 
 

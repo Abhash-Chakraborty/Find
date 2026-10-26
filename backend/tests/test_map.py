@@ -1,7 +1,6 @@
 """Privacy and scoping tests for the opt-in local map."""
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from find_api.models.app_setting import AppSetting
 from find_api.models.media import Media
@@ -12,14 +11,14 @@ from find_api.routers import map as map_router
 def _media(
     media_id: int,
     *,
-    latitude: Optional[float] = 22.5726,
-    longitude: Optional[float] = 88.3639,
+    latitude: float | None = 22.5726,
+    longitude: float | None = 88.3639,
     liked: bool = False,
     hidden: bool = False,
     archived: bool = False,
     deleted: bool = False,
     vault_state: str = "visible",
-    uploader_user_id: Optional[int] = None,
+    uploader_user_id: int | None = None,
 ) -> Media:
     return Media(
         id=media_id,
@@ -27,7 +26,7 @@ def _media(
         minio_key=f"images/{media_id}.jpg",
         filename=f"photo-{media_id}.jpg",
         status="indexed",
-        created_at=datetime(2026, 7, media_id, tzinfo=timezone.utc),
+        created_at=datetime(2026, 7, media_id, tzinfo=UTC),
         width=1600,
         height=900,
         latitude=latitude,
@@ -35,7 +34,7 @@ def _media(
         liked=liked,
         is_hidden=hidden,
         is_archived=archived,
-        deleted_at=datetime.now(timezone.utc) if deleted else None,
+        deleted_at=datetime.now(UTC) if deleted else None,
         vault_state=vault_state,
         uploader_user_id=uploader_user_id,
     )

@@ -77,7 +77,7 @@ export function HardwareAccelSettings({
             <label
               key={mode.value}
               data-testid={`accel-option-${mode.value}`}
-              className="group relative flex min-h-28 cursor-pointer flex-col gap-2 bg-[color:var(--void)]/90 p-4 transition hover:bg-[color:var(--surface-hover)] has-[:checked]:bg-[color:var(--blue-soft)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
+              className="group relative flex min-h-28 cursor-pointer flex-col gap-2 bg-[color:var(--void)]/90 p-4 outline-none transition hover:bg-[color:var(--surface-hover)] active:bg-[color:var(--blue-soft)] has-[:checked]:bg-[color:var(--blue-soft)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 has-[:focus-visible]:z-10 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[color:var(--blue)]"
               title={
                 gpuNotInstalled
                   ? "GPU runtime is not included in this installed build."
@@ -118,6 +118,8 @@ export function HardwareAccelSettings({
         <p
           className="px-5 py-4 text-sm text-[color:var(--silver)]"
           data-testid="accel-loading"
+          role="status"
+          aria-live="polite"
         >
           Detecting hardware…
         </p>

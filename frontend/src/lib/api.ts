@@ -172,6 +172,10 @@ export interface ClusterDetail {
     thumbnail_url?: string | null;
     caption?: string;
   }>;
+  /** Members matching the filename filter; equals member_count without one. */
+  total: number;
+  skip: number;
+  limit: number;
 }
 
 export type ClusterUpdateResponse = Omit<ClusterInfo, "samples">;
@@ -211,6 +215,8 @@ export interface JobStatus {
 }
 
 export interface AppConfig {
+  /** Backend package version (find_api.__version__), the single source of truth. */
+  app_version: string;
   ml_mode: "disabled" | "full" | "mock" | "unavailable";
   configured_ml_mode: "disabled" | "full" | "mock" | "remote";
   accel_mode: AccelMode;
@@ -310,6 +316,89 @@ export const revokeAccountSession = async (
   sessionId: number,
 ): Promise<void> => {
   await api.delete(`/api/auth/sessions/${sessionId}`);
+};
+
+// --- Instance management (shared deployments, issue #263) ---
+
+export interface InstanceInvite {
+  id: number;
+  is_used: boolean;
+  expires_at: string | null;
+  created_at: string | null;
+}
+
+/**
+ * The raw token is returned by POST /auth/invites once and never stored, so it
+ * has to be surfaced to the admin immediately -- it cannot be re-read later.
+ */
+export interface CreatedInvite {
+  id: number;
+  invite_token: string;
+  expires_at: string;
+}
+
+export interface JoinRequest {
+  id: number;
+  username: string;
+  display_name: string | null;
+  status: "pending" | "approved" | "rejected";
+  created_at: string | null;
+  reviewed_at: string | null;
+}
+
+export const getInstanceUsers = async (): Promise<AccountUser[]> => {
+  const response = await api.get<{ users: AccountUser[] }>("/api/auth/users");
+  return response.data.users;
+};
+
+export const getInstanceInvites = async (): Promise<InstanceInvite[]> => {
+  const response = await api.get<{ invites: InstanceInvite[] }>(
+    "/api/auth/invites",
+  );
+  return response.data.invites;
+};
+
+export const createInstanceInvite = async (params?: {
+  ttl_hours?: number;
+}): Promise<CreatedInvite> => {
+  const response = await api.post<CreatedInvite>(
+    "/api/auth/invites",
+    params ?? {},
+  );
+  return response.data;
+};
+
+export const getJoinRequests = async (): Promise<JoinRequest[]> => {
+  const response = await api.get<{ requests: JoinRequest[] }>(
+    "/api/auth/join-requests",
+  );
+  return response.data.requests;
+};
+
+export const approveJoinRequest = async (
+  requestId: number,
+): Promise<{ user: AccountUser }> => {
+  const response = await api.post<{ user: AccountUser }>(
+    `/api/auth/join-requests/${requestId}/approve`,
+  );
+  return response.data;
+};
+
+export const rejectJoinRequest = async (requestId: number): Promise<void> => {
+  await api.post(`/api/auth/join-requests/${requestId}/reject`);
+};
+
+export const submitJoinRequest = async (params: {
+  invite_token: string;
+  username: string;
+  password: string;
+  display_name?: string;
+}): Promise<{ join_request_id: number }> => {
+  const response = await api.post<{ join_request_id: number }>(
+    "/api/auth/join",
+    params,
+  );
+  return response.data;
 };
 
 export type AccelMode = "auto" | "gpu" | "cpu";
@@ -677,8 +766,11 @@ export const getClusters = async (): Promise<ClustersResponse> => {
 
 export const getClusterDetail = async (
   clusterId: number,
+  { skip = 0, limit = DETAIL_PAGE_SIZE, q }: DetailPage & { q?: string } = {},
 ): Promise<ClusterDetail> => {
-  const response = await api.get<ClusterDetail>(`/api/cluster/${clusterId}`);
+  const response = await api.get<ClusterDetail>(`/api/cluster/${clusterId}`, {
+    params: { skip, limit, q: q?.trim() || undefined },
+  });
   return response.data;
 };
 
@@ -749,6 +841,17 @@ export interface PersonImagesResponse {
   person_id: number;
   person_name: string | null;
   images: PersonImage[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+/** Page size for person, cluster and album detail lists. */
+export const DETAIL_PAGE_SIZE = 200;
+
+export interface DetailPage {
+  skip?: number;
+  limit?: number;
 }
 
 export const getPeople = async (): Promise<PersonItem[]> => {
@@ -758,9 +861,11 @@ export const getPeople = async (): Promise<PersonItem[]> => {
 
 export const getPersonImages = async (
   personId: number,
+  { skip = 0, limit = DETAIL_PAGE_SIZE }: DetailPage = {},
 ): Promise<PersonImagesResponse> => {
   const response = await api.get<PersonImagesResponse>(
     `/api/people/${personId}/images`,
+    { params: { skip, limit } },
   );
   return response.data;
 };
@@ -882,40 +987,6 @@ export const submitSearchRating = async (
   return response.data;
 };
 
-export const submitCaptionRating = async (
-  mediaId: number,
-  rating: number,
-  reason?: string,
-): Promise<GeneralFeedback> => {
-  const response = await api.post<GeneralFeedback>(
-    "/api/feedback/caption-rating",
-    {
-      feedback_type: "caption_rating",
-      media_id: mediaId,
-      rating,
-      rating_reason: reason,
-    },
-  );
-  return response.data;
-};
-
-export const submitObjectRating = async (
-  mediaId: number,
-  rating: number,
-  reason?: string,
-): Promise<GeneralFeedback> => {
-  const response = await api.post<GeneralFeedback>(
-    "/api/feedback/object-rating",
-    {
-      feedback_type: "object_rating",
-      media_id: mediaId,
-      rating,
-      rating_reason: reason,
-    },
-  );
-  return response.data;
-};
-
 export const submitCaptionCorrection = async (
   mediaId: number,
   correctedCaption: string,
@@ -950,17 +1021,6 @@ export const submitObjectCorrection = async (
   return response.data;
 };
 
-export const getFeedbackStats = async () => {
-  const response = await api.get("/api/feedback/stats");
-  return response.data;
-};
-
-export const getPersonFeedback = async (personId?: number) => {
-  const params = personId ? { person_id: personId } : {};
-  const response = await api.get("/api/people/feedback", { params });
-  return response.data;
-};
-
 // --- Albums (Phase 4.2) ----------------------------------------------------
 
 export interface Album {
@@ -977,6 +1037,8 @@ export interface Album {
 export interface AlbumAssetsResponse {
   items: MediaItem[];
   total: number;
+  skip: number;
+  limit: number;
 }
 
 export const getAlbums = async (): Promise<{
@@ -1021,9 +1083,11 @@ export const deleteAlbum = async (
 
 export const getAlbumAssets = async (
   albumId: number,
+  { skip = 0, limit = DETAIL_PAGE_SIZE }: DetailPage = {},
 ): Promise<AlbumAssetsResponse> => {
   const response = await api.get<AlbumAssetsResponse>(
     `/api/albums/${albumId}/assets`,
+    { params: { skip, limit } },
   );
   return response.data;
 };
@@ -1178,5 +1242,59 @@ export const restoreImage = async (
 
 export const emptyTrash = async (): Promise<BulkDeleteResponse> => {
   const response = await api.post<BulkDeleteResponse>("/api/trash/empty");
+  return response.data;
+};
+
+export interface ActivityItem {
+  id: number;
+  category: string;
+  action: string;
+  user_id: number | null;
+  media_id: number | null;
+  payload: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
+export interface ActivityListResponse {
+  items: ActivityItem[];
+  total: number;
+  skip: number;
+  page: number;
+  limit: number;
+}
+
+export interface ActivityPurgeResponse {
+  message: string;
+  deleted_count: number;
+}
+
+export const getActivity = async (
+  params: {
+    skip?: number;
+    limit?: number;
+    category?: string;
+    action?: string;
+    media_id?: number;
+  } = {},
+): Promise<ActivityListResponse> => {
+  const response = await api.get<ActivityListResponse>("/api/activity", {
+    params: {
+      skip: params.skip ?? 0,
+      limit: params.limit ?? 50,
+      category: params.category,
+      action: params.action,
+      media_id: params.media_id,
+    },
+  });
+  return response.data;
+};
+
+export const clearActivity = async (): Promise<ActivityPurgeResponse> => {
+  const response = await api.post<ActivityPurgeResponse>("/api/activity/clear");
+  return response.data;
+};
+
+export const purgeActivity = async (): Promise<ActivityPurgeResponse> => {
+  const response = await api.post<ActivityPurgeResponse>("/api/activity/purge");
   return response.data;
 };

@@ -2,41 +2,46 @@
 Main FastAPI application entry point
 """
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from fastapi.staticfiles import StaticFiles
+
 from find_api import __version__
-from find_api.routers.duplicates import router as duplicates_router
+from find_api.core.config import settings
 from find_api.core.database import init_db
+from find_api.core.model_manager import get_model_manager
 from find_api.core.recovery import run_analysis_recovery_loop
 from find_api.core.storage import init_storage
-from find_api.core.config import settings
-from find_api.core.model_manager import get_model_manager
+from find_api.diagnostics.bundle import ensure_error_log_buffer
 from find_api.routers import (
+    activity,
+    album,
     auth,
-    cluster,
     clusters,
     config,
+    diagnostics,
     feedback,
     gallery,
     map,
+    ml,
+    partner,
     people,
     search,
+    shared_link,
     status,
     timeline,
     upload,
     vault,
 )
-from find_api.routers import album
-from find_api.routers import shared_link
-from find_api.routers import partner
+from find_api.routers.duplicates import router as duplicates_router
 
 # Configure logging
 logging.basicConfig(
@@ -64,6 +69,9 @@ async def lifespan(app: FastAPI):
     # Initialize database
     logger.info("Initializing database...")
     init_db()
+
+    # Install diagnostics error buffer once at boot (not at import time).
+    ensure_error_log_buffer()
 
     # Initialize configured storage backend
     logger.info("Initializing %s storage...", settings.STORAGE_BACKEND)
@@ -141,13 +149,15 @@ app.include_router(map.router, prefix="/api", tags=["map"])
 app.include_router(album.router, prefix="/api", tags=["albums"])
 app.include_router(shared_link.router, prefix="/api", tags=["shared-links"])
 app.include_router(partner.router, prefix="/api", tags=["partners"])
+app.include_router(activity.router, prefix="/api", tags=["activity"])
 app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(clusters.router, prefix="/api", tags=["clusters"])
-app.include_router(cluster.router, prefix="/api", tags=["cluster-ops"])
 app.include_router(status.router, prefix="/api", tags=["status"])
+app.include_router(diagnostics.router, prefix="/api", tags=["diagnostics"])
 app.include_router(config.router, prefix="/api", tags=["config"])
 app.include_router(people.router, prefix="/api", tags=["people"])
 app.include_router(vault.router, prefix="/api", tags=["vault"])
+app.include_router(ml.router)
 app.include_router(feedback.router, tags=["feedback"])
 app.include_router(duplicates_router)
 

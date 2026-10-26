@@ -1,7 +1,7 @@
 """Tests for timeline bucket endpoints (Phase 3.1)."""
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from find_api.models.media import Media
 
@@ -42,7 +42,7 @@ def _seed(
 
 
 def _dt(year, month, day=15):
-    return datetime(year, month, day, 12, 0, 0, tzinfo=timezone.utc)
+    return datetime(year, month, day, 12, 0, 0, tzinfo=UTC)
 
 
 class TestTimelineBuckets:

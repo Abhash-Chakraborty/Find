@@ -17,6 +17,8 @@ from find_api.core.storage_factory import (
 from find_api.core.storage_thumbnails import (
     THUMBNAIL_CONTENT_TYPE,
     generate_thumbnail,
+)
+from find_api.core.storage_thumbnails import (
     upload_thumbnail as upload_thumbnail_to_backend,
 )
 

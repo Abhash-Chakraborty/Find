@@ -13,20 +13,25 @@ Security model (see also models/shared_link.py):
 We deliberately do NOT replicate the reference's plaintext password storage.
 """
 
+import hashlib
+import hmac
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+import secrets
+import time
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Query as SAQuery, Session
+from sqlalchemy.orm import Query as SAQuery
+from sqlalchemy.orm import Session
 
 from find_api.core.auth import (
     hash_password,
     hash_token,
     verify_password_constant_time,
 )
+from find_api.core.config import settings
 from find_api.core.database import get_db
 from find_api.core.dependencies import get_required_user
 from find_api.core.storage import get_file
@@ -36,46 +41,41 @@ from find_api.models.shared_link import SharedLink
 from find_api.models.user import User
 from find_api.routers.gallery import _browsable_media_query
 
-import secrets
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# How long an unlocked protected share stays unlocked in one browser.
+SHARE_COOKIE_TTL_SECONDS = 12 * 60 * 60
 
 
 # --- Schemas ---------------------------------------------------------------
 class SharedLinkCreate(BaseModel):
     album_id: int
-    password: Optional[str] = Field(None, min_length=1, max_length=128)
-    description: Optional[str] = Field(None, max_length=500)
-    expires_at: Optional[datetime] = None
+    password: str | None = Field(None, min_length=1, max_length=128)
+    description: str | None = Field(None, max_length=500)
+    expires_at: datetime | None = None
     allow_download: bool = True
     show_exif: bool = False
 
 
 class SharedLinkUpdate(BaseModel):
-    description: Optional[str] = Field(None, max_length=500)
-    expires_at: Optional[datetime] = None
-    allow_download: Optional[bool] = None
-    show_exif: Optional[bool] = None
+    description: str | None = Field(None, max_length=500)
+    expires_at: datetime | None = None
+    allow_download: bool | None = None
+    show_exif: bool | None = None
     # "" clears the password; a non-empty value sets a new one; None leaves it.
-    password: Optional[str] = Field(None, max_length=128)
-
-
-class PublicUnlockRequest(BaseModel):
-    password: Optional[str] = None
+    password: str | None = Field(None, max_length=128)
 
 
 # --- Helpers ---------------------------------------------------------------
-def _scope_links(query: SAQuery, user: Optional[User]) -> SAQuery:
+def _scope_links(query: SAQuery, user: User | None) -> SAQuery:
     if user is None or user.role == "admin":
         return query
     return query.filter(SharedLink.owner_user_id == user.id)
 
 
-def _load_owned_link_or_404(
-    db: Session, link_id: int, user: Optional[User]
-) -> SharedLink:
+def _load_owned_link_or_404(db: Session, link_id: int, user: User | None) -> SharedLink:
     link = (
         _scope_links(db.query(SharedLink), user)
         .filter(SharedLink.id == link_id)
@@ -91,11 +91,11 @@ def _is_expired(link: SharedLink) -> bool:
         return False
     expires = link.expires_at
     if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) >= expires
+        expires = expires.replace(tzinfo=UTC)
+    return datetime.now(UTC) >= expires
 
 
-def _serialize_link(link: SharedLink, *, include_key: Optional[str] = None) -> dict:
+def _serialize_link(link: SharedLink, *, include_key: str | None = None) -> dict:
     data = {
         "id": link.id,
         "album_id": link.album_id,
@@ -118,7 +118,7 @@ def _serialize_link(link: SharedLink, *, include_key: Optional[str] = None) -> d
 def create_shared_link(
     request: SharedLinkCreate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     # The album must exist and be owned by the caller (IDOR guard).
     album_q = db.query(Album).filter(Album.id == request.album_id)
@@ -149,7 +149,7 @@ def create_shared_link(
 @router.get("/shared-links")
 def list_shared_links(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     links = (
         _scope_links(db.query(SharedLink), user)
@@ -167,7 +167,7 @@ def update_shared_link(
     link_id: int,
     request: SharedLinkUpdate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     link = _load_owned_link_or_404(db, link_id, user)
 
@@ -194,7 +194,7 @@ def update_shared_link(
 def delete_shared_link(
     link_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     link = _load_owned_link_or_404(db, link_id, user)
     db.delete(link)
@@ -216,12 +216,59 @@ def _resolve_public_link(db: Session, key: str) -> SharedLink:
     return link
 
 
-def _check_password(link: SharedLink, supplied: Optional[str]) -> None:
-    """Enforce the link password (constant-time). 401 when required/incorrect."""
-    if link.password_hash is None:
-        return
+def _share_cookie_name(link: SharedLink) -> str:
+    return f"find_share_{link.id}"
+
+
+def _share_cookie_value(link: SharedLink, expires: int) -> str:
+    """Sign the cookie with the link's own bcrypt hash.
+
+    The hash never leaves the server, so it works as the HMAC key, and
+    changing or clearing the password invalidates every cookie issued for it.
+    """
+    mac = hmac.new(
+        link.password_hash.encode("utf-8"),
+        f"{link.id}:{expires}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{expires}.{mac}"
+
+
+def _has_share_cookie(link: SharedLink, request: Request) -> bool:
+    raw = request.cookies.get(_share_cookie_name(link))
+    if not raw:
+        return False
+    expires_text, _, _mac = raw.partition(".")
+    if not expires_text.isdigit() or int(expires_text) < time.time():
+        return False
+    return hmac.compare_digest(raw, _share_cookie_value(link, int(expires_text)))
+
+
+def _check_password(link: SharedLink, supplied: str | None, request: Request) -> bool:
+    """Enforce the link password (constant-time). 401 when required/incorrect.
+
+    A valid unlock cookie stands in for the password, so an album page does
+    not run bcrypt once per thumbnail. Returns True when the password itself
+    was verified, which is when the caller should issue a cookie.
+    """
+    if link.password_hash is None or _has_share_cookie(link, request):
+        return False
     if not supplied or not verify_password_constant_time(supplied, link.password_hash):
         raise HTTPException(401, "Password required or incorrect")
+    return True
+
+
+def _set_share_cookie(response: Response, link: SharedLink, key: str) -> None:
+    expires = int(time.time()) + SHARE_COOKIE_TTL_SECONDS
+    response.set_cookie(
+        key=_share_cookie_name(link),
+        value=_share_cookie_value(link, expires),
+        max_age=SHARE_COOKIE_TTL_SECONDS,
+        path=f"/api/public/shared/{key}",
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+    )
 
 
 def _serialize_public_item(media: Media, link: SharedLink, key: str) -> dict:
@@ -267,9 +314,7 @@ def _shared_album_media_or_404(db: Session, link: SharedLink, media_id: int) -> 
     return media
 
 
-def _serve_object_bytes(
-    object_key: Optional[str], content_type: Optional[str]
-) -> Response:
+def _serve_object_bytes(object_key: str | None, content_type: str | None) -> Response:
     if not object_key:
         raise HTTPException(404, "Asset not found")
     try:
@@ -287,18 +332,22 @@ def _serve_object_bytes(
 @router.get("/public/shared/{key}")
 def get_public_shared_link(
     key: str,
-    password: Optional[str] = Query(None),
-    x_share_password: Optional[str] = Header(None),
+    request: Request,
+    response: Response,
+    password: str | None = Query(None),
+    x_share_password: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
     """Return link metadata + the linked album's browsable assets.
 
     Access is scoped to exactly the linked album. Media bytes are served only
     through the share-scoped /asset routes below (never via raw storage keys
-    or the owner-scoped image routes).
+    or the owner-scoped image routes). A correct password also sets an unlock
+    cookie scoped to this link, which the /asset routes accept.
     """
     link = _resolve_public_link(db, key)
-    _check_password(link, password or x_share_password)
+    if _check_password(link, password or x_share_password, request):
+        _set_share_cookie(response, link, key)
 
     album = db.query(Album).filter(Album.id == link.album_id).first()
     if not album:
@@ -328,14 +377,15 @@ def get_public_shared_link(
 def get_public_shared_thumbnail(
     key: str,
     media_id: int,
-    password: Optional[str] = Query(None),
-    x_share_password: Optional[str] = Header(None),
+    request: Request,
+    password: str | None = Query(None),
+    x_share_password: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
     """Serve a thumbnail for an asset in the link's album. Always permitted
     (thumbnails are low-res previews), but still scoped + password-gated."""
     link = _resolve_public_link(db, key)
-    _check_password(link, password or x_share_password)
+    _check_password(link, password or x_share_password, request)
     media = _shared_album_media_or_404(db, link, media_id)
     if media.thumbnail_key:
         return _serve_object_bytes(media.thumbnail_key, media.thumbnail_content_type)
@@ -351,13 +401,14 @@ def get_public_shared_thumbnail(
 def get_public_shared_original(
     key: str,
     media_id: int,
-    password: Optional[str] = Query(None),
-    x_share_password: Optional[str] = Header(None),
+    request: Request,
+    password: str | None = Query(None),
+    x_share_password: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
     """Serve the full-resolution original — ONLY when the link allows download."""
     link = _resolve_public_link(db, key)
-    _check_password(link, password or x_share_password)
+    _check_password(link, password or x_share_password, request)
     if not link.allow_download:
         raise HTTPException(403, "Download is not permitted for this link")
     media = _shared_album_media_or_404(db, link, media_id)

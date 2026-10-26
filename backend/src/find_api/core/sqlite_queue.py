@@ -7,8 +7,9 @@ import logging
 import sqlite3
 import threading
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from find_api.core.config import settings
 
@@ -401,7 +402,7 @@ def _serialize_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
 
 
 def _now_str(offset_seconds: int = 0) -> str:
-    return (datetime.now(timezone.utc) + timedelta(seconds=offset_seconds)).isoformat()
+    return (datetime.now(UTC) + timedelta(seconds=offset_seconds)).isoformat()
 
 
 def _parse_time(ts: str | None) -> datetime | None:

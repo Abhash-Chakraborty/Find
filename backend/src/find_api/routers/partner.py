@@ -14,7 +14,6 @@ Security model:
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -38,7 +37,7 @@ class PartnerShareCreate(BaseModel):
     partner_user_id: int
 
 
-def _require_shared_mode_user(user: Optional[User]) -> User:
+def _require_shared_mode_user(user: User | None) -> User:
     """Partner sharing needs a real user. Local mode (user is None) → 400."""
     if user is None:
         raise HTTPException(
@@ -68,9 +67,7 @@ def _serialize_partner_item(media: Media, sharer_user_id: int) -> dict:
     }
 
 
-def _serve_object_bytes(
-    object_key: Optional[str], content_type: Optional[str]
-) -> Response:
+def _serve_object_bytes(object_key: str | None, content_type: str | None) -> Response:
     if not object_key:
         raise HTTPException(404, "Asset not found")
     try:
@@ -102,7 +99,7 @@ def _serialize_share(share: PartnerShare, db: Session) -> dict:
 def create_partner_share(
     request: PartnerShareCreate,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Grant a partner read access to the current user's library."""
     me = _require_shared_mode_user(user)
@@ -139,7 +136,7 @@ def create_partner_share(
 @router.get("/partners")
 def list_partner_shares(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """List grants the current user created (outgoing) and received (incoming)."""
     me = _require_shared_mode_user(user)
@@ -166,7 +163,7 @@ def list_partner_shares(
 def revoke_partner_share(
     share_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Revoke a grant. Only the sharer who created it may revoke it (IDOR guard)."""
     me = _require_shared_mode_user(user)
@@ -226,7 +223,7 @@ def _partner_media_or_404(db: Session, sharer_user_id: int, media_id: int) -> Me
 def list_partner_media(
     sharer_user_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """List a sharer's browsable media — only if they shared with me.
 
@@ -257,7 +254,7 @@ def get_partner_thumbnail(
     sharer_user_id: int,
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Serve a thumbnail for a shared asset — re-validates the grant per request."""
     me = _require_shared_mode_user(user)
@@ -275,7 +272,7 @@ def get_partner_original(
     sharer_user_id: int,
     media_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_required_user),
+    user: User | None = Depends(get_required_user),
 ):
     """Serve the full-resolution original — re-validates the grant per request."""
     me = _require_shared_mode_user(user)
