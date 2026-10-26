@@ -240,6 +240,19 @@ jobs:
       # Enforce consistent style — don't waste review time on whitespace
       - run: uv run ruff format --check .
 
+      # The cpu image also ships for linux/arm64, and the lock only guarantees
+      # x86_64 wheels. Resolve the cpu extra for arm64 without installing it,
+      # so a dependency that drops its aarch64 wheel (paddlepaddle 3.3 did)
+      # fails here instead of in the release publish.
+      - name: CPU extra resolves for linux/arm64
+        run: |
+          uv export --frozen --no-dev --extra cpu --no-hashes --no-emit-project -q > "${RUNNER_TEMP}/req-cpu.txt"
+          uv pip install --dry-run --no-deps --python-version 3.12 \
+            --python-platform aarch64-manylinux_2_28 --target "${RUNNER_TEMP}/arm64" \
+            --index-strategy unsafe-best-match \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            -r "${RUNNER_TEMP}/req-cpu.txt"
+
       # Smoke-import the FastAPI app to catch broken imports or bad config before runtime.
       - name: Backend import smoke check
         run: ML_MODE=mock uv run python -c "from find_api.main import app; print('smoke OK:', app.title)"

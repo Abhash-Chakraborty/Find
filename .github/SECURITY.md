@@ -23,6 +23,6 @@ disclosure so fixes can be prepared responsibly.
 
 Maintainers should use a patch version for a backward-compatible security fix.
 After the private fix is reviewed and promoted from `canary` to `main`, the
-release workflow may be manually dispatched with the emergency option to skip
-the normal three-hour quiet period. The branch-policy bypass is reserved for a
-last-resort production incident and does not replace review or disclosure.
+release workflow tags and publishes it straight away. The branch-policy bypass
+is reserved for a last-resort production incident and does not replace review
+or disclosure.

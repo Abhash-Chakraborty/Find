@@ -6,6 +6,20 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
 ## [Unreleased]
 
+## [1.1.5] — 2026-10-26
+
+### Fixed
+
+- The `cpu` backend image builds for linux/arm64 again. paddlepaddle 3.3 has
+  no Linux ARM wheel, so arm64 uses 3.2.2 and x86_64 keeps 3.3.1. CI now
+  resolves the cpu extra for arm64 on every change, so this fails before a
+  release instead of during one.
+
+### Changed
+
+- Releases publish as soon as the canary promotion lands on `main`. The
+  three-hour quiet period and the emergency input are gone.
+
 ## [1.1.4] — 2026-10-26
 
 ### Fixed

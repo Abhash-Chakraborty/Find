@@ -305,9 +305,9 @@ private media to a remote service or silently falls back to local models.
 
 Maintainers prepare patch, minor, or major semantic versions with one manual
 workflow. The generated version PR lands in `canary`; the reviewed
-`canary`-to-`main` promotion starts a three-hour quiet period before GitHub
-creates the release and publishes immutable web plus separate `no-ai`, `mock`,
-`cpu`, and `nvidia` backend images. Manual publish runs can still build one
+`canary`-to-`main` promotion makes GitHub create the release and publish
+immutable web plus separate `no-ai`, `mock`, `cpu`, and `nvidia` backend
+images. Manual publish runs can still build one
 selected profile without unrelated AI dependencies. See the
 [changelog](CHANGELOG.md) for what each release contains.
 

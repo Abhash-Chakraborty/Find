@@ -1,15 +1,9 @@
-name: Release main after quiet period
+name: Release main
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      emergency:
-        description: Skip the three-hour delay for a critical security or production fix
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -45,18 +39,9 @@ jobs:
             exit 1
           fi
 
-  gate:
-    name: ${{ inputs.emergency && 'Emergency release approval' || 'Three-hour release quiet period' }}
-    needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment: ${{ inputs.emergency && 'release-emergency' || 'release-delay' }}
-    steps:
-      - run: echo "Release gate completed for v${{ needs.validate.outputs.version }}."
-
   release:
     name: Tag and create GitHub release
-    needs: [validate, gate]
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -72,11 +57,11 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Confirm main stayed stable through the gate
+      - name: Confirm main is still the validated commit
         run: |
           git fetch origin main --quiet
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" || {
-            echo "main advanced; the newer push owns the release timer." >&2
+            echo "main advanced; the newer push owns the release." >&2
             exit 1
           }
           python scripts/bump_version.py --check

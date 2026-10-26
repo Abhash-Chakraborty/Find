@@ -105,4 +105,4 @@ jobs:
             --head "${BRANCH}" \
             --title "chore: prepare v${VERSION}" \
             --label release \
-            --body "Automated semantic-version update for **v${VERSION}**. Review and edit the generated changelog before merging. After this reaches main through the canary promotion, the protected three-hour release timer starts."
+            --body "Automated semantic-version update for **v${VERSION}**. Review and edit the generated changelog before merging. The release is tagged and published as soon as this reaches main through the canary promotion."
