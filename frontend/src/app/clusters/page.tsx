@@ -36,6 +36,7 @@ import {
   resolveMediaUrl,
 } from "@/lib/media";
 import { useAiAvailability } from "@/lib/use-ai-availability";
+import { useLibraryBusy } from "@/lib/use-library-busy";
 
 function formatJobStatus(status?: string) {
   switch (status) {
@@ -88,11 +89,13 @@ export default function ClustersPage() {
   const [filterText, setFilterText] = useState("");
   const [clusterLabelDraft, setClusterLabelDraft] = useState("");
   const clusterTimelineScrollRef = useRef<HTMLDivElement | null>(null);
+  // Clusters only change when a clustering job runs, and new images queue
+  // one, so the page polls only while either is in flight.
+  const libraryBusy = useLibraryBusy();
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ["clusters"],
     queryFn: getClusters,
-    refetchInterval: clusterJobId ? 4000 : 10000,
-    staleTime: MINIO_URL_STALE_TIME_MS,
+    refetchInterval: clusterJobId ? 4000 : libraryBusy ? 10000 : false,
   });
   const { aiUnavailable, unavailableMessage } = useAiAvailability();
 
@@ -117,7 +120,7 @@ export default function ClustersPage() {
   const indexedQuery = useQuery({
     queryKey: ["indexed-stats"],
     queryFn: () => getGallery({ status: "indexed", limit: 1 }),
-    refetchInterval: 10000,
+    refetchInterval: libraryBusy ? 10000 : false,
   });
 
   useEffect(() => {

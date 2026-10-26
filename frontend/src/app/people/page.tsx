@@ -21,6 +21,7 @@ import { FeedbackActions } from "@/components/person-feedback-actions";
 import { TimelineMediaView } from "@/components/timeline-media-view";
 import { VirtualizedGrid } from "@/components/virtualized-grid";
 import {
+  getJobStatus,
   getPeople,
   getPersonImages,
   type PersonItem,
@@ -30,6 +31,7 @@ import {
 } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 import { useAiAvailability } from "@/lib/use-ai-availability";
+import { useLibraryBusy } from "@/lib/use-library-busy";
 
 // ─── Person Card Component ────────────────────────────────────────────────────
 
@@ -197,6 +199,10 @@ export default function PeoplePage() {
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [previewMedia, setPreviewMedia] = useState<PreviewMedia | null>(null);
   const personTimelineScrollRef = useRef<HTMLDivElement | null>(null);
+  const [faceJobId, setFaceJobId] = useState<string | null>(null);
+  // People change when new images are indexed or a face clustering job
+  // runs, so the list polls only while one of those is in flight.
+  const libraryBusy = useLibraryBusy();
 
   const {
     data: people,
@@ -206,8 +212,24 @@ export default function PeoplePage() {
   } = useQuery({
     queryKey: ["people"],
     queryFn: getPeople,
-    refetchInterval: 15000,
+    refetchInterval: faceJobId ? 4000 : libraryBusy ? 15000 : false,
   });
+  const faceJobQuery = useQuery({
+    queryKey: ["face-cluster-job", faceJobId],
+    queryFn: () => getJobStatus(faceJobId as string),
+    enabled: faceJobId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "finished" || status === "failed" ? false : 2500;
+    },
+  });
+  const faceJobStatus = faceJobQuery.data?.status;
+  useEffect(() => {
+    if (faceJobStatus !== "finished" && faceJobStatus !== "failed") return;
+    if (faceJobStatus === "failed") toast.error("Face clustering failed");
+    setFaceJobId(null);
+    queryClient.invalidateQueries({ queryKey: ["people"] });
+  }, [faceJobStatus, queryClient]);
   const { aiUnavailable, unavailableMessage } = useAiAvailability();
 
   const selectedPersonQuery = useQuery({
@@ -218,8 +240,9 @@ export default function PeoplePage() {
 
   const clusterMutation = useMutation({
     mutationFn: triggerFaceClustering,
-    onSuccess: () => {
+    onSuccess: (result: { job_id?: string }) => {
       toast.success("Face clustering queued");
+      setFaceJobId(result.job_id ?? null);
       queryClient.invalidateQueries({ queryKey: ["people"] });
     },
     onError: () => {

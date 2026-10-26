@@ -33,7 +33,10 @@ export function AiRuntimeSettings({
     queryKey: ["runtime-config"],
     queryFn: getRuntimeConfig,
     retry: false,
-    refetchInterval: 30_000,
+    // The runtime only changes when someone toggles it in Settings (which
+    // refreshes this query) or restarts the stack, so check again when the
+    // window regains focus instead of on a timer.
+    refetchOnWindowFocus: true,
   });
   const checked = enabled ?? runtime.data?.ai_enabled ?? false;
 
