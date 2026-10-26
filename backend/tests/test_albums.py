@@ -263,3 +263,35 @@ class TestAlbumOrdering:
 
         body = client.get(f"/api/albums/{album['id']}/assets").json()
         assert [item["id"] for item in body["items"]] == [c.id, a.id, b.id]
+
+
+class TestAlbumListQueries:
+    def test_list_counts_each_album_in_one_query(self, client, db, count_selects):
+        def list_cost(prefix: str, album_count: int) -> int:
+            for index in range(album_count):
+                album = _create_album(client, name=f"{prefix}{index}")
+                media = _seed_media(db, filename=f"{prefix}{index}.jpg")
+                client.put(
+                    f"/api/albums/{album['id']}/assets",
+                    json={"media_ids": [media.id]},
+                )
+            return count_selects(lambda: client.get("/api/albums"))
+
+        few = list_cost("few", 2)
+        many = list_cost("many", 8)
+
+        assert few == many, f"album list queries grew with albums: {few} -> {many}"
+
+    def test_list_counts_match_each_album(self, client, db):
+        empty = _create_album(client, name="Empty")
+        full = _create_album(client, name="Full")
+        a = _seed_media(db, filename="count-a.jpg")
+        b = _seed_media(db, filename="count-b.jpg")
+        client.put(f"/api/albums/{full['id']}/assets", json={"media_ids": [a.id, b.id]})
+
+        counts = {
+            album["id"]: album["asset_count"]
+            for album in client.get("/api/albums").json()["albums"]
+        }
+
+        assert counts == {empty["id"]: 0, full["id"]: 2}

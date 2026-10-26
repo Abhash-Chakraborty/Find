@@ -75,6 +75,28 @@ def db():
 
 
 @pytest.fixture()
+def count_selects(db):
+    """Return a function that runs a callable and counts the SELECTs it sent."""
+    from sqlalchemy import event
+
+    def run(action) -> int:
+        statements: list[str] = []
+
+        def record(conn, cursor, statement, params, context, executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(_engine, "before_cursor_execute", record)
+        try:
+            action()
+        finally:
+            event.remove(_engine, "before_cursor_execute", record)
+        return len(statements)
+
+    return run
+
+
+@pytest.fixture()
 def client(db):
     """TestClient with mocked storage and queue dependencies."""
 

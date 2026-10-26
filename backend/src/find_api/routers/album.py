@@ -68,19 +68,34 @@ def _load_album_or_404(db: Session, album_id: int, user: User | None) -> Album:
     return album
 
 
-def _album_asset_count(db: Session, album_id: int, user: User | None) -> int:
+def _album_asset_counts(
+    db: Session, album_ids: list[int], user: User | None
+) -> dict[int, int]:
     # Count only members that actually appear in the album listing — i.e.
     # browsable (not hidden/archived/trashed) and owned by the caller — so the
-    # card count never disagrees with what the detail view shows.
-    return (
+    # card count never disagrees with what the detail view shows. One grouped
+    # query covers every album on the page.
+    if not album_ids:
+        return {}
+    rows = (
         scope_media_query(_browsable_media_query(db), user)
         .join(AlbumAsset, AlbumAsset.media_id == Media.id)
-        .filter(AlbumAsset.album_id == album_id)
-        .count()
+        .filter(AlbumAsset.album_id.in_(album_ids))
+        .with_entities(AlbumAsset.album_id, func.count(Media.id))
+        .group_by(AlbumAsset.album_id)
+        .all()
     )
+    return dict(rows)
 
 
-def _serialize_album(db: Session, album: Album, user: User | None) -> dict:
+def _serialize_album(
+    db: Session,
+    album: Album,
+    user: User | None,
+    asset_count: int | None = None,
+) -> dict:
+    if asset_count is None:
+        asset_count = _album_asset_counts(db, [album.id], user).get(album.id, 0)
     return {
         "id": album.id,
         "name": album.name,
@@ -91,7 +106,7 @@ def _serialize_album(db: Session, album: Album, user: User | None) -> dict:
             if album.cover_media_id
             else None
         ),
-        "asset_count": _album_asset_count(db, album.id, user),
+        "asset_count": asset_count,
         "created_at": album.created_at.isoformat() if album.created_at else None,
         "updated_at": album.updated_at.isoformat() if album.updated_at else None,
     }
@@ -108,8 +123,9 @@ def list_albums(
         .order_by(desc(Album.created_at), desc(Album.id))
         .all()
     )
+    counts = _album_asset_counts(db, [a.id for a in albums], user)
     return {
-        "albums": [_serialize_album(db, a, user) for a in albums],
+        "albums": [_serialize_album(db, a, user, counts.get(a.id, 0)) for a in albums],
         "total": len(albums),
     }
 
