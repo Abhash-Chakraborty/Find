@@ -154,6 +154,20 @@ class Settings(BaseSettings):
             raise ValueError(f"{info.field_name} must be 0 or greater")
         return value
 
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def pin_postgres_driver(cls, value: str) -> str:
+        """Keep plain postgresql:// URLs on psycopg2.
+
+        SQLAlchemy 2.1 made psycopg (v3) the default driver for postgresql://,
+        but Find installs psycopg2. Existing .env files use the plain scheme,
+        so name the driver here instead of asking everyone to edit theirs.
+        """
+        for scheme in ("postgresql://", "postgres://"):
+            if value.startswith(scheme):
+                return "postgresql+psycopg2://" + value[len(scheme) :]
+        return value
+
     @field_validator("MAX_IMAGE_PIXELS")
     @classmethod
     def validate_image_pixel_ceiling(cls, value: int):
