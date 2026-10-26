@@ -6,6 +6,8 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
 ## [Unreleased]
 
+## [1.1.5] — 2026-10-26
+
 ### Fixed
 
 - The `cpu` backend image builds for linux/arm64 again. paddlepaddle 3.3 has
