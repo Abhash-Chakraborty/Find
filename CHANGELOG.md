@@ -6,6 +6,8 @@ distributed under AGPL-3.0 (see `LICENSE` / `NOTICE`).
 
 ## [Unreleased]
 
+## [1.1.4] — 2026-10-26
+
 ### Fixed
 
 - Search's file-type filter matches JPEGs again; `jpg` and `jpeg` map to
