@@ -16,7 +16,7 @@ dependencies = [
   "pgvector==0.5.1",
   "minio==7.2.20",
   "redis==8.1.0",
-  "rq>=2.10.0,<3",
+  "rq>=2.10.0,<4",
   "pillow>=12.3.0",
   "numpy==1.26.3",
   "piexif==1.1.3",
