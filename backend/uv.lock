@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 resolution-markers = [
     "sys_platform == 'darwin' and extra != 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia'",
@@ -332,7 +332,7 @@ name = "cffi"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy' or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz", hash = "sha256:44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529", size = 523588, upload-time = "2025-09-08T23:24:04.541Z" }
 wheels = [
@@ -395,7 +395,7 @@ name = "click"
 version = "8.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/76/d4/81420972a676e8ffea40450d8c8c92943e7218a78fe9b64359836cc9876b/click-8.4.2.tar.gz", hash = "sha256:9a6cea6e60b17ebe0a44c5cc636d94f09bd66142c1cd7d8b4cd731c4917a15f6", size = 338000, upload-time = "2026-06-24T17:45:15.148Z" }
 wheels = [
@@ -479,7 +479,7 @@ name = "cryptography"
 version = "50.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9d/af/182eb91b0df3fe75c4d9f26fe70684569566745f6ba7e5c9c73a862c5252/cryptography-50.0.2.tar.gz", hash = "sha256:7b46165bb56eb4704e2eaaf86f3c940d19154535d9b0ca7d6d590b04060e00d5", size = 880623, upload-time = "2026-09-30T15:30:04.884Z" }
 wheels = [
@@ -529,7 +529,7 @@ name = "cuda-bindings"
 version = "12.9.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-pathfinder", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'win32' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "cuda-pathfinder", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7f/b2/8cef7e30e02e7ec3bf157ec192c0522546ed807c262752e884c693813494/cuda_bindings-12.9.10-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:aa1e07b12ae190a01ba3e0c85253be6ec1bfa13545a88eac5fd45ae4b0c04333", size = 7063851, upload-time = "2026-10-15T14:12:01.26Z" },
@@ -741,10 +741,10 @@ cpu = [
     { name = "paddlepaddle", version = "3.3.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "scikit-learn" },
     { name = "timm" },
-    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
-    { name = "torchvision", version = "0.28.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "torchvision", version = "0.28.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
+    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torchvision", version = "0.28.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torchvision", version = "0.28.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "transformers" },
     { name = "ultralytics" },
 ]
@@ -817,7 +817,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.2.4" },
     { name = "python-multipart", specifier = ">=0.0.32,<0.1" },
     { name = "redis", specifier = "==8.1.0" },
-    { name = "rq", specifier = ">=2.10.0,<3" },
+    { name = "rq", specifier = ">=2.10.0,<4" },
     { name = "scikit-learn", marker = "extra == 'cpu'", specifier = "==1.9.1" },
     { name = "scikit-learn", marker = "extra == 'mock'", specifier = "==1.9.1" },
     { name = "scikit-learn", marker = "extra == 'nvidia'", specifier = "==1.9.1" },
@@ -1458,7 +1458,7 @@ name = "nvidia-cudnn-cu12"
 version = "9.20.0.48"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'win32' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/77/1c382fdc5de163b2ff14d6174d12dc318c0a42302f5e3a4fbc5114ab0501/nvidia_cudnn_cu12-9.20.0.48-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:d9da9c15344323afae571751393552652c52486eab0b886530997bef664e29de", size = 664659972, upload-time = "2026-03-09T19:27:37.986Z" },
@@ -1471,7 +1471,7 @@ name = "nvidia-cufft-cu12"
 version = "11.4.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'win32' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/2b/76445b0af890da61b501fde30650a1a4bd910607261b209cccb5235d3daa/nvidia_cufft_cu12-11.4.1.4-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:1a28c9b12260a1aa7a8fd12f5ebd82d027963d635ba82ff39a1acfa7c4c0fbcf", size = 200822453, upload-time = "2025-06-05T20:05:27.889Z" },
@@ -1503,9 +1503,9 @@ name = "nvidia-cusolver-cu12"
 version = "11.7.5.82"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'win32' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "nvidia-cusparse-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'win32' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'win32' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "nvidia-cusparse-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/03/99/686ff9bf3a82a531c62b1a5c614476e8dfa24a9d89067aeedf3592ee4538/nvidia_cusolver_cu12-11.7.5.82-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:62efa83e4ace59a4c734d052bb72158e888aa7b770e1a5f601682f16fe5b4fd2", size = 337869834, upload-time = "2025-06-05T20:06:53.125Z" },
@@ -1518,7 +1518,7 @@ name = "nvidia-cusparse-cu12"
 version = "12.5.10.65"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'win32' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'darwin' and sys_platform != 'win32' and extra == 'extra-12-find-backend-nvidia') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5e/6f/8710fbd17cdd1d0fc3fea7d36d5b65ce1933611c31e1861da330206b253a/nvidia_cusparse_cu12-12.5.10.65-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:221c73e7482dd93eda44e65ce567c031c07e2f93f6fa0ecd3ba876a195023e83", size = 366359408, upload-time = "2025-06-05T20:07:42.501Z" },
@@ -1640,25 +1640,26 @@ wheels = [
 
 [[package]]
 name = "open-clip-torch"
-version = "3.3.0"
+version = "4.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ftfy" },
     { name = "huggingface-hub" },
     { name = "regex" },
     { name = "safetensors" },
+    { name = "tiktoken" },
     { name = "timm" },
-    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
+    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "torch", version = "2.13.0+cu129", source = { registry = "https://download.pytorch.org/whl/cu129" }, marker = "extra == 'extra-12-find-backend-nvidia'" },
-    { name = "torchvision", version = "0.28.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "torchvision", version = "0.28.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
+    { name = "torchvision", version = "0.28.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torchvision", version = "0.28.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "torchvision", version = "0.28.0+cu129", source = { registry = "https://download.pytorch.org/whl/cu129" }, marker = "extra == 'extra-12-find-backend-nvidia'" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/1f/2bc9795047fa2c1ad2567ef78ce6dfc9a7b763fa534acee09a94da2a5b8f/open_clip_torch-3.3.0.tar.gz", hash = "sha256:904b1a9f909df8281bb3de60ab95491cd2994a509177ea4f9d6292a84fe24d6d", size = 1503380, upload-time = "2026-02-27T00:32:46.74Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/dc/77/6820ffce4f28c6be7241be1b880d80adc3cecd5f86b9de94e890f567bdbe/open_clip_torch-4.2.2.tar.gz", hash = "sha256:d30675277a727cab0b2faae27b66e0a88afbb020586ece94417a270157f988d4", size = 1832848, upload-time = "2026-11-10T18:05:52.823Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/37/b5/41c315ccd94ca332ead3e832e83eee343ab245005c3e43d9d3e75eae34eb/open_clip_torch-3.3.0-py3-none-any.whl", hash = "sha256:c549ad5ed6bfc119cc11105033c0a2b9d7a2a4afeb40a58a09aab3da1a0043ce", size = 1547268, upload-time = "2026-02-27T00:32:44.902Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/9a/0cad8373c8a7ed5ac58b47f67c3674763f05d2a26e23c054b1087730a01f/open_clip_torch-4.2.2-py3-none-any.whl", hash = "sha256:307fb2db201cdd62fd5acacf56f11985a1c8241649c97937236c378ac92b4e36", size = 1797317, upload-time = "2026-11-10T18:05:50.762Z" },
 ]
 
 [[package]]
@@ -1812,15 +1813,15 @@ resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-12-find-backend-cpu' and extra != 'extra-12-find-backend-nvidia'",
 ]
 dependencies = [
-    { name = "httpx", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-nvidia') or (extra != 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "networkx", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-nvidia') or (extra != 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "numpy", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-nvidia') or (extra != 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "opt-einsum", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-nvidia') or (extra != 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "pillow", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-nvidia') or (extra != 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "protobuf", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-nvidia') or (extra != 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "safetensors", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-nvidia') or (extra != 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "setuptools", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-nvidia') or (extra != 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "typing-extensions", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-nvidia') or (extra != 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "httpx", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or extra == 'extra-12-find-backend-nvidia'" },
+    { name = "networkx", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or extra == 'extra-12-find-backend-nvidia'" },
+    { name = "numpy", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or extra == 'extra-12-find-backend-nvidia'" },
+    { name = "opt-einsum", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or extra == 'extra-12-find-backend-nvidia'" },
+    { name = "pillow", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or extra == 'extra-12-find-backend-nvidia'" },
+    { name = "protobuf", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or extra == 'extra-12-find-backend-nvidia'" },
+    { name = "safetensors", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or extra == 'extra-12-find-backend-nvidia'" },
+    { name = "setuptools", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or extra == 'extra-12-find-backend-nvidia'" },
+    { name = "typing-extensions", marker = "(platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu') or extra == 'extra-12-find-backend-nvidia'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3b/97/62d061b4700a7020506f4db80c4721100b5b2fa0709f4e999c38dc7e2293/paddlepaddle-3.3.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:d7827d867503b502a881c718e3743d9b91648a62d01f93bcd5ba3d7846de5ab5", size = 104546703, upload-time = "2026-03-26T11:18:20.499Z" },
@@ -2315,7 +2316,7 @@ name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
@@ -2516,16 +2517,16 @@ wheels = [
 
 [[package]]
 name = "rq"
-version = "2.12.0"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "croniter" },
     { name = "redis" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a2/81/dacb94c8f67606b233cb7836dd67042daf9a61f7b585dcec65113f1e71f7/rq-2.12.0.tar.gz", hash = "sha256:78116d0c860f6285817b52d7d6d0b16a726372073ce8ea1d229732ce74ef9378", size = 760892, upload-time = "2026-08-30T12:05:25.048Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/dd/386529e533eef3d67e51a430566ebb24382e664168a6612e2260b6b12243/rq-3.0.0.tar.gz", hash = "sha256:b41e39b3c36ec3faf9e2402c638a0b25fe18ebb93a1cb15193bc69694f054618", size = 803458, upload-time = "2026-10-28T15:32:57.123Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a4/c2/995863e88669133a058c2a6a912b62d18a64fa7baaf78eb66aaa4350b48d/rq-2.12.0-py3-none-any.whl", hash = "sha256:97e349a00e9f2a18962102b3dca156cb5ce315d3ef38145e24ba9cabd16a9361", size = 127957, upload-time = "2026-08-30T12:05:23.131Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/b7/bfba8789d38b7a797d4c177969d8c7eaf9dac7d2dcbda61f2ba50d17330c/rq-3.0.0-py3-none-any.whl", hash = "sha256:71b92cb7b2880e0d0ac2a462945e3f09243122f61465cec4238689d8ddf2abf4", size = 143521, upload-time = "2026-10-28T15:32:52.626Z" },
 ]
 
 [[package]]
@@ -2786,6 +2787,25 @@ wheels = [
 ]
 
 [[package]]
+name = "tiktoken"
+version = "0.14.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "regex" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/62/167a842aa0429d45f5e797354fd4343a96f6043d67d0513c675c7b8d36e6/tiktoken-0.14.0.tar.gz", hash = "sha256:231dec90efcdccf1b565a1416107736f1e09b1a08fe736ef9d6363e626d03874", size = 38898, upload-time = "2026-08-17T19:49:49.514Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/da/e273746b9d24a63c776bc60fba914351573ad9c575b52601eb5e60632564/tiktoken-0.14.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:8e947aefe98ef74cce94923f90e48c98fe34eb1ec0a6bfdfadfc5a96359bfc36", size = 1094408, upload-time = "2026-08-17T19:48:49.269Z" },
+    { url = "https://files.pythonhosted.org/packages/69/9f/fe6b1aca23331aa5271df5a4bd07bf68a7059254d47faee1b8272592a777/tiktoken-0.14.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:d6cebe67765569df3dafac8474e4eccf5c19d24140492567a5e58a11445732a4", size = 1038499, upload-time = "2026-08-17T19:48:50.666Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/35/e9f47647c9e163bd1de30fe1a491669b7248cfc67b7404c35c009a701e1a/tiktoken-0.14.0-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:7db45b98e94adf4173a5cd7422b150999a7ee11ff847783a14f6e1b80cc38cb6", size = 1186355, upload-time = "2026-08-17T19:48:51.93Z" },
+    { url = "https://files.pythonhosted.org/packages/51/11/9976ad86980a00cdef05e730a0127a2578a1bc6d11644d8d47246de2eb26/tiktoken-0.14.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:7896eea257fe497a2b7134474d909156c6744ce8da35bce88011a960e008aa0d", size = 1204197, upload-time = "2026-08-17T19:48:53.18Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/9c/7035b0bcfaa68d1ee4803fc5be5214ad865669b05bd20e7105ae8a18afc6/tiktoken-0.14.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:b950248272f1b303dc32986396e2dccfa10cf6d1e83ec8f0bba1776660305482", size = 1250635, upload-time = "2026-08-17T19:48:54.392Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/1d/69cabf18bed7f4366da076735816abce0d4db3fae491ae338a6612128777/tiktoken-0.14.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:3de75343041a1c57333b1e707ac8a9769738241d7d6a55d39e12cf84548337c6", size = 1316085, upload-time = "2026-08-17T19:48:55.525Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/bd/a2e884fb1402cba5be08836590320012b2d8ada0e2eef9911a64df4bcd2d/tiktoken-0.14.0-cp312-cp312-win_amd64.whl", hash = "sha256:087538c080e5ff421abd3a0785ed63c5111d06af98e6cd0d374dbe5969147ca3", size = 941208, upload-time = "2026-08-17T19:48:56.938Z" },
+]
+
+[[package]]
 name = "timm"
 version = "1.0.30"
 source = { registry = "https://pypi.org/simple" }
@@ -2793,11 +2813,11 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "pyyaml" },
     { name = "safetensors" },
-    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
+    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "torch", version = "2.13.0+cu129", source = { registry = "https://download.pytorch.org/whl/cu129" }, marker = "extra == 'extra-12-find-backend-nvidia'" },
-    { name = "torchvision", version = "0.28.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "torchvision", version = "0.28.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
+    { name = "torchvision", version = "0.28.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torchvision", version = "0.28.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "torchvision", version = "0.28.0+cu129", source = { registry = "https://download.pytorch.org/whl/cu129" }, marker = "extra == 'extra-12-find-backend-nvidia'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0e/ab/49041213990e48edcb6013463b18ef86d8d3c5d6ac5b408802c480443025/timm-1.0.30.tar.gz", hash = "sha256:1444a3af7e17fdba5440ac2bcf6e4b728da96dd62289ed9e1bcba31a545f5935", size = 2534738, upload-time = "2026-09-22T20:46:13.9Z" }
@@ -2867,13 +2887,13 @@ resolution-markers = [
     "platform_machine != 'aarch64' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "fsspec", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "jinja2", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "networkx", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "setuptools", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "sympy", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "typing-extensions", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "filelock", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "fsspec", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "jinja2", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "networkx", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "setuptools", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "sympy", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "typing-extensions", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.13.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:2fe228aba290d14b9f31b049be550dbd469c3fd3013d7a19705b30454da97027", upload-time = "2026-07-08T12:26:18Z" },
@@ -2893,13 +2913,13 @@ resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux'",
 ]
 dependencies = [
-    { name = "filelock", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
-    { name = "fsspec", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
-    { name = "jinja2", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
-    { name = "networkx", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
-    { name = "setuptools", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
-    { name = "sympy", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
-    { name = "typing-extensions", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
+    { name = "filelock", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "fsspec", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "jinja2", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "networkx", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "setuptools", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "sympy", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "typing-extensions", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.13.0%2Bcpu-cp312-cp312-linux_s390x.whl", hash = "sha256:ffadde149901c8afa138daa38d898264003cfcf1a3336ca5cd964b5af227d867", upload-time = "2026-07-08T19:28:41Z" },
@@ -2948,9 +2968,9 @@ resolution-markers = [
     "platform_machine != 'aarch64' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "numpy", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "pillow", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "numpy", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "pillow", marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.28.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:e9f54c30cd52e3ef7fd034cc69b7bb7e0964e1c8f8743e018ab92e95b40f9eee", upload-time = "2026-07-08T12:26:40Z" },
@@ -2970,9 +2990,9 @@ resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux'",
 ]
 dependencies = [
-    { name = "numpy", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
-    { name = "pillow", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
-    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
+    { name = "numpy", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "pillow", marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.28.0%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:2f768c4f6d5adf6d5535061fd69ec44827608bac0e96e12114942a6fdfce1107", upload-time = "2026-07-08T12:26:39Z" },
@@ -3127,11 +3147,11 @@ dependencies = [
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "requests" },
-    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
+    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "torch", version = "2.13.0+cu129", source = { registry = "https://download.pytorch.org/whl/cu129" }, marker = "extra == 'extra-12-find-backend-nvidia'" },
-    { name = "torchvision", version = "0.28.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "torchvision", version = "0.28.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
+    { name = "torchvision", version = "0.28.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torchvision", version = "0.28.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "torchvision", version = "0.28.0+cu129", source = { registry = "https://download.pytorch.org/whl/cu129" }, marker = "extra == 'extra-12-find-backend-nvidia'" },
     { name = "ultralytics-platform" },
     { name = "ultralytics-thop" },
@@ -3159,8 +3179,8 @@ version = "2.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
-    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
-    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (platform_machine != 'aarch64' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu')" },
+    { name = "torch", version = "2.13.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and extra == 'extra-12-find-backend-cpu') or (sys_platform != 'darwin' and extra == 'extra-12-find-backend-cpu') or (extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
     { name = "torch", version = "2.13.0+cu129", source = { registry = "https://download.pytorch.org/whl/cu129" }, marker = "extra == 'extra-12-find-backend-nvidia'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f9/6f/f7dd1959a3f0d3d7417800f6c54112a0bdc9f0529470bb0558c326cd19f3/ultralytics_thop-2.2.3.tar.gz", hash = "sha256:141cea7d1af7fda04b135b5070d19d84f2272c76c5401de9e47581c23e7c5c60", size = 39816, upload-time = "2026-10-19T20:36:33.461Z" }
@@ -3195,7 +3215,7 @@ standard = [
     { name = "httptools" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "uvloop", marker = "(platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32') or (platform_python_implementation == 'PyPy' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'cygwin' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia') or (sys_platform == 'win32' and extra == 'extra-12-find-backend-cpu' and extra == 'extra-12-find-backend-nvidia')" },
+    { name = "uvloop", marker = "platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'" },
     { name = "watchfiles" },
     { name = "websockets" },
 ]
